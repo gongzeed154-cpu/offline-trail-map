@@ -1,7 +1,7 @@
 /* service worker: เก็บไฟล์แอพและไทล์แผนที่ไว้ใช้ตอนไม่มีสัญญาณ */
 importScripts('./common.js');
 
-var SHELL_CACHE = 'shell-v13';
+var SHELL_CACHE = 'shell-v14';
 var TILE_CACHE = 'tiles-v1';
 var SHELL_FILES = [
   './',

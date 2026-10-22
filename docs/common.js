@@ -8,6 +8,15 @@
   var DEM_MAXZOOM = 12; // ระดับซูมสูงสุดของไทล์ความสูง
   var MIN_ZOOM = 10; // ระดับซูมต่ำสุดที่ดาวน์โหลด
 
+  // แผนที่ภาพถ่ายดาวเทียม (Esri) และภูมิประเทศเส้นชั้นความสูง (OpenTopoMap)
+  var SAT_TEMPLATE = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+  var TOPO_TEMPLATE = 'https://tile.opentopomap.org/{z}/{x}/{y}.png';
+  var TRAFFIC_TEMPLATE = 'https://mt1.google.com/vt?lyrs=h,traffic&x={x}&y={y}&z={z}';
+  var SAT_MAXZOOM = 18;
+  var TOPO_MAXZOOM = 17;
+  var SAT_DL_MAXZOOM = 16; // ระดับซูมสูงสุดที่ดาวน์โหลดเก็บไว้ (ซูมเกินนี้ขยายภาพจากที่มี)
+  var TOPO_DL_MAXZOOM = 15;
+
   // ไทล์เวกเตอร์ของ OpenFreeMap มีเลขเวอร์ชันในพาธ (เช่น /planet/20261022_001001_pt/...)
   // เปลี่ยนเป็นคีย์ที่ไม่ผูกกับเวอร์ชัน เพื่อให้ไทล์ที่เก็บไว้ใช้ได้ต่อแม้เวอร์ชันเปลี่ยน
   function cacheKey(url) {
@@ -20,7 +29,9 @@
     if (url === OFM_TILEJSON) return false; // TileJSON ต้องได้ของใหม่เสมอ (มีเลขเวอร์ชัน)
     return (
       url.indexOf('https://tiles.openfreemap.org/') === 0 ||
-      url.indexOf('https://s3.amazonaws.com/elevation-tiles-prod/') === 0
+      url.indexOf('https://s3.amazonaws.com/elevation-tiles-prod/') === 0 ||
+      url.indexOf('https://server.arcgisonline.com/') === 0 ||
+      url.indexOf('https://tile.opentopomap.org/') === 0
     );
   }
 
@@ -56,11 +67,17 @@
     return out;
   }
 
-  function countTiles(bounds) {
-    return (
+  // base = 'trail' | 'sat' | 'topo' : แผนที่พื้นหลังที่จะดาวน์โหลดเพิ่มนอกจากเวกเตอร์ + ความสูง
+  function rasterMax(base) {
+    return base === 'sat' ? SAT_DL_MAXZOOM : base === 'topo' ? TOPO_DL_MAXZOOM : 0;
+  }
+
+  function countTiles(bounds, base) {
+    var n =
       tilesForBounds(bounds, MIN_ZOOM, VECTOR_MAXZOOM).length +
-      tilesForBounds(bounds, MIN_ZOOM, DEM_MAXZOOM).length
-    );
+      tilesForBounds(bounds, MIN_ZOOM, DEM_MAXZOOM).length;
+    if (rasterMax(base)) n += tilesForBounds(bounds, MIN_ZOOM, rasterMax(base)).length;
+    return n;
   }
 
   function fillTemplate(tpl, t) {
@@ -106,10 +123,32 @@
           tileSize: 256,
           maxzoom: DEM_MAXZOOM,
           attribution: 'Terrain Tiles: Mapzen, NASA SRTM, USGS (AWS Open Data)'
+        },
+        sat: {
+          type: 'raster',
+          tiles: [SAT_TEMPLATE],
+          tileSize: 256,
+          maxzoom: SAT_MAXZOOM,
+          attribution: 'ภาพดาวเทียม © Esri, Maxar, Earthstar Geographics'
+        },
+        topo: {
+          type: 'raster',
+          tiles: [TOPO_TEMPLATE],
+          tileSize: 256,
+          maxzoom: TOPO_MAXZOOM,
+          attribution: '© OpenTopoMap (CC-BY-SA)'
+        },
+        traffic: {
+          type: 'raster',
+          tiles: [TRAFFIC_TEMPLATE],
+          tileSize: 256,
+          maxzoom: 19
         }
       },
       layers: [
         { id: 'background', type: 'background', paint: { 'background-color': '#f1efe6' } },
+        { id: 'sat', type: 'raster', source: 'sat', layout: { visibility: 'none' } },
+        { id: 'topo', type: 'raster', source: 'topo', layout: { visibility: 'none' } },
         {
           id: 'landcover_wood', type: 'fill', source: 'openmaptiles', 'source-layer': 'landcover',
           filter: ['==', ['get', 'class'], 'wood'], paint: { 'fill-color': '#b9d8a8' }
@@ -144,6 +183,11 @@
           }
         },
         {
+          id: 'building', type: 'fill', source: 'openmaptiles', 'source-layer': 'building',
+          minzoom: 14,
+          paint: { 'fill-color': '#e2d6c3', 'fill-outline-color': '#b9a98f' }
+        },
+        {
           id: 'road_path', type: 'line', source: 'openmaptiles', 'source-layer': 'transportation',
           minzoom: 12,
           filter: ['in', ['get', 'class'], ['literal', ['path', 'track']]],
@@ -174,6 +218,29 @@
           id: 'boundary', type: 'line', source: 'openmaptiles', 'source-layer': 'boundary',
           filter: ['<=', ['get', 'admin_level'], 4],
           paint: { 'line-color': '#9b8fb0', 'line-width': 1, 'line-dasharray': [4, 2] }
+        },
+        {
+          id: 'road_name', type: 'symbol', source: 'openmaptiles', 'source-layer': 'transportation_name',
+          minzoom: 13,
+          layout: {
+            'symbol-placement': 'line',
+            'text-field': ['coalesce', ['get', 'name:th'], ['get', 'name']],
+            'text-font': FONT,
+            'text-size': 11
+          },
+          paint: { 'text-color': '#444444', 'text-halo-color': '#ffffff', 'text-halo-width': 1.2 }
+        },
+        {
+          id: 'poi', type: 'symbol', source: 'openmaptiles', 'source-layer': 'poi',
+          minzoom: 15,
+          layout: {
+            'text-field': ['coalesce', ['get', 'name:th'], ['get', 'name']],
+            'text-font': FONT,
+            'text-size': 11,
+            'text-anchor': 'top',
+            'text-offset': [0, 0.3]
+          },
+          paint: { 'text-color': '#6b4a2b', 'text-halo-color': '#ffffff', 'text-halo-width': 1.1 }
         },
         {
           id: 'peak', type: 'symbol', source: 'openmaptiles', 'source-layer': 'mountain_peak',
@@ -216,6 +283,9 @@
     VECTOR_MAXZOOM: VECTOR_MAXZOOM,
     DEM_MAXZOOM: DEM_MAXZOOM,
     MIN_ZOOM: MIN_ZOOM,
+    SAT_TEMPLATE: SAT_TEMPLATE,
+    TOPO_TEMPLATE: TOPO_TEMPLATE,
+    rasterMax: rasterMax,
     cacheKey: cacheKey,
     isCacheable: isCacheable,
     tilesForBounds: tilesForBounds,

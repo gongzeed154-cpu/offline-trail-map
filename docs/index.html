@@ -47,8 +47,47 @@
   #hint { position: fixed; left: 12px; right: 12px; top: calc(env(safe-area-inset-top) + 56px); background: #fff8d6; border: 1px solid #e6d98a; border-radius: 12px; padding: 12px 14px; z-index: 15; font-size: 14px; line-height: 1.5; }
   #hint button { float: right; border: 0; background: none; font-size: 18px; margin-left: 8px; }
   #fatal { position: fixed; inset: 0; background: #fff; z-index: 40; padding: 32px 24px; line-height: 1.7; }
-  .maplibregl-ctrl-bottom-right { bottom: 70px; }
-  .maplibregl-ctrl-bottom-left { bottom: 70px; }
+  .maplibregl-ctrl-bottom-right { bottom: 76px; }
+  .maplibregl-ctrl-bottom-left { bottom: 76px; }
+
+  #coord { font-size: 13px; padding: 7px 12px; max-width: calc(100vw - 80px); font-variant-numeric: tabular-nums; border: 0; text-align: left; }
+  #coord small { display: block; color: #666; font-size: 11px; }
+  #cross { position: fixed; left: 50%; top: 50%; width: 26px; height: 26px; margin: -13px 0 0 -13px; pointer-events: none; z-index: 4; }
+  #cross::before, #cross::after { content: ""; position: absolute; background: #d00; }
+  #cross::before { left: 12px; top: 0; width: 2px; height: 26px; }
+  #cross::after { top: 12px; left: 0; height: 2px; width: 26px; }
+
+  #tools { position: fixed; top: calc(env(safe-area-inset-top) + 10px); right: 10px; display: flex; flex-direction: column; gap: 8px; z-index: 5; }
+  .tool { width: 46px; height: 46px; border-radius: 23px; border: 0; background: #fff; box-shadow: 0 2px 6px rgba(0,0,0,.25); font-size: 11px; line-height: 1.1; color: var(--fg); padding: 0; }
+  .tool b { display: block; font-size: 18px; font-weight: 600; }
+  .tool.on { background: var(--green); color: #fff; }
+
+  #sheet { position: fixed; left: 0; right: 0; bottom: 0; max-height: 62vh; overflow: auto; background: #fff; z-index: 12; border-radius: 16px 16px 0 0; box-shadow: 0 -2px 12px rgba(0,0,0,.3); padding: 0 16px calc(env(safe-area-inset-bottom) + 16px); -webkit-overflow-scrolling: touch; }
+  #sheet .shead { position: sticky; top: 0; background: #fff; display: flex; justify-content: space-between; align-items: center; padding: 14px 0 8px; }
+  #sheet h3 { margin: 0; font-size: 17px; }
+  #sheet .shead button { border: 0; background: none; color: var(--green); font-size: 16px; padding: 4px 0 4px 12px; }
+  #sheet h4 { margin: 14px 0 6px; font-size: 13px; color: #666; font-weight: 600; }
+  .opt { display: flex; align-items: center; gap: 10px; padding: 10px 0; font-size: 15px; border-bottom: 1px solid #f0f0f0; }
+  .opt input { width: 20px; height: 20px; accent-color: var(--green); flex: none; }
+  .opt span { flex: 1; }
+  .opt small { color: #777; font-size: 12px; display: block; }
+  .note { font-size: 12px; color: #777; line-height: 1.5; margin: 10px 0 0; }
+  .field { display: flex; gap: 8px; align-items: center; margin: 8px 0; font-size: 14px; }
+  .field label { flex: 0 0 96px; }
+  .field input[type=number] { flex: 1; min-width: 0; font-size: 16px; padding: 8px; border: 1px solid #ccc; border-radius: 8px; }
+  .btnrow { display: flex; gap: 8px; margin-top: 10px; }
+  .btn { flex: 1; border: 0; border-radius: 10px; padding: 12px; font-size: 15px; background: var(--green); color: #fff; }
+  .btn.alt { background: #e8efe9; color: var(--green); }
+
+  #azcard { position: fixed; left: 10px; right: 10px; bottom: calc(env(safe-area-inset-bottom) + 76px); background: rgba(255,255,255,.96); border-radius: 14px; box-shadow: 0 2px 8px rgba(0,0,0,.3); padding: 10px 14px; z-index: 6; font-size: 14px; line-height: 1.55; }
+  #azcard .big { font-size: 20px; font-weight: 700; color: #c4501b; }
+  #azcard .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+  #azcard .lbl { color: #666; font-size: 12px; }
+  .pmark { width: 30px; height: 30px; border-radius: 50%; border: 3px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.5); color: #fff; font-weight: 700; display: flex; align-items: center; justify-content: center; font-size: 14px; touch-action: none; }
+  .pmark.a { background: #1a6ad6; }
+  .pmark.b { background: #c4501b; }
+  .prot { position: absolute; left: 50%; top: 50%; pointer-events: none; overflow: visible; }
+  .pin { width: 22px; height: 22px; border-radius: 50%; background: #d00; border: 3px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.5); }
 </style>
 </head>
 <body>
@@ -58,7 +97,20 @@
   <button class="chip" id="openPanel">แผนที่ที่ดาวน์โหลดไว้ (<span id="areaCount">0</span>)</button>
   <div class="chip" id="alt" hidden></div>
   <div class="chip" id="offline" hidden>ออฟไลน์</div>
+  <button class="chip" id="coord"></button>
 </div>
+
+<div id="cross"></div>
+
+<div id="tools">
+  <button class="tool" id="toolLayers"><b>◩</b>ชั้นแผนที่</button>
+  <button class="tool" id="toolGrid"><b>▦</b>พิกัด</button>
+  <button class="tool" id="toolProt"><b>◔</b>วัดมุม</button>
+</div>
+
+<div id="azcard" hidden></div>
+
+<div id="sheet" hidden></div>
 
 <div id="hint" hidden>
   <button id="hintClose" aria-label="ปิด">✕</button>
@@ -85,6 +137,7 @@
 
 <script src="lib/maplibre-gl.js"></script>
 <script src="common.js"></script>
+<script src="geo.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

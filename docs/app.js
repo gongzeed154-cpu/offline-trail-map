@@ -29,6 +29,9 @@
     anchor: 'center', // จุดของแผ่นวัดมุมที่ตรงกับหมุด A: center | romer | sixty
     camOffset: 0, // ค่าปรับแก้ทิศของกล้องเล็ง (องศา)
     orient: 'north', // north = ล็อกทิศเหนือ, free = หมุนตามทิศที่เดิน
+    display: 'day', // โหมดหน้าจอ: day / night / nv / mono / stealth
+    bright: 100, // ความสว่างหน้าจอ (%)
+    mute: false, // ปิดเสียงพูดแจ้งเตือน
     decl: 0 // มุมเบี่ยงเบนแม่เหล็ก (องศา, ตะวันออกเป็นบวก)
   };
 
@@ -167,6 +170,11 @@
     } catch (e) { /* ไม่มีแผ่นวัดมุม */ }
     TrailPaper.init({ map: function () { return map; }, toast: toast, closeSheet: closeSheet });
     TrailPaper.loadAll();
+    TrailProj.init({
+      map: function () { return map; }, toast: toast, prefs: prefs,
+      getPin: function () { return pinPos; },
+      showSheet: function (k) { if (sheetKind !== k) openSheet(k); else TrailProj.renderSheet($('sheetBody')); }
+    });
     TrailNav.init({
       map: function () { return map; }, toast: toast, closeSheet: closeSheet, geolocate: geolocate,
       vectorTpl: function () { return vectorTpl; }, prefs: prefs,
@@ -184,6 +192,15 @@
     TrailPrint.init({
       map: function () { return map; }, toast: toast, prefs: prefs,
       visibleRoutes: function () { return TrailNav.visibleRoutes(); }
+    });
+    TrailSound.init({ map: function () { return map; }, toast: toast });
+    TrailJump.init({
+      map: function () { return map; }, toast: toast, prefs: prefs, closeSheet: closeSheet,
+      showSheet: function (k) { if (sheetKind !== k) openSheet(k); else TrailJump.renderSheet($('sheetBody')); }
+    });
+    TrailWind.init({
+      map: function () { return map; }, toast: toast,
+      showSheet: function (k) { if (sheetKind !== k) openSheet(k); else TrailWind.renderSheet($('sheetBody')); }
     });
     TrailSky.init({
       map: function () { return map; }, toast: toast, prefs: prefs, savePrefs: savePrefs,
@@ -595,6 +612,31 @@
     refreshProt();
   }
 
+  /* ---------- โหมดหน้าจอ ---------- */
+  var NV = 'grayscale(1) sepia(1) hue-rotate(-35deg) saturate(6) ';
+  var DISPLAYS = {
+    day: { icon: '☀', name: 'กลางวัน', sub: 'สีปกติ', f: function (b) { return b < 1 ? 'brightness(' + b + ')' : 'none'; } },
+    night: { icon: '☾', name: 'กลางคืน', sub: 'หรี่แสงและโทนอุ่น ถนอมสายตา', f: function (b) { return 'brightness(' + (b * 0.65).toFixed(2) + ') sepia(0.35) saturate(0.75)'; } },
+    nv: { icon: '◉', name: 'ไนท์วิชชั่น', sub: 'แสงแดงล้วน ไม่ทำให้ตาปรับความมืดเสีย', f: function (b) { return NV + 'brightness(' + (b * 0.8).toFixed(2) + ')'; } },
+    mono: { icon: '◐', name: 'ขาวดำ', sub: 'ดูความต่างระดับ/รูปร่างชัด ประหยัดแบตจอ OLED', f: function (b) { return 'grayscale(1) contrast(1.2) brightness(' + b + ')'; } },
+    stealth: { icon: '☗', name: 'พรางตัว', sub: 'แดงมืดสุด แสงลอดน้อย และปิดเสียงทั้งหมด', f: function (b) { return NV + 'brightness(' + (b * 0.3).toFixed(2) + ')'; } }
+  };
+  function applyDisplay() {
+    var d = DISPLAYS[prefs.display] || DISPLAYS.day;
+    var b = Math.max(0.2, Math.min(1, (prefs.bright || 100) / 100));
+    document.documentElement.style.filter = d.f(b);
+    var muted = prefs.mute || prefs.display === 'stealth';
+    if ($('dispBtn')) $('dispBtn').textContent = d.icon;
+    if ($('muteBtn')) $('muteBtn').textContent = muted ? '🔇' : '🔊';
+    if (muted) { try { speechSynthesis.cancel(); } catch (e) { /* ไม่เป็นไร */ } }
+  }
+  function cycleDisplay() {
+    var keys = Object.keys(DISPLAYS);
+    prefs.display = keys[(keys.indexOf(prefs.display) + 1) % keys.length];
+    savePrefs(); applyDisplay();
+    toast('โหมดหน้าจอ: ' + DISPLAYS[prefs.display].name);
+  }
+
   /* ---------- แผงตั้งค่าด้านล่าง ---------- */
   var sheetKind = null;
 
@@ -610,7 +652,7 @@
     sheetKind = kind;
     var sh = $('sheet');
     sh.hidden = false;
-    var title = kind === 'layers' ? 'ชั้นแผนที่' : kind === 'grid' ? 'พิกัดและตารางกริด' : kind === 'special' ? 'หมวดพิเศษ' : kind === 'route' ? 'เส้นทางและนำทาง' : kind === 'sky' ? 'ดวงดาวนำทาง' : kind === 'mil' ? 'สัญลักษณ์ทหารและพิมพ์แผนที่ฝึก' : 'วัดมุมด้วยแผ่นวัดมุม';
+    var title = kind === 'layers' ? 'ชั้นแผนที่และหน้าจอ' : kind === 'grid' ? 'พิกัดและตารางกริด' : kind === 'special' ? 'หมวดพิเศษ' : kind === 'route' ? 'เส้นทางและนำทาง' : kind === 'sky' ? 'ดวงดาวนำทาง' : kind === 'mil' ? 'สัญลักษณ์ทหารและพิมพ์แผนที่ฝึก' : kind === 'proj' ? 'งาน (เส้นทาง · สัญลักษณ์ · หมุด)' : kind === 'snd' ? 'ฟังเสียง (วิเคราะห์ชนิดและระยะ)' : kind === 'wind' ? 'ทิศทางและความเร็วลม' : kind === 'jump' ? 'โหมดโดดร่ม (วางแผน/ฝึก)' : 'วัดมุมด้วยแผ่นวัดมุม';
     sh.innerHTML = '<div class="shead"><h3></h3><button id="sheetClose">ปิด</button></div><div id="sheetBody"></div>';
     sh.querySelector('h3').textContent = title;
     $('sheetClose').onclick = closeSheet;
@@ -621,6 +663,10 @@
     else if (kind === 'route') TrailNav.renderSheet($('sheetBody'));
     else if (kind === 'sky') TrailSky.renderSheet($('sheetBody'));
     else if (kind === 'mil') TrailSym.renderSheet($('sheetBody'));
+    else if (kind === 'proj') TrailProj.renderSheet($('sheetBody'));
+    else if (kind === 'snd') TrailSound.renderSheet($('sheetBody'));
+    else if (kind === 'wind') TrailWind.renderSheet($('sheetBody'));
+    else if (kind === 'jump') TrailJump.renderSheet($('sheetBody'));
     else renderProtSheet();
   }
 
@@ -634,7 +680,11 @@
   }
 
   function renderLayersSheet() {
-    var h = '<h4>แผนที่พื้นหลัง</h4>' +
+    var h = '<h4>โหมดหน้าจอ</h4>' +
+      Object.keys(DISPLAYS).map(function (k) { return radio('disp', k, DISPLAYS[k].icon + ' ' + DISPLAYS[k].name, DISPLAYS[k].sub, prefs.display === k); }).join('') +
+      '<div class="field"><label>ความสว่าง</label><input type="range" id="dispBright" min="20" max="100" step="5" value="' + prefs.bright + '" style="flex:1"></div>' +
+      check('dispMute', 'ปิดเสียง', 'ไม่พูดแจ้งเตือนนำทาง (โหมดพรางตัวปิดเสียงให้อัตโนมัติ)', prefs.mute) +
+      '<h4>แผนที่พื้นหลัง</h4>' +
       radio('base', 'trail', 'แผนที่เดินป่า', 'ทางเดินเท้า ป่า น้ำ เงาภูเขา ยอดเขา ซูมเห็นอาคาร/ชื่อถนน', prefs.base === 'trail') +
       radio('base', 'sat', 'ภาพถ่ายดาวเทียม', 'ซูมได้ละเอียดสุด · ดาวน์โหลดเก็บไว้ใช้ออฟไลน์ได้', prefs.base === 'sat') +
       radio('base', 'topo', 'ภูมิประเทศ (เส้นชั้นความสูง)', 'แผนที่ตามแบบ topo · ดาวน์โหลดเก็บไว้ใช้ออฟไลน์ได้', prefs.base === 'topo') +
@@ -648,6 +698,11 @@
     });
     $('ovWeather').onchange = function () { prefs.weather = this.checked ? 'radar' : 'off'; savePrefs(); applyWeather(); };
     $('ovTraffic').onchange = function () { prefs.traffic = this.checked; savePrefs(); applyTraffic(); };
+    Array.prototype.forEach.call(document.querySelectorAll('input[name=disp]'), function (el) {
+      el.onchange = function () { prefs.display = el.value; savePrefs(); applyDisplay(); };
+    });
+    $('dispBright').oninput = function () { prefs.bright = parseInt(this.value, 10) || 100; savePrefs(); applyDisplay(); };
+    $('dispMute').onchange = function () { prefs.mute = this.checked; savePrefs(); applyDisplay(); };
   }
 
   function renderGridSheet() {
@@ -790,7 +845,8 @@
     }
 
     var id = String(Date.now());
-    var area = { id: id, name: defaultName(), bounds: bounds, tiles: keys.length, failed: failed, base: base };
+    var nm = prompt('ตั้งชื่อแผนที่ที่ดาวน์โหลดนี้', defaultName());
+    var area = { id: id, name: (nm && nm.trim()) || defaultName(), bounds: bounds, tiles: keys.length, failed: failed, base: base };
     var areaCache = await caches.open(AREA_CACHE);
     await areaCache.put('/__area/' + id, new Response(JSON.stringify(keys), { headers: { 'Content-Type': 'application/json' } }));
     var list = loadAreas();
@@ -838,11 +894,24 @@
         $('panel').hidden = true;
         map.fitBounds([[a.bounds[0], a.bounds[1]], [a.bounds[2], a.bounds[3]]], { duration: 800 });
       };
+      var ren = document.createElement('button');
+      ren.className = 'del';
+      ren.style.color = '#2e6b3f';
+      ren.textContent = 'ชื่อ';
+      ren.onclick = function () {
+        var n = prompt('ชื่อแผนที่', a.name);
+        if (n === null || !n.trim()) return;
+        var all = loadAreas();
+        all.forEach(function (x) { if (x.id === a.id) x.name = n.trim(); });
+        saveAreas(all);
+        renderAreas();
+      };
       var del = document.createElement('button');
       del.className = 'del';
       del.textContent = 'ลบ';
       del.onclick = function () { removeArea(a); };
       row.appendChild(info);
+      row.appendChild(ren);
       row.appendChild(del);
       box.appendChild(row);
     });
@@ -1011,6 +1080,16 @@
     $('toolCam').onclick = function () { TrailCam.open(); };
     $('toolSky').onclick = function () { openSheet('sky'); };
     $('toolMil').onclick = function () { openSheet('mil'); };
+    $('toolProj').onclick = function () { openSheet('proj'); };
+    $('toolSnd').onclick = function () { openSheet('snd'); };
+    $('toolJump').onclick = function () { openSheet('jump'); };
+    $('dispBtn').onclick = cycleDisplay;
+    $('muteBtn').onclick = function () {
+      if (prefs.display === 'stealth') { toast('โหมดพรางตัวปิดเสียงอยู่ เปลี่ยนโหมดก่อนจึงเปิดเสียงได้'); return; }
+      prefs.mute = !prefs.mute; savePrefs(); applyDisplay();
+      toast(prefs.mute ? 'ปิดเสียงแล้ว' : 'เปิดเสียงแล้ว');
+    };
+    applyDisplay();
     $('sb2').onclick = $('sb1').onclick = function () {
       var i = G.FORMATS.indexOf(prefs.fmt);
       prefs.fmt = G.FORMATS[(i + 1) % G.FORMATS.length];

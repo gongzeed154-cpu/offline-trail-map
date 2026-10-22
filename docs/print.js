@@ -209,6 +209,18 @@
         nsym++;
       });
     }
+    // หมุดที่ตั้งชื่อไว้
+    if (o.sym && root.TrailProj) {
+      TrailProj.visiblePins().forEach(function (p) {
+        var q = P2(p.lat, p.lng);
+        if (q[0] < fx || q[0] > fx + fw || q[1] < fy || q[1] > fy + fh) return;
+        c.beginPath(); c.arc(q[0], q[1], mm(1.6), 0, 7);
+        c.fillStyle = '#ff8a00'; c.fill(); c.lineWidth = mm(0.4); c.strokeStyle = '#000'; c.stroke();
+        c.font = '700 ' + mm(2.8).toFixed(1) + 'px ' + FONT; c.textAlign = 'left'; c.textBaseline = 'alphabetic';
+        c.lineWidth = mm(0.8); c.strokeStyle = '#fff'; c.strokeText(p.name, q[0] + mm(2.4), q[1] + mm(1));
+        c.fillStyle = '#000'; c.fillText(p.name, q[0] + mm(2.4), q[1] + mm(1));
+      });
+    }
     c.restore();
 
     // กรอบและตัวเลขกริด
@@ -374,7 +386,7 @@
       fld('ศูนย์กลางแผ่น', '<input type="text" id="pCenter" style="flex:1;min-width:0;font-size:16px;padding:8px;border:1px solid #ccc;border-radius:8px"><button type="button" class="btn alt" id="pCur" style="flex:none;padding:8px 10px">กลางจอ</button>') +
       fld('พื้นหลัง', opts('pBase', [['none', 'กริดเปล่า (สำหรับฝึกลงพิกัด)'], ['topo', 'ภูมิประเทศ (เส้นชั้นความสูง)'], ['sat', 'ภาพถ่ายดาวเทียม']], cfg.base)) +
       fld('ความเข้มภาพ', '<input type="range" id="pFade" min="20" max="100" step="5" style="flex:1"><span id="pFadeV" style="flex:0 0 40px;text-align:right"></span>') +
-      '<label class="opt"><input type="checkbox" id="pSym"><span>วางสัญลักษณ์ทหารที่ปักไว้<small>ตามแท็บ "สัญลักษณ์ทหาร"</small></span></label>' +
+      '<label class="opt"><input type="checkbox" id="pSym"><span>วางสัญลักษณ์ทหารและหมุดที่ปักไว้<small>เฉพาะงานที่ติ๊กแสดงอยู่</small></span></label>' +
       '<label class="opt"><input type="checkbox" id="pRoutes"><span>วาดเส้นทางที่แสดงอยู่</span></label>' +
       fld('ความละเอียด', opts('pDpi', [[100, '100 dpi (เร็ว ไฟล์เล็ก)'], [150, '150 dpi (แนะนำ)'], [200, '200 dpi (คมที่สุด)']], cfg.dpi)) +
       '<div class="btnrow"><button class="btn" id="pBuild">สร้างแผนที่ฝึก</button><button class="btn alt" id="pPlate">แผ่นวัดมุมขนาดจริง</button></div>' +

@@ -24,11 +24,12 @@
   }
   #top { position: fixed; top: calc(env(safe-area-inset-top) + 10px); left: 10px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; z-index: 5; }
   #offline { background: #b3261e; color: #fff; }
-  #bottom { position: fixed; left: 10px; bottom: calc(env(safe-area-inset-bottom) + 64px); z-index: 5; }
+  #bottom { display: flex; gap: 8px; align-items: center; position: fixed; left: 10px; bottom: calc(env(safe-area-inset-bottom) + 64px); z-index: 5; }
   #download {
     height: 36px; padding: 0 14px; border: 0; border-radius: 18px; background: var(--green); color: #fff;
     font-size: 13px; font-weight: 600; box-shadow: 0 2px 6px rgba(0,0,0,.3);
   }
+  .rb { width: 36px; height: 36px; border: 0; border-radius: 18px; background: #fff; box-shadow: 0 2px 6px rgba(0,0,0,.3); font-size: 17px; padding: 0; }
   #download:disabled { background: #6f9a7b; }
   #panel { position: fixed; inset: 0; background: #fff; z-index: 20; display: flex; flex-direction: column; padding-top: env(safe-area-inset-top); }
   #panel[hidden], [hidden] { display: none !important; }
@@ -153,6 +154,9 @@
   <button class="tool" id="toolProt"><b>◔</b>วัดมุม</button>
   <button class="tool" id="toolCam"><b>◉</b>กล้อง</button>
   <button class="tool" id="toolSky"><b>✦</b>ดวงดาว</button>
+  <button class="tool" id="toolProj"><b>▤</b>งาน</button>
+  <button class="tool" id="toolJump"><b>✈</b>โดดร่ม</button>
+  <button class="tool" id="toolSnd"><b>♪</b>เสียง</button>
   <button class="tool" id="toolMil"><b>⎙</b>พิมพ์</button>
   <button class="tool" id="toolRoute"><b>⚑</b>เส้นทาง</button>
   <button class="tool" id="toolSpecial"><b>★</b>พิเศษ</button>
@@ -172,6 +176,8 @@
 
 <div id="bottom">
   <button id="download">⬇ ออฟไลน์</button>
+  <button id="dispBtn" class="rb" aria-label="โหมดหน้าจอ">☀</button>
+  <button id="muteBtn" class="rb" aria-label="เสียง">🔊</button>
 </div>
 
 <div id="panel" hidden>
@@ -200,6 +206,10 @@
 <script src="nav.js"></script>
 <script src="cam.js"></script>
 <script src="stars.js"></script>
+<script src="sound.js"></script>
+<script src="wind.js"></script>
+<script src="jump.js"></script>
+<script src="projects.js"></script>
 <script src="symbols.js"></script>
 <script src="print.js"></script>
 <script src="app.js"></script>

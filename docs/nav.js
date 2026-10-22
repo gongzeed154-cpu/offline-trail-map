@@ -51,6 +51,7 @@
     map.addLayer({ id: 'nav-link-line', type: 'line', source: 'nav-link', paint: { 'line-color': '#d6261c', 'line-width': 3, 'line-dasharray': [1, 1.5] } }, 'grid-lines');
     map.addLayer({ id: 'route-wp-dot', type: 'circle', source: 'route-wp', paint: { 'circle-radius': 10, 'circle-color': ['case', ['get', 'saddle'], '#e08a00', '#7b2cbf'], 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 2 } }, 'grid-lines');
     map.addLayer({ id: 'route-wp-num', type: 'symbol', source: 'route-wp', layout: { 'text-field': ['get', 't'], 'text-font': ['Noto Sans Bold'], 'text-size': 11, 'text-allow-overlap': true }, paint: { 'text-color': '#ffffff' } }, 'grid-lines');
+    TrailProj.onChange(drawRoutes);
     drawRoutes();
     bindDraw();
     ctx.geolocate.on('geolocate', function (e) {
@@ -71,7 +72,7 @@
     if (!map.getSource('routes')) return;
     var lines = [], wps = [];
     routes.forEach(function (r) {
-      if (!r.show) return;
+      if (!TrailProj.isVisible(r)) return;
       lines.push({ type: 'Feature', properties: { active: !!(nav && nav.routeId === r.id) }, geometry: { type: 'LineString', coordinates: routePts(r) } });
       r.wps.forEach(function (w, i) { wps.push({ type: 'Feature', properties: { t: String(i + 1), saddle: false }, geometry: { type: 'Point', coordinates: [w.lng, w.lat] } }); });
       r.legs.forEach(function (l) {
@@ -250,7 +251,7 @@
     if (name === null) return;
     var d = 0, t = 0;
     edit.legs.forEach(function (l) { d += l.dist; t += legTime(l); });
-    var r = { id: String(Date.now()), name: name.trim() || 'เส้นทาง', wps: edit.wps, legs: edit.legs, dist: d, time: t, show: true };
+    var r = { id: String(Date.now()), name: name.trim() || 'เส้นทาง', wps: edit.wps, legs: edit.legs, dist: d, time: t, show: true, proj: TrailProj.active() };
     routes.push(r);
     saveRoutes();
     clearEditUI();
@@ -398,7 +399,7 @@
   }
 
   function speak(text) {
-    if (!np.voice || !window.speechSynthesis) return;
+    if (!np.voice || !window.speechSynthesis || (ctx.prefs && (ctx.prefs.mute || ctx.prefs.display === 'stealth'))) return;
     try {
       var u = new SpeechSynthesisUtterance(text);
       u.lang = 'th-TH';
@@ -562,7 +563,7 @@
         var l = { mode: 'free', pts: seg, dist: R.polyLength(seg), time: 0 };
         legs.push(l); d += l.dist; t += legTime(l);
       }
-      routes.push({ id: String(Date.now()) + '-' + idx, name: it.name || 'นำเข้า', wps: wps, legs: legs, dist: d, time: t, show: true });
+      routes.push({ id: String(Date.now()) + '-' + idx, name: it.name || 'นำเข้า', wps: wps, legs: legs, dist: d, time: t, show: true, proj: TrailProj.active() });
       n++;
     });
     if (n) { saveRoutes(); drawRoutes(); }
@@ -603,7 +604,7 @@
       var id = row.getAttribute('data-id');
       var r = routes.filter(function (x) { return x.id === id; })[0];
       row.querySelector('.rname').textContent = r.name;
-      var sub = fmtDist(r.dist) + ' · ~' + fmtDur(r.time) + ' · ' + r.wps.length + ' จุด';
+      var sub = fmtDist(r.dist) + ' · ~' + fmtDur(r.time) + ' · ' + r.wps.length + ' จุด' + ' · งาน: ' + TrailProj.nameOf(r.proj);
       var auto = r.legs.filter(function (l) { return l.mode === 'auto'; });
       if (auto.length) {
         var tl = 0, td = 0, asc = 0, sad = 0;
@@ -614,7 +615,7 @@
       var sh = row.querySelector('.rshow');
       sh.textContent = r.show ? 'ซ่อน' : 'แสดง';
       sh.onclick = function () { r.show = !r.show; saveRoutes(); drawRoutes(); sh.textContent = r.show ? 'ซ่อน' : 'แสดง'; };
-      row.querySelector('.rzoom').onclick = function () { r.show = true; saveRoutes(); drawRoutes(); ctx.closeSheet(); ctx.map().fitBounds(boundsOf(routePts(r)), { padding: 60, duration: 700 }); };
+      row.querySelector('.rzoom').onclick = function () { r.show = true; TrailProj.reveal(r.proj); saveRoutes(); drawRoutes(); ctx.closeSheet(); ctx.map().fitBounds(boundsOf(routePts(r)), { padding: 60, duration: 700 }); };
       row.querySelector('.rgo').onclick = function () { startNav(id, false); };
       row.querySelector('.rsim').onclick = function () { startNav(id, true); };
       row.querySelector('.rren').onclick = function () {
@@ -680,6 +681,11 @@
     handleClick: handleClick,
     renderSheet: renderSheet,
     isBusy: function () { return !!edit; },
-    visibleRoutes: function () { return routes.filter(function (r) { return r.show; }).map(function (r) { return { name: r.name, pts: routePts(r) }; }); }
+    items: function () { return routes; },
+    commit: function () { saveRoutes(); drawRoutes(); },
+    removeRoute: function (id) { routes = routes.filter(function (x) { return x.id !== id; }); saveRoutes(); drawRoutes(); },
+    zoomRoute: function (r) { ctx.closeSheet(); ctx.map().fitBounds(boundsOf(routePts(r)), { padding: 60, duration: 700 }); },
+    addRaw: function (list) { list.forEach(function (r) { routes.push(r); }); saveRoutes(); drawRoutes(); },
+    visibleRoutes: function () { return routes.filter(function (r) { return TrailProj.isVisible(r); }).map(function (r) { return { name: r.name, pts: routePts(r) }; }); }
   };
 })(typeof self !== 'undefined' ? self : this);

@@ -148,7 +148,14 @@
   function init(c) {
     ctx = c;
     load();
-    syms.forEach(mount);
+    refresh();
+    TrailProj.onChange(refresh);
+  }
+
+  function refresh() {
+    syms.forEach(function (s) {
+      if (TrailProj.isVisible(s)) { if (!markers[s.id]) mount(s); } else unmount(s.id);
+    });
   }
 
   function select(id) {
@@ -159,7 +166,7 @@
   }
 
   function place(latlng) {
-    var s = { id: String(Date.now()) + Math.floor(Math.random() * 1000), type: cur.type, side: cur.side, label: cur.label, lat: latlng.lat, lng: latlng.lng };
+    var s = { id: String(Date.now()) + Math.floor(Math.random() * 1000), type: cur.type, side: cur.side, label: cur.label, lat: latlng.lat, lng: latlng.lng, proj: TrailProj.active(), show: true };
     syms.push(s);
     save();
     mount(s);
@@ -167,7 +174,7 @@
     return s;
   }
 
-  function visible() { return syms.slice(); }
+  function visible() { return syms.filter(function (s) { return TrailProj.isVisible(s); }); }
 
   /* ---------- แผงสัญลักษณ์ / พิมพ์ ---------- */
   var bodyEl = null;
@@ -289,5 +296,10 @@
     }
   }
 
-  root.TrailSym = { init: init, renderSheet: renderSheet, draw: draw, list: visible, SIDES: SIDES, TYPES: TYPES, SIDE_BY: SIDE_BY, select: select };
+  root.TrailSym = {
+    items: function () { return syms; },
+    commit: function () { save(); refresh(); },
+    removeSym: function (id) { syms = syms.filter(function (x) { return x.id !== id; }); unmount(id); if (sel === id) sel = null; save(); },
+    addRaw: function (list) { list.forEach(function (s) { syms.push(s); }); save(); refresh(); },
+    init: init, renderSheet: renderSheet, draw: draw, list: visible, SIDES: SIDES, TYPES: TYPES, SIDE_BY: SIDE_BY, select: select };
 })(typeof self !== 'undefined' ? self : this);

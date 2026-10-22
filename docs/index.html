@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<title>แผนที่เดินป่าออฟไลน์</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#2e6b3f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="แผนที่เดินป่า">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="stylesheet" href="lib/maplibre-gl.css">
+<style>
+  :root { --green: #2e6b3f; --bg: #ffffff; --fg: #222; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; font-family: -apple-system, "Sarabun", "Noto Sans Thai", sans-serif; color: var(--fg); background: var(--bg); overscroll-behavior: none; }
+  #map { position: fixed; inset: 0; }
+  .chip {
+    background: #fff; border: 0; border-radius: 20px; padding: 10px 14px; font-size: 15px;
+    box-shadow: 0 2px 6px rgba(0,0,0,.25); color: var(--fg);
+  }
+  #top { position: fixed; top: calc(env(safe-area-inset-top) + 10px); left: 10px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; z-index: 5; }
+  #offline { background: #b3261e; color: #fff; }
+  #bottom { position: fixed; left: 0; right: 0; bottom: 0; padding: 12px 16px calc(env(safe-area-inset-bottom) + 12px); z-index: 5; }
+  #download {
+    width: 100%; height: 52px; border: 0; border-radius: 26px; background: var(--green); color: #fff;
+    font-size: 16px; font-weight: 600; box-shadow: 0 2px 8px rgba(0,0,0,.3);
+  }
+  #download:disabled { background: #6f9a7b; }
+  #panel { position: fixed; inset: 0; background: #fff; z-index: 20; display: flex; flex-direction: column; padding-top: env(safe-area-inset-top); }
+  #panel[hidden], [hidden] { display: none !important; }
+  .phead { display: flex; justify-content: space-between; align-items: center; padding: 16px; border-bottom: 1px solid #ddd; }
+  .phead h2 { margin: 0; font-size: 18px; }
+  .phead button { border: 0; background: none; color: var(--green); font-size: 16px; }
+  #areaList { flex: 1; overflow: auto; }
+  .row { display: flex; align-items: center; border-bottom: 1px solid #eee; }
+  .info { flex: 1; text-align: left; border: 0; background: none; padding: 16px; font-size: 16px; }
+  .info b { display: block; }
+  .info span { font-size: 13px; color: #666; }
+  .del { border: 0; background: none; color: #b3261e; font-size: 15px; padding: 16px; }
+  .empty { padding: 24px; text-align: center; color: #666; line-height: 1.6; }
+  #usage { padding: 12px 16px calc(env(safe-area-inset-bottom) + 12px); font-size: 13px; color: #666; border-top: 1px solid #eee; }
+  #toast { position: fixed; left: 16px; right: 16px; bottom: calc(env(safe-area-inset-bottom) + 80px); background: #222; color: #fff; padding: 12px 14px; border-radius: 12px; z-index: 30; font-size: 14px; }
+  #hint { position: fixed; left: 12px; right: 12px; top: calc(env(safe-area-inset-top) + 56px); background: #fff8d6; border: 1px solid #e6d98a; border-radius: 12px; padding: 12px 14px; z-index: 15; font-size: 14px; line-height: 1.5; }
+  #hint button { float: right; border: 0; background: none; font-size: 18px; margin-left: 8px; }
+  #fatal { position: fixed; inset: 0; background: #fff; z-index: 40; padding: 32px 24px; line-height: 1.7; }
+  .maplibregl-ctrl-bottom-right { bottom: 70px; }
+  .maplibregl-ctrl-bottom-left { bottom: 70px; }
+</style>
+</head>
+<body>
+<div id="map"></div>
+
+<div id="top">
+  <button class="chip" id="openPanel">แผนที่ที่ดาวน์โหลดไว้ (<span id="areaCount">0</span>)</button>
+  <div class="chip" id="alt" hidden></div>
+  <div class="chip" id="offline" hidden>ออฟไลน์</div>
+</div>
+
+<div id="hint" hidden>
+  <button id="hintClose" aria-label="ปิด">✕</button>
+  <b>ติดตั้งลงหน้าจอโฮม</b><br>
+  กดปุ่มแชร์ (สี่เหลี่ยมมีลูกศรขึ้น) ใน Safari แล้วเลือก "เพิ่มไปยังหน้าจอโฮม" จากนั้นเปิดแอพจากไอคอนบนหน้าจอ แผนที่ที่ดาวน์โหลดจะอยู่ได้นานกว่า
+</div>
+
+<div id="bottom">
+  <button id="download">ดาวน์โหลดพื้นที่ที่เห็นบนจอ</button>
+</div>
+
+<div id="panel" hidden>
+  <div class="phead"><h2>แผนที่ที่ดาวน์โหลดไว้</h2><button id="closePanel">ปิด</button></div>
+  <div id="areaList"></div>
+  <div id="usage"></div>
+</div>
+
+<div id="toast" hidden></div>
+
+<div id="fatal" hidden>
+  <h2>เปิดแผนที่ไม่ได้</h2>
+  <p>เปิดแอพครั้งแรกต้องมีอินเทอร์เน็ต เพื่อดึงข้อมูลแผนที่ กรุณาต่ออินเทอร์เน็ตแล้วเปิดแอพใหม่</p>
+</div>
+
+<script src="lib/maplibre-gl.js"></script>
+<script src="common.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

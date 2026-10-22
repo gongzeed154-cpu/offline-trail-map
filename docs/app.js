@@ -163,6 +163,11 @@
     } catch (e) { /* ไม่มีแผ่นวัดมุม */ }
     TrailPaper.init({ map: function () { return map; }, toast: toast, closeSheet: closeSheet });
     TrailPaper.loadAll();
+    TrailNav.init({
+      map: function () { return map; }, toast: toast, closeSheet: closeSheet, geolocate: geolocate,
+      vectorTpl: function () { return vectorTpl; }, prefs: prefs,
+      fmtPoint: function (lat, lng) { return G.formatPoint(lat, lng, prefs.fmt); }
+    });
 
     applyBase();
     applyTraffic();
@@ -244,6 +249,7 @@
   }
 
   function onMapClick(e) {
+    if (TrailNav.handleClick(e)) return;
     if (prot.on) { protTap(e.lngLat); return; }
     if (pinMarker) {
       pinMarker.remove();
@@ -505,6 +511,7 @@
     updatePlate();
 
     var card = $('azcard');
+    if (!$('navcard').hidden || !$('routecard').hidden) { card.hidden = true; return; }
     if (!prot.on) { card.hidden = true; return; }
     card.hidden = false;
     if (!r) {
@@ -563,7 +570,7 @@
     sheetKind = kind;
     var sh = $('sheet');
     sh.hidden = false;
-    var title = kind === 'layers' ? 'ชั้นแผนที่' : kind === 'grid' ? 'พิกัดและตารางกริด' : kind === 'special' ? 'หมวดพิเศษ' : 'วัดมุมด้วยแผ่นวัดมุม';
+    var title = kind === 'layers' ? 'ชั้นแผนที่' : kind === 'grid' ? 'พิกัดและตารางกริด' : kind === 'special' ? 'หมวดพิเศษ' : kind === 'route' ? 'เส้นทางและนำทาง' : 'วัดมุมด้วยแผ่นวัดมุม';
     sh.innerHTML = '<div class="shead"><h3></h3><button id="sheetClose">ปิด</button></div><div id="sheetBody"></div>';
     sh.querySelector('h3').textContent = title;
     $('sheetClose').onclick = closeSheet;
@@ -571,6 +578,7 @@
     if (kind === 'layers') renderLayersSheet();
     else if (kind === 'grid') renderGridSheet();
     else if (kind === 'special') TrailPaper.renderSheet($('sheetBody'));
+    else if (kind === 'route') TrailNav.renderSheet($('sheetBody'));
     else renderProtSheet();
   }
 
@@ -861,6 +869,12 @@
     loadPrefs();
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('./sw.js').catch(function () {});
+      var reloaded = false;
+      navigator.serviceWorker.addEventListener('controllerchange', function () {
+        if (reloaded || !navigator.serviceWorker.controller) return;
+        reloaded = true;
+        if (!downloading) location.reload();
+      });
     }
     window.addEventListener('online', updateOnline);
     window.addEventListener('offline', updateOnline);
@@ -874,6 +888,7 @@
     $('toolGrid').onclick = function () { openSheet('grid'); };
     $('toolProt').onclick = function () { openSheet('prot'); };
     $('toolSpecial').onclick = function () { openSheet('special'); };
+    $('toolRoute').onclick = function () { openSheet('route'); };
     $('coord').onclick = function () {
       var i = G.FORMATS.indexOf(prefs.fmt);
       prefs.fmt = G.FORMATS[(i + 1) % G.FORMATS.length];

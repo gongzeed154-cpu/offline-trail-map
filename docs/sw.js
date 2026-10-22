@@ -1,7 +1,7 @@
 /* service worker: เก็บไฟล์แอพและไทล์แผนที่ไว้ใช้ตอนไม่มีสัญญาณ */
 importScripts('./common.js');
 
-var SHELL_CACHE = 'shell-v3';
+var SHELL_CACHE = 'shell-v4';
 var TILE_CACHE = 'tiles-v1';
 var SHELL_FILES = [
   './',
@@ -11,6 +11,8 @@ var SHELL_FILES = [
   './geo.js',
   './plate.js',
   './paper.js',
+  './route.js',
+  './nav.js',
   './manifest.webmanifest',
   './lib/maplibre-gl.js',
   './lib/maplibre-gl.css',
@@ -60,18 +62,18 @@ self.addEventListener('fetch', function (event) {
     return;
   }
 
-  // ไฟล์ของแอพเอง: ใช้ที่เก็บไว้ก่อน แล้วอัปเดตเบื้องหลังเมื่อมีเน็ต
+  // ไฟล์ของแอพเอง: ลองโหลดจากเน็ตก่อน (รอไม่เกิน 3 วินาที) ถ้าไม่ได้ค่อยใช้ที่เก็บไว้ เพื่อให้เวอร์ชันใหม่มาถึงทันที
   if (url.indexOf(self.location.origin) === 0) {
     event.respondWith(
       caches.open(SHELL_CACHE).then(function (cache) {
         return cache.match(req, { ignoreSearch: true }).then(function (hit) {
-          var net = fetch(req)
-            .then(function (res) {
-              if (res && res.ok) cache.put(req, res.clone());
-              return res;
-            })
-            .catch(function () { return hit; });
-          return hit || net;
+          var net = fetch(req, { cache: 'no-cache' }).then(function (res) {
+            if (res && res.ok) cache.put(req, res.clone());
+            return res;
+          });
+          if (!hit) return net;
+          var timeout = new Promise(function (resolve) { setTimeout(function () { resolve(hit); }, 3000); });
+          return Promise.race([net.catch(function () { return hit; }), timeout]);
         });
       })
     );

@@ -255,6 +255,83 @@
     return fromUTM(zone, ua.north, ua.e + distM * Math.sin(r), ua.n + distM * Math.cos(r));
   }
 
+  /* ---------- อ่านพิกัดที่พิมพ์เข้ามา ---------- */
+  function parseAngleStr(s) {
+    s = String(s).trim().toUpperCase();
+    var neg = /[SW]/.test(s) || /^-/.test(s);
+    var nums = s.replace(/,/g, '.').match(/\d+(?:\.\d+)?/g);
+    if (!nums) return NaN;
+    var v = 0, div = 1;
+    for (var i = 0; i < 3 && i < nums.length; i++) { v += parseFloat(nums[i]) / div; div *= 60; }
+    return neg ? -v : v;
+  }
+
+  // รับ MGRS, UTM, หรือ lat/lng (องศาทศนิยม / องศา-ลิปดา / องศา-ลิปดา-ฟิลิปดา) คืน {lat,lng} หรือ null
+  function parsePoint(text) {
+    var t = String(text || '').trim().toUpperCase();
+    if (!t) return null;
+    var m, p, i;
+
+    m = /^(\d{1,2})\s*([C-HJ-NP-X])\s*([A-HJ-NP-Z])\s*([A-HJ-NP-V])\s*([\d\s]*)$/.exec(t);
+    if (m) {
+      var zone = parseInt(m[1], 10);
+      if (zone < 1 || zone > 60) return null;
+      var col = COL_LETTERS[(zone - 1) % 3].indexOf(m[3]);
+      var row = ROW_LETTERS.indexOf(m[4]);
+      if (col < 0 || row < 0) return null;
+      var parts = m[5].trim().split(/\s+/).filter(function (x) { return x; });
+      var es, ns;
+      if (parts.length === 2) { es = parts[0]; ns = parts[1]; }
+      else if (parts.length === 1 && parts[0].length % 2 === 0) { es = parts[0].slice(0, parts[0].length / 2); ns = parts[0].slice(parts[0].length / 2); }
+      else if (parts.length === 0) { es = ''; ns = ''; }
+      else return null;
+      if (es.length !== ns.length || es.length > 5) return null;
+      var sc = Math.pow(10, 5 - es.length);
+      var eM = (es ? parseInt(es, 10) : 0) * sc, nM = (ns ? parseInt(ns, 10) : 0) * sc;
+      var n100 = ((row - (zone % 2 === 0 ? 5 : 0) + 20) % 20) * 100000;
+      var bi = BANDS.indexOf(m[2]);
+      var ref = toUTM(-80 + 8 * bi + 0.001, zoneMeridian(zone), zone).n;
+      var N0 = n100 + nM;
+      while (N0 < ref - 3000) N0 += 2000000;
+      return fromUTM(zone, bi >= 10, (col + 1) * 100000 + eM, N0);
+    }
+
+    m = /^(\d{1,2})\s*([C-X])\s*E?\s*(\d{5,7})\s*[,\s]\s*N?\s*(\d{6,8})$/.exec(t);
+    if (m) {
+      var z = parseInt(m[1], 10);
+      var bi2 = BANDS.indexOf(m[2]);
+      if (z < 1 || z > 60 || bi2 < 0) return null;
+      return fromUTM(z, bi2 >= 10, parseInt(m[3], 10), parseInt(m[4], 10));
+    }
+
+    var lat = NaN, lng = NaN;
+    if (/[NSEW]/.test(t)) {
+      var chunks = t.match(/[^NSEW]+[NSEW]/g);
+      if (!chunks || chunks.length !== 2) return null;
+      for (i = 0; i < 2; i++) {
+        var hz = chunks[i].charAt(chunks[i].length - 1);
+        var val = parseAngleStr(chunks[i]);
+        if (hz === 'N' || hz === 'S') lat = Math.abs(val) * (hz === 'S' ? -1 : 1);
+        else lng = Math.abs(val) * (hz === 'W' ? -1 : 1);
+      }
+    } else {
+      var halves = t.split(/[;,]/);
+      if (halves.length === 2 && /\d/.test(halves[0]) && /\d/.test(halves[1])) {
+        lat = parseAngleStr(halves[0]); lng = parseAngleStr(halves[1]);
+      } else {
+        var nums = t.match(/-?\d+(?:\.\d+)?/g) || [];
+        if (nums.length === 2) { lat = parseFloat(nums[0]); lng = parseFloat(nums[1]); }
+        else if (nums.length === 4 || nums.length === 6) {
+          var k = nums.length / 2;
+          lat = parseAngleStr(nums.slice(0, k).join(' '));
+          lng = parseAngleStr(nums.slice(k).join(' '));
+        } else return null;
+      }
+    }
+    if (isNaN(lat) || isNaN(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+    return { lat: lat, lng: lng };
+  }
+
   root.TrailGeo = {
     D2R: D2R,
     R2D: R2D,
@@ -280,6 +357,7 @@
     gridAzimuth: gridAzimuth,
     trueAzimuth: trueAzimuth,
     haversine: haversine,
+    parsePoint: parsePoint,
     pointFromGrid: pointFromGrid
   };
 })(typeof self !== 'undefined' ? self : this);

@@ -1,0 +1,33 @@
+@page { size: A4; margin: 14mm 14mm 16mm 14mm; }
+* { box-sizing: border-box; }
+html { font-family: "Leelawadee UI", "Tahoma", "Sarabun", "Noto Sans Thai", sans-serif; color: #1d1d1f; font-size: 10.5pt; line-height: 1.55; }
+body { margin: 0; }
+h1 { font-size: 20pt; color: #1f5a30; margin: 0 0 6pt; border-bottom: 3px solid #2e6b3f; padding-bottom: 4pt; page-break-before: always; }
+h1.first { page-break-before: auto; }
+h2 { font-size: 13.5pt; color: #2e6b3f; margin: 14pt 0 4pt; page-break-after: avoid; }
+h3 { font-size: 11.5pt; margin: 10pt 0 2pt; page-break-after: avoid; }
+p { margin: 4pt 0; }
+ul, ol { margin: 3pt 0 3pt 16pt; padding: 0; }
+li { margin: 1.5pt 0; }
+table { border-collapse: collapse; width: 100%; margin: 6pt 0; font-size: 9.5pt; page-break-inside: auto; }
+tr { page-break-inside: avoid; }
+th, td { border: 1px solid #c9d3cb; padding: 3pt 5pt; vertical-align: top; text-align: left; }
+th { background: #e6efe8; color: #1f5a30; }
+td.c, th.c { text-align: center; }
+.ok { color: #1a7f37; font-weight: 700; }
+.no { color: #b3261e; }
+.box { border-radius: 6pt; padding: 6pt 9pt; margin: 8pt 0; page-break-inside: avoid; }
+.tip { background: #eaf6ee; border: 1px solid #9fcfae; }
+.warn { background: #fff4e0; border: 1px solid #f0b95a; }
+.danger { background: #fdecea; border: 1px solid #e58a82; color: #6e1209; }
+.kbd { display: inline-block; border: 1px solid #888; border-radius: 4pt; padding: 0 4pt; background: #f4f4f4; font-weight: 700; }
+.cover { height: 255mm; display: flex; flex-direction: column; justify-content: space-between; page-break-after: always; }
+.cover h0 { display: block; font-size: 30pt; font-weight: 800; color: #1f5a30; line-height: 1.2; margin-top: 30mm; }
+.cover .sub { font-size: 14pt; color: #444; margin-top: 6pt; }
+.qrbox { display: flex; gap: 14mm; align-items: center; border: 2px solid #2e6b3f; border-radius: 10pt; padding: 8mm; }
+.qrbox .qr { width: 52mm; flex: none; }
+.qrbox .qr svg { width: 100%; height: auto; display: block; }
+.qrbox b { font-size: 13pt; }
+.small { font-size: 9pt; color: #555; }
+.tiers th.t1 { background: #e8e8e8; } .tiers th.t2 { background: #cfe3ff; } .tiers th.t3 { background: #ffe2a8; } .tiers th.t4 { background: #e3c8ff; }
+.toc li { margin: 1pt 0; }

@@ -177,6 +177,18 @@
       vectorTpl: function () { return vectorTpl; },
       fmtPoint: function (lat, lng) { return G.formatPoint(lat, lng, prefs.fmt); }
     });
+    TrailSym.init({
+      map: function () { return map; }, toast: toast, prefs: prefs,
+      showSheet: function (k) { if (sheetKind !== k) openSheet(k); else TrailSym.renderSheet($('sheetBody')); }
+    });
+    TrailPrint.init({
+      map: function () { return map; }, toast: toast, prefs: prefs,
+      visibleRoutes: function () { return TrailNav.visibleRoutes(); }
+    });
+    TrailSky.init({
+      map: function () { return map; }, toast: toast, prefs: prefs, savePrefs: savePrefs,
+      fmtPoint: function (lat, lng) { return G.formatPoint(lat, lng, prefs.fmt); }
+    });
     applyOrient();
     updateStatus();
     try {
@@ -273,6 +285,8 @@
   }
 
   function onMapClick(e) {
+    var tg = e.originalEvent && e.originalEvent.target;
+    if (tg && tg.closest && tg.closest('.symmark')) return;
     if (TrailNav.handleClick(e)) return;
     if (prot.on) { protTap(e.lngLat); return; }
     if (pinMarker) {
@@ -596,7 +610,7 @@
     sheetKind = kind;
     var sh = $('sheet');
     sh.hidden = false;
-    var title = kind === 'layers' ? 'ชั้นแผนที่' : kind === 'grid' ? 'พิกัดและตารางกริด' : kind === 'special' ? 'หมวดพิเศษ' : kind === 'route' ? 'เส้นทางและนำทาง' : 'วัดมุมด้วยแผ่นวัดมุม';
+    var title = kind === 'layers' ? 'ชั้นแผนที่' : kind === 'grid' ? 'พิกัดและตารางกริด' : kind === 'special' ? 'หมวดพิเศษ' : kind === 'route' ? 'เส้นทางและนำทาง' : kind === 'sky' ? 'ดวงดาวนำทาง' : kind === 'mil' ? 'สัญลักษณ์ทหารและพิมพ์แผนที่ฝึก' : 'วัดมุมด้วยแผ่นวัดมุม';
     sh.innerHTML = '<div class="shead"><h3></h3><button id="sheetClose">ปิด</button></div><div id="sheetBody"></div>';
     sh.querySelector('h3').textContent = title;
     $('sheetClose').onclick = closeSheet;
@@ -605,6 +619,8 @@
     else if (kind === 'grid') renderGridSheet();
     else if (kind === 'special') TrailPaper.renderSheet($('sheetBody'));
     else if (kind === 'route') TrailNav.renderSheet($('sheetBody'));
+    else if (kind === 'sky') TrailSky.renderSheet($('sheetBody'));
+    else if (kind === 'mil') TrailSym.renderSheet($('sheetBody'));
     else renderProtSheet();
   }
 
@@ -993,6 +1009,8 @@
     $('toolSpecial').onclick = function () { openSheet('special'); };
     $('toolRoute').onclick = function () { openSheet('route'); };
     $('toolCam').onclick = function () { TrailCam.open(); };
+    $('toolSky').onclick = function () { openSheet('sky'); };
+    $('toolMil').onclick = function () { openSheet('mil'); };
     $('sb2').onclick = $('sb1').onclick = function () {
       var i = G.FORMATS.indexOf(prefs.fmt);
       prefs.fmt = G.FORMATS[(i + 1) % G.FORMATS.length];

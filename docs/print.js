@@ -1,0 +1,452 @@
+// สร้างแผนที่ฝึกสำหรับพิมพ์: กริด UTM ตามมาตราส่วนจริง + สเกล + ทิศเหนือ + สัญลักษณ์ทหาร ส่งออก PDF/PNG/JPEG
+(function (root) {
+  var G = TrailGeo;
+  var C = TrailCommon;
+  var KEY = 'trail_print_v1';
+  var PAPERS = { A5: [148, 210], A4: [210, 297], A3: [297, 420], Letter: [216, 279] };
+  var SCALES = [10000, 25000, 50000, 100000, 250000];
+  var FONT = '"Sarabun","Noto Sans Thai",-apple-system,sans-serif';
+  var BARS = [[100, 25], [200, 50], [500, 100], [1000, 250], [2000, 500], [2500, 500], [4000, 1000], [5000, 1000], [8000, 2000], [10000, 2000], [20000, 5000], [25000, 5000], [40000, 10000], [50000, 10000]];
+
+  var cfg = { title: 'แบบฝึกอ่านพิกัดกริด', paper: 'A4', land: false, scale: 50000, grid: 'auto', style: 'lines', center: '', cfmt: 'mgrs', base: 'none', fade: 55, sym: true, routes: true, dpi: 150 };
+  var ctx = null;
+  var last = null;
+  var busy = false;
+
+  function $(id) { return document.getElementById(id); }
+  function init(c) {
+    ctx = c;
+    try { var s = JSON.parse(localStorage.getItem(KEY) || '{}'); for (var k in cfg) if (s[k] !== undefined) cfg[k] = s[k]; } catch (e) { /* ค่าเริ่มต้น */ }
+  }
+  function saveCfg() { try { localStorage.setItem(KEY, JSON.stringify(cfg)); } catch (e) { /* ไม่เป็นไร */ } }
+  function autoGrid(scale) { return scale <= 10000 ? 100 : scale <= 100000 ? 1000 : 10000; }
+  function safeName(s) { return String(s).replace(/[\\/:*?"<>|]/g, '_').trim() || 'map'; }
+  function fmtLen(m) { return m >= 1000 ? (m / 1000) + ' กม.' : m + ' ม.'; }
+
+  /* ---------- พื้นหลังภาพไทล์ (ดึงเข้าเส้นกริด UTM) ---------- */
+  async function drawBase(c, o, g, onStatus) {
+    var tpl = o.base === 'sat' ? C.SAT_TEMPLATE : C.TOPO_TEMPLATE;
+    var maxZ = o.base === 'sat' ? 16 : 15;
+    var lat0 = G.fromUTM(g.zone, g.north, g.E0, g.N0).lat;
+    var z = Math.ceil(Math.log(156543.03392 * Math.cos(lat0 * Math.PI / 180) / g.mpp) / Math.LN2);
+    z = Math.max(3, Math.min(maxZ, z));
+    var S = 16, nx = Math.ceil(g.fw / S) + 1, ny = Math.ceil(g.fh / S) + 1;
+    var LL = new Array(nx * ny);
+    for (var j = 0; j < ny; j++) {
+      for (var i = 0; i < nx; i++) {
+        LL[j * nx + i] = G.fromUTM(g.zone, g.north, g.E0 + (i * S - g.fw / 2) * g.mpp, g.N0 - (j * S - g.fh / 2) * g.mpp);
+      }
+    }
+    var WX, WY, tx0, tx1, ty0, ty1, total;
+    for (;;) {
+      var sc = 256 * Math.pow(2, z);
+      WX = new Float64Array(nx * ny); WY = new Float64Array(nx * ny);
+      var mnx = 1e18, mxx = -1e18, mny = 1e18, mxy = -1e18;
+      for (var k = 0; k < LL.length; k++) {
+        var s = Math.sin(LL[k].lat * Math.PI / 180);
+        WX[k] = (LL[k].lng + 180) / 360 * sc;
+        WY[k] = (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * sc;
+        mnx = Math.min(mnx, WX[k]); mxx = Math.max(mxx, WX[k]); mny = Math.min(mny, WY[k]); mxy = Math.max(mxy, WY[k]);
+      }
+      var lim = Math.pow(2, z) - 1;
+      tx0 = Math.floor(mnx / 256); tx1 = Math.floor(mxx / 256);
+      ty0 = Math.max(0, Math.floor(mny / 256)); ty1 = Math.min(lim, Math.floor(mxy / 256));
+      total = (tx1 - tx0 + 1) * (ty1 - ty0 + 1);
+      if (total <= 150 || z <= 3) break;
+      z--;
+    }
+    var mw = (tx1 - tx0 + 1) * 256, mh = (ty1 - ty0 + 1) * 256;
+    var mosaic = document.createElement('canvas');
+    mosaic.width = mw; mosaic.height = mh;
+    var mc = mosaic.getContext('2d');
+    var jobs = [];
+    for (var ty = ty0; ty <= ty1; ty++) for (var tx = tx0; tx <= tx1; tx++) jobs.push({ tx: tx, ty: ty });
+    var done = 0, got = 0;
+    async function worker() {
+      while (jobs.length) {
+        var job = jobs.pop();
+        try {
+          var wrapX = ((job.tx % (lim + 1)) + lim + 1) % (lim + 1);
+          var url = tpl.replace('{z}', z).replace('{x}', wrapX).replace('{y}', job.ty);
+          var r = await fetch(url);
+          if (r.ok) {
+            var bm = await createImageBitmap(await r.blob());
+            mc.drawImage(bm, (job.tx - tx0) * 256, (job.ty - ty0) * 256);
+            if (bm.close) bm.close();
+            got++;
+          }
+        } catch (e) { /* ข้ามไทล์ที่โหลดไม่ได้ */ }
+        done++;
+        onStatus('โหลดภาพพื้นหลัง ' + done + '/' + total + ' (ซูม ' + z + ')');
+      }
+    }
+    await Promise.all([worker(), worker(), worker(), worker(), worker(), worker()]);
+    if (!got) throw new Error('โหลดภาพพื้นหลังไม่ได้ (ต้องออนไลน์ หรือดาวน์โหลดพื้นที่นั้นไว้ก่อน)');
+    onStatus('ปรับภาพให้ตรงกริด…');
+    await new Promise(function (r) { setTimeout(r, 20); });
+    var md = mc.getImageData(0, 0, mw, mh).data;
+    var out = c.createImageData(g.fw, g.fh), od = out.data;
+    var fade = o.fade / 100;
+    var ox = tx0 * 256, oy = ty0 * 256;
+    for (var py = 0; py < g.fh; py++) {
+      var jj = Math.floor(py / S), fyy = (py - jj * S) / S;
+      for (var px = 0; px < g.fw; px++) {
+        var ii = Math.floor(px / S), fxx = (px - ii * S) / S;
+        var a = jj * nx + ii, b = a + 1, d = a + nx, e = d + 1;
+        var wx = (WX[a] * (1 - fxx) + WX[b] * fxx) * (1 - fyy) + (WX[d] * (1 - fxx) + WX[e] * fxx) * fyy;
+        var wy = (WY[a] * (1 - fxx) + WY[b] * fxx) * (1 - fyy) + (WY[d] * (1 - fxx) + WY[e] * fxx) * fyy;
+        var sx = Math.floor(wx - ox), sy = Math.floor(wy - oy);
+        var o4 = (py * g.fw + px) * 4;
+        var r0 = 255, g0 = 255, b0 = 255;
+        if (sx >= 0 && sy >= 0 && sx < mw && sy < mh) {
+          var m4 = (sy * mw + sx) * 4;
+          if (md[m4 + 3] > 0) { r0 = md[m4]; g0 = md[m4 + 1]; b0 = md[m4 + 2]; }
+        }
+        od[o4] = 255 + (r0 - 255) * fade;
+        od[o4 + 1] = 255 + (g0 - 255) * fade;
+        od[o4 + 2] = 255 + (b0 - 255) * fade;
+        od[o4 + 3] = 255;
+      }
+    }
+    c.putImageData(out, g.fx, g.fy);
+  }
+
+  /* ---------- วาดหน้ากระดาษ ---------- */
+  function gridLabel(v, I, first) {
+    var km = v / 1000, dec = I < 100 ? 2 : I < 1000 ? 1 : 0;
+    var s = Math.abs(km).toFixed(dec);
+    if (first) return s;
+    var parts = s.split('.'), ip = parseInt(parts[0], 10) % 100;
+    return (ip < 10 ? '0' : '') + ip + (dec ? '.' + parts[1] : '');
+  }
+
+  async function render(o, onStatus) {
+    var pxmm = o.dpi / 25.4, P = PAPERS[o.paper];
+    var wmm = o.land ? P[1] : P[0], hmm = o.land ? P[0] : P[1];
+    var W = Math.round(wmm * pxmm), H = Math.round(hmm * pxmm);
+    var cv = document.createElement('canvas');
+    cv.width = W; cv.height = H;
+    var c = cv.getContext('2d');
+    c.fillStyle = '#ffffff'; c.fillRect(0, 0, W, H);
+    function mm(v) { return v * pxmm; }
+
+    var M = 8, L = 6, HD = 12, FT = Math.min(40, Math.max(30, hmm * 0.13));
+    var fx = Math.round(mm(M + L)), fy = Math.round(mm(M + HD + L));
+    var fw = Math.round(W - 2 * mm(M + L)), fh = Math.round(H - mm(M + HD + L) - mm(L + FT + M));
+    if (fw < 100 || fh < 100) throw new Error('กระดาษเล็กเกินไปสำหรับค่านี้');
+    var mpp = (o.scale / 1000) / pxmm; // เมตรต่อพิกเซล
+    var cl = o.center ? G.parsePoint(o.center) : null;
+    if (o.center && !cl) throw new Error('อ่านพิกัดศูนย์กลางไม่ได้ ตรวจรูปแบบ: ' + G.FORMAT_HINT[o.cfmt]);
+    if (!cl) { var mc0 = ctx.map().getCenter(); cl = { lat: mc0.lat, lng: mc0.lng }; }
+    if (cl.lat <= -80 || cl.lat >= 84) throw new Error('พิกัดอยู่นอกช่วง UTM');
+    var u0 = G.toUTM(cl.lat, cl.lng);
+    var g = { fx: fx, fy: fy, fw: fw, fh: fh, cx: fx + fw / 2, cy: fy + fh / 2, mpp: mpp, E0: u0.e, N0: u0.n, zone: u0.zone, north: u0.north };
+    function P2(lat, lng) {
+      var u = G.toUTM(lat, lng, g.zone);
+      return [g.cx + (u.e - g.E0) / mpp, g.cy - (u.n - g.N0) / mpp];
+    }
+    function text(str, x, y, sizeMM, bold, align, color) {
+      c.font = (bold ? '700 ' : '400 ') + mm(sizeMM).toFixed(1) + 'px ' + FONT;
+      c.textAlign = align || 'left'; c.textBaseline = 'alphabetic';
+      c.fillStyle = color || '#000';
+      c.fillText(str, x, y);
+    }
+
+    if (o.base !== 'none') await drawBase(c, o, g, onStatus);
+
+    // กริด
+    var I = o.grid === 'auto' ? autoGrid(o.scale) : parseInt(o.grid, 10);
+    var Emin = g.E0 - (fw / 2) * mpp, Emax = g.E0 + (fw / 2) * mpp, Nmin = g.N0 - (fh / 2) * mpp, Nmax = g.N0 + (fh / 2) * mpp;
+    var kE0 = Math.ceil(Emin / I), kE1 = Math.floor(Emax / I), kN0 = Math.ceil(Nmin / I), kN1 = Math.floor(Nmax / I);
+    function xOf(e) { return g.cx + (e - g.E0) / mpp; }
+    function yOf(n) { return g.cy - (n - g.N0) / mpp; }
+
+    c.save();
+    c.beginPath(); c.rect(fx, fy, fw, fh); c.clip();
+    c.strokeStyle = 'rgba(20,20,20,0.9)';
+    c.lineWidth = Math.max(1, mm(o.style === 'lines' ? 0.25 : 0.2));
+    var k, kk;
+    if (o.style === 'lines') {
+      c.beginPath();
+      for (k = kE0; k <= kE1; k++) { var x = xOf(k * I); c.moveTo(x, fy); c.lineTo(x, fy + fh); }
+      for (kk = kN0; kk <= kN1; kk++) { var y = yOf(kk * I); c.moveTo(fx, y); c.lineTo(fx + fw, y); }
+      c.stroke();
+    } else {
+      c.beginPath();
+      var cr = mm(2.5);
+      for (k = kE0; k <= kE1; k++) {
+        for (kk = kN0; kk <= kN1; kk++) {
+          var cx0 = xOf(k * I), cy0 = yOf(kk * I);
+          c.moveTo(cx0 - cr, cy0); c.lineTo(cx0 + cr, cy0); c.moveTo(cx0, cy0 - cr); c.lineTo(cx0, cy0 + cr);
+        }
+      }
+      c.stroke();
+    }
+    // ขีดสั้นที่ขอบกรอบ
+    c.lineWidth = Math.max(1, mm(0.25));
+    c.beginPath();
+    var tk = mm(2.2);
+    for (k = kE0; k <= kE1; k++) { var xt = xOf(k * I); c.moveTo(xt, fy); c.lineTo(xt, fy + tk); c.moveTo(xt, fy + fh); c.lineTo(xt, fy + fh - tk); }
+    for (kk = kN0; kk <= kN1; kk++) { var yt = yOf(kk * I); c.moveTo(fx, yt); c.lineTo(fx + tk, yt); c.moveTo(fx + fw, yt); c.lineTo(fx + fw - tk, yt); }
+    c.stroke();
+
+    // เส้นทาง
+    if (o.routes && ctx.visibleRoutes) {
+      c.strokeStyle = '#7b2cbf'; c.lineWidth = mm(0.7); c.lineJoin = 'round';
+      ctx.visibleRoutes().forEach(function (r) {
+        c.beginPath();
+        r.pts.forEach(function (p, i) { var q = P2(p[1], p[0]); if (i) c.lineTo(q[0], q[1]); else c.moveTo(q[0], q[1]); });
+        c.stroke();
+      });
+    }
+    // สัญลักษณ์ทหาร
+    var nsym = 0;
+    if (o.sym && root.TrailSym) {
+      TrailSym.list().forEach(function (s) {
+        var q = P2(s.lat, s.lng);
+        if (q[0] < fx - mm(6) || q[0] > fx + fw + mm(6) || q[1] < fy - mm(6) || q[1] > fy + fh + mm(6)) return;
+        TrailSym.draw(c, s.type, s.side, q[0], q[1], mm(9), s.label);
+        nsym++;
+      });
+    }
+    c.restore();
+
+    // กรอบและตัวเลขกริด
+    c.strokeStyle = '#000'; c.lineWidth = mm(0.5);
+    c.strokeRect(fx, fy, fw, fh);
+    for (k = kE0; k <= kE1; k++) {
+      var first = k === kE0;
+      var lt = gridLabel(k * I, I, first), xx = xOf(k * I);
+      text(lt, xx, fy - mm(1.6), first ? 3 : 2.6, first, 'center');
+      text(lt, xx, fy + fh + mm(4.2), first ? 3 : 2.6, first, 'center');
+    }
+    for (kk = kN0; kk <= kN1; kk++) {
+      var firstN = kk === kN0;
+      var ln = gridLabel(kk * I, I, firstN), yy = yOf(kk * I);
+      text(ln, fx - mm(1), yy + mm(0.9), firstN ? 3 : 2.6, firstN, 'right');
+      text(ln, fx + fw + mm(1), yy + mm(0.9), firstN ? 3 : 2.6, firstN, 'left');
+    }
+
+    // หัวกระดาษ
+    var sw = G.fromUTM(g.zone, g.north, Emin, Nmin), ne = G.fromUTM(g.zone, g.north, Emax, Nmax);
+    var conv = G.convergence(cl.lat, cl.lng), decl = (ctx.prefs && ctx.prefs.decl) || 0;
+    text(o.title || 'แผนที่ฝึก', mm(M), mm(M + 6), 6, true, 'left');
+    text('1 : ' + o.scale.toLocaleString('en-US'), W - mm(M), mm(M + 6), 6, true, 'right');
+    text('UTM โซน ' + g.zone + G.bandOf(cl.lat) + ' · WGS84 · ศูนย์กลาง ' + G.formatPoint(cl.lat, cl.lng, 'mgrs') + ' · กริดทุก ' + fmtLen(I) + ' · กระดาษ ' + o.paper + (o.land ? ' แนวนอน' : ' แนวตั้ง'),
+      mm(M), mm(M + 10.5), 2.7, false, 'left', '#333');
+
+    // ส่วนท้าย: แถบสเกล
+    var y0 = fy + fh + mm(L + 4);
+    var contentW = fw / pxmm;
+    var maxMM = Math.min(90, contentW * 0.5);
+    var bar = BARS[0];
+    BARS.forEach(function (b) { if (b[0] * 1000 / o.scale <= maxMM) bar = b; });
+    var Lm = bar[0], dm = bar[1];
+    var mmPerM = 1000 / o.scale;
+    var ext = dm * mmPerM;
+    var xz = fx + mm(ext + 4);
+    var yb = y0 + mm(4);
+    var segs = Math.round(Lm / dm), s2, sx0;
+    c.lineWidth = Math.max(1, mm(0.25)); c.strokeStyle = '#000';
+    for (s2 = 0; s2 < segs; s2++) {
+      sx0 = xz + mm(s2 * dm * mmPerM);
+      c.fillStyle = s2 % 2 ? '#fff' : '#000';
+      c.fillRect(sx0, yb, mm(dm * mmPerM), mm(1.8)); c.strokeRect(sx0, yb, mm(dm * mmPerM), mm(1.8));
+    }
+    for (s2 = 0; s2 < 5; s2++) {
+      sx0 = xz - mm(ext) + mm(s2 * ext / 5);
+      c.fillStyle = s2 % 2 ? '#fff' : '#000';
+      c.fillRect(sx0, yb, mm(ext / 5), mm(1.8)); c.strokeRect(sx0, yb, mm(ext / 5), mm(1.8));
+    }
+    function barLab(m) { return (m >= 1000 ? String(+(m / 1000).toFixed(2)) : String(m)); }
+    for (s2 = 0; s2 <= segs; s2++) text(barLab(s2 * dm), xz + mm(s2 * dm * mmPerM), yb + mm(5), 2.4, false, 'center');
+    text(barLab(dm), xz - mm(ext), yb + mm(5), 2.4, false, 'center');
+    text(Lm >= 1000 ? 'กม.' : 'เมตร', xz + mm(Lm * mmPerM) + mm(3), yb + mm(5), 2.4, false, 'left');
+    text('มาตราส่วน 1:' + o.scale.toLocaleString('en-US') + '  (แถบยาว ' + (Lm * mmPerM).toFixed(0) + ' มม. = ' + fmtLen(Lm) + ')', fx, yb - mm(1.2), 2.4, true, 'left');
+
+    // แผนภาพทิศ GN/TN/MN
+    var ox = fx + fw - mm(40), oy = y0 + mm(19), len = mm(15);
+    function ray(angDeg, label, dash) {
+      var a = angDeg * Math.PI / 180, ex = ox + len * Math.sin(a), ey = oy - len * Math.cos(a);
+      c.save();
+      c.strokeStyle = '#000'; c.lineWidth = Math.max(1, mm(0.3));
+      if (dash) c.setLineDash([mm(1.2), mm(0.8)]);
+      c.beginPath(); c.moveTo(ox, oy); c.lineTo(ex, ey); c.stroke();
+      c.restore();
+      text(label, ex + (Math.sin(a) >= 0 ? mm(0.8) : -mm(0.8)), ey - mm(0.6), 2.4, true, Math.sin(a) >= 0 ? 'left' : 'right');
+    }
+    ray(0, 'GN');
+    ray(-conv, 'TN', true);
+    ray(decl - conv, 'MN');
+    var gm = decl - conv;
+    text('γ (TN→GN) = ' + conv.toFixed(2) + '°', ox + mm(4), oy - mm(7), 2.2, false, 'left');
+    text(decl ? 'MN ' + (decl >= 0 ? 'ตะวันออก' : 'ตะวันตก') + ' ' + Math.abs(decl).toFixed(1) + '° จาก TN' : 'ยังไม่ตั้งมุมแม่เหล็ก', ox + mm(4), oy - mm(3.5), 2.2, false, 'left');
+    text('GM = ' + gm.toFixed(2) + '° ≈ ' + Math.round(gm * 6400 / 360) + ' มิล', ox + mm(4), oy, 2.2, false, 'left');
+
+    // หมายเหตุ
+    var notes = [
+      'ช่องกริด 1 ช่อง = ' + (I * mmPerM).toFixed(1) + ' มม. บนกระดาษ · พิมพ์ที่ 100% (ห้ามเลือก "พอดีหน้า/Fit to page") แล้ววัดแถบสเกลตรวจ',
+      'มุมล่างซ้าย ' + G.formatPoint(sw.lat, sw.lng, 'mgrs') + ' · มุมบนขวา ' + G.formatPoint(ne.lat, ne.lng, 'mgrs'),
+      o.scale === 50000 ? 'ใช้กับแผ่นวัดมุมสี่เหลี่ยม 1:50,000 ได้ (1 กม. = 20 มม.)' : 'แผ่นวัดมุมใช้ได้เมื่อสเกลตรงกัน: พิมพ์แผ่นสเกล 1:' + o.scale.toLocaleString('en-US') + ' ได้จากเมนูเดียวกัน',
+      o.base === 'topo' ? 'พื้นหลัง: © OpenTopoMap (CC-BY-SA) · ข้อมูล © ผู้ร่วมจัดทำ OpenStreetMap' : o.base === 'sat' ? 'พื้นหลัง: Esri World Imagery' : 'กริดเปล่า สำหรับฝึกอ่าน/ลงพิกัด'
+    ];
+    notes.forEach(function (n, i) { text(n, fx, yb + mm(11 + i * 3.6), 2.2, false, 'left', '#333'); });
+
+    return { cv: cv, wmm: wmm, hmm: hmm, w: W, h: H, nsym: nsym };
+  }
+
+  function renderPlate(o) {
+    var pxmm = o.dpi / 25.4, P = PAPERS[o.paper];
+    var wmm = o.land ? P[1] : P[0], hmm = o.land ? P[0] : P[1];
+    var side = TrailPlate.SIDE * 1000 / o.scale; // มม. บนกระดาษ
+    if (side + 24 > Math.min(wmm, hmm)) throw new Error('แผ่นสเกล 1:' + o.scale.toLocaleString('en-US') + ' ใหญ่ ' + Math.round(side) + ' มม. ใหญ่เกินกระดาษนี้ เลือกกระดาษใหญ่ขึ้น');
+    var W = Math.round(wmm * pxmm), H = Math.round(hmm * pxmm);
+    var cv = document.createElement('canvas');
+    cv.width = W; cv.height = H;
+    var c = cv.getContext('2d');
+    c.fillStyle = '#fff'; c.fillRect(0, 0, W, H);
+    var sp = Math.round(side * pxmm);
+    var plate = TrailPlate.draw(sp);
+    var x = Math.round((W - sp) / 2), y = Math.round((H - sp) / 2);
+    c.drawImage(plate, x, y);
+    c.strokeStyle = '#000'; c.lineWidth = 1;
+    c.strokeRect(x, y, sp, sp);
+    c.fillStyle = '#000';
+    c.font = '700 ' + (pxmm * 4.5).toFixed(1) + 'px ' + FONT; c.textAlign = 'center';
+    c.fillText('แผ่นวัดมุมสี่เหลี่ยม 1 : ' + o.scale.toLocaleString('en-US'), W / 2, y - pxmm * 8);
+    c.font = '400 ' + (pxmm * 2.8).toFixed(1) + 'px ' + FONT;
+    c.fillText('ด้านละ ' + side.toFixed(0) + ' มม. (= ' + (TrailPlate.SIDE / 1000) + ' กม.) · พิมพ์ที่ 100% ลงแผ่นใสหรือกระดาษแล้วตัดตามกรอบ', W / 2, y - pxmm * 3.5);
+    return { cv: cv, wmm: wmm, hmm: hmm, w: W, h: H, plate: true };
+  }
+
+  /* ---------- ไฟล์ ---------- */
+  function toBlob(cv, type, q) { return new Promise(function (res) { cv.toBlob(res, type, q); }); }
+
+  function makePDF(jpeg, wpx, hpx, wmm, hmm) {
+    var wp = wmm / 25.4 * 72, hp = hmm / 25.4 * 72;
+    var enc = new TextEncoder(), parts = [], offs = [], len = 0;
+    function push(b) { if (typeof b === 'string') b = enc.encode(b); parts.push(b); len += b.length; }
+    function obj(n, body) { offs[n] = len; push(n + ' 0 obj\n' + body + '\nendobj\n'); }
+    push('%PDF-1.4\n');
+    obj(1, '<< /Type /Catalog /Pages 2 0 R >>');
+    obj(2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
+    obj(3, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ' + wp.toFixed(2) + ' ' + hp.toFixed(2) + '] /Resources << /XObject << /Im0 5 0 R >> >> /Contents 4 0 R >>');
+    var cs = 'q ' + wp.toFixed(2) + ' 0 0 ' + hp.toFixed(2) + ' 0 0 cm /Im0 Do Q';
+    obj(4, '<< /Length ' + cs.length + ' >>\nstream\n' + cs + '\nendstream');
+    offs[5] = len;
+    push('5 0 obj\n<< /Type /XObject /Subtype /Image /Width ' + wpx + ' /Height ' + hpx + ' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ' + jpeg.length + ' >>\nstream\n');
+    push(jpeg);
+    push('\nendstream\nendobj\n');
+    var xr = len, x = 'xref\n0 6\n0000000000 65535 f \n';
+    for (var n = 1; n <= 5; n++) x += ('0000000000' + offs[n]).slice(-10) + ' 00000 n \n';
+    push(x + 'trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n' + xr + '\n%%EOF\n');
+    var out = new Uint8Array(len), p = 0;
+    parts.forEach(function (b) { out.set(b, p); p += b.length; });
+    return out;
+  }
+
+  async function fileFor(kind) {
+    var base = safeName(last.plate ? 'แผ่นวัดมุม-1-' + (cfg.scale / 1000) + 'k' : cfg.title + '-1-' + (cfg.scale / 1000) + 'k');
+    if (kind === 'png') return { name: base + '.png', mime: 'image/png', blob: await toBlob(last.cv, 'image/png') };
+    var jb = await toBlob(last.cv, 'image/jpeg', 0.93);
+    if (kind === 'jpg') return { name: base + '.jpg', mime: 'image/jpeg', blob: jb };
+    var jpeg = new Uint8Array(await jb.arrayBuffer());
+    var pdf = makePDF(jpeg, last.w, last.h, last.wmm, last.hmm);
+    return { name: base + '.pdf', mime: 'application/pdf', blob: new Blob([pdf], { type: 'application/pdf' }) };
+  }
+
+  /* ---------- แผงพิมพ์ ---------- */
+  function opts(id, list, cur) {
+    return '<select id="' + id + '" style="flex:1;min-width:0;font-size:16px;padding:8px;border:1px solid #ccc;border-radius:8px;background:#fff">' +
+      list.map(function (o) { return '<option value="' + o[0] + '"' + (String(o[0]) === String(cur) ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select>';
+  }
+  function fld(label, inner) { return '<div class="field"><label style="flex:0 0 96px">' + label + '</label>' + inner + '</div>'; }
+
+  function renderSheet(box) {
+    var h = fld('ชื่อแผ่น', '<input type="text" id="pTitle" style="flex:1;min-width:0;font-size:16px;padding:8px;border:1px solid #ccc;border-radius:8px">') +
+      fld('กระดาษ', opts('pPaper', Object.keys(PAPERS).map(function (k) { return [k, k + ' (' + PAPERS[k][0] + '×' + PAPERS[k][1] + ' มม.)']; }), cfg.paper)) +
+      fld('แนววาง', opts('pLand', [['0', 'แนวตั้ง'], ['1', 'แนวนอน']], cfg.land ? '1' : '0')) +
+      fld('มาตราส่วน', opts('pScale', SCALES.map(function (s) { return [s, '1 : ' + s.toLocaleString('en-US')]; }), cfg.scale)) +
+      fld('ช่วงกริด', opts('pGrid', [['auto', 'อัตโนมัติตามสเกล'], [100, '100 ม.'], [500, '500 ม.'], [1000, '1 กม.'], [2000, '2 กม.'], [5000, '5 กม.'], [10000, '10 กม.']], cfg.grid)) +
+      fld('แบบเส้นกริด', opts('pStyle', [['lines', 'เส้นเต็ม'], ['cross', 'กากบาทที่จุดตัด']], cfg.style)) +
+      fld('รูปแบบพิกัด', '<select id="pFmt" style="flex:1;min-width:0;font-size:16px;padding:8px;border:1px solid #ccc;border-radius:8px;background:#fff">' +
+        G.FORMATS.map(function (f) { return '<option value="' + f + '"' + (f === cfg.cfmt ? ' selected' : '') + '>' + G.FORMAT_NAMES[f] + '</option>'; }).join('') + '</select>') +
+      fld('ศูนย์กลางแผ่น', '<input type="text" id="pCenter" style="flex:1;min-width:0;font-size:16px;padding:8px;border:1px solid #ccc;border-radius:8px"><button type="button" class="btn alt" id="pCur" style="flex:none;padding:8px 10px">กลางจอ</button>') +
+      fld('พื้นหลัง', opts('pBase', [['none', 'กริดเปล่า (สำหรับฝึกลงพิกัด)'], ['topo', 'ภูมิประเทศ (เส้นชั้นความสูง)'], ['sat', 'ภาพถ่ายดาวเทียม']], cfg.base)) +
+      fld('ความเข้มภาพ', '<input type="range" id="pFade" min="20" max="100" step="5" style="flex:1"><span id="pFadeV" style="flex:0 0 40px;text-align:right"></span>') +
+      '<label class="opt"><input type="checkbox" id="pSym"><span>วางสัญลักษณ์ทหารที่ปักไว้<small>ตามแท็บ "สัญลักษณ์ทหาร"</small></span></label>' +
+      '<label class="opt"><input type="checkbox" id="pRoutes"><span>วาดเส้นทางที่แสดงอยู่</span></label>' +
+      fld('ความละเอียด', opts('pDpi', [[100, '100 dpi (เร็ว ไฟล์เล็ก)'], [150, '150 dpi (แนะนำ)'], [200, '200 dpi (คมที่สุด)']], cfg.dpi)) +
+      '<div class="btnrow"><button class="btn" id="pBuild">สร้างแผนที่ฝึก</button><button class="btn alt" id="pPlate">แผ่นวัดมุมขนาดจริง</button></div>' +
+      '<div id="pStat" class="note"></div><div id="pOut"></div>' +
+      '<p class="note">พื้นหลังภูมิประเทศ/ดาวเทียมต้องออนไลน์ หรือดาวน์โหลดพื้นที่นั้นไว้แล้ว ภาพถูกดัดให้ตรงกับกริด UTM จึงถูกต้องตามสเกล ' +
+      'ถ้าพื้นที่ในแผนที่ลับ/หวงห้าม อย่าส่งไฟล์ออกนอกหน่วยงาน · พิมพ์ที่ขนาด 100% เสมอ</p>';
+    box.innerHTML = h;
+    $('pTitle').value = cfg.title;
+    $('pCenter').value = cfg.center;
+    G.bindCoord($('pCenter'), $('pFmt'), $('pCur'), function () { return ctx.map().getCenter(); }, function (f) { cfg.cfmt = f; saveCfg(); });
+    $('pFade').value = cfg.fade; $('pFadeV').textContent = cfg.fade + '%';
+    $('pSym').checked = cfg.sym; $('pRoutes').checked = cfg.routes;
+    $('pFade').oninput = function () { $('pFadeV').textContent = this.value + '%'; };
+    function readCfg() {
+      cfg.title = $('pTitle').value.trim() || 'แบบฝึกอ่านพิกัดกริด';
+      cfg.paper = $('pPaper').value; cfg.land = $('pLand').value === '1';
+      cfg.scale = parseInt($('pScale').value, 10); cfg.grid = $('pGrid').value; cfg.style = $('pStyle').value;
+      cfg.center = $('pCenter').value.trim(); cfg.base = $('pBase').value; cfg.fade = parseInt($('pFade').value, 10);
+      cfg.sym = $('pSym').checked; cfg.routes = $('pRoutes').checked; cfg.dpi = parseInt($('pDpi').value, 10);
+      saveCfg();
+    }
+    function run(kind) {
+      if (busy) return;
+      readCfg();
+      busy = true;
+      $('pBuild').disabled = true; $('pPlate').disabled = true;
+      $('pOut').innerHTML = '';
+      var stat = $('pStat');
+      stat.textContent = 'กำลังสร้าง…';
+      var onStatus = function (t) { if ($('pStat')) $('pStat').textContent = t; };
+      var job = kind === 'plate' ? Promise.resolve().then(function () { return renderPlate(cfg); }) : render(cfg, onStatus);
+      job.then(function (res) {
+        last = res;
+        busy = false;
+        if (!$('pOut')) return;
+        $('pBuild').disabled = false; $('pPlate').disabled = false;
+        $('pStat').textContent = (res.plate ? 'แผ่นวัดมุม ' : 'แผนที่ ') + cfg.paper + ' · ' + res.w + '×' + res.h + ' px · ' + cfg.dpi + ' dpi' + (res.nsym ? ' · สัญลักษณ์ ' + res.nsym + ' รายการ' : '');
+        var pv = document.createElement('canvas');
+        pv.width = 720; pv.height = Math.round(720 * res.h / res.w);
+        pv.getContext('2d').drawImage(res.cv, 0, 0, pv.width, pv.height);
+        var img = document.createElement('img');
+        img.src = pv.toDataURL('image/jpeg', 0.85);
+        img.style.cssText = 'width:100%;border:1px solid #ccc;margin-top:8px';
+        $('pOut').appendChild(img);
+        var row = document.createElement('div');
+        row.className = 'btnrow';
+        [['pdf', 'PDF'], ['png', 'PNG'], ['jpg', 'JPEG']].forEach(function (f) {
+          var b = document.createElement('button');
+          b.className = f[0] === 'pdf' ? 'btn' : 'btn alt';
+          b.textContent = f[1];
+          b.onclick = function () {
+            b.disabled = true;
+            fileFor(f[0]).then(function (file) {
+              b.disabled = false;
+              TrailExport.share(file).then(function (ok) { if (!ok) { TrailExport.download(file); ctx.toast('ดาวน์โหลดแล้ว: ' + file.name + ' (ดูในแอพไฟล์)'); } });
+            }).catch(function () { b.disabled = false; ctx.toast('สร้างไฟล์ไม่สำเร็จ'); });
+          };
+          row.appendChild(b);
+        });
+        $('pOut').appendChild(row);
+        var hint = document.createElement('p');
+        hint.className = 'note';
+        hint.textContent = 'กดชนิดไฟล์เพื่อแชร์/บันทึก (เลือก "พิมพ์" ในแผ่นแชร์ของ iPhone ได้ทันที) · ตั้งค่าพิมพ์เป็นขนาดจริง 100% ไม่ย่อให้พอดีหน้า';
+        $('pOut').appendChild(hint);
+      }).catch(function (e) {
+        busy = false;
+        if ($('pStat')) { $('pBuild').disabled = false; $('pPlate').disabled = false; $('pStat').textContent = 'ไม่สำเร็จ: ' + (e && e.message ? e.message : e); }
+      });
+    }
+    $('pBuild').onclick = function () { run('map'); };
+    $('pPlate').onclick = function () { run('plate'); };
+  }
+
+  root.TrailPrint = { init: init, renderSheet: renderSheet };
+})(typeof self !== 'undefined' ? self : this);

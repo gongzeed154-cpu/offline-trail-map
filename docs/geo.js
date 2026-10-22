@@ -258,6 +258,7 @@
   /* ---------- อ่านพิกัดที่พิมพ์เข้ามา ---------- */
   function parseAngleStr(s) {
     s = String(s).trim().toUpperCase();
+    s = s.replace(/(\d+)\.(\d+)\.(\d+(?:\.\d+)?)/, '$1 $2 $3'); // รูปแบบ dd.mm.ss
     var neg = /[SW]/.test(s) || /^-/.test(s);
     var nums = s.replace(/,/g, '.').match(/\d+(?:\.\d+)?/g);
     if (!nums) return NaN;
@@ -346,7 +347,33 @@
     return { lat: p2 * R2D, lng: ((l2 * R2D + 540) % 360) - 180 };
   }
 
+  var FORMAT_HINT = {
+    mgrs: 'เช่น 47P PA 12345 67890',
+    utm: 'เช่น 47P E 123456 N 1234567',
+    dms: 'เช่น 13°45′30″N 100°30′12″E หรือ 13.45.30 N 100.30.12 E',
+    dm: 'เช่น 13°45.500′N 100°30.200′E',
+    dd: 'เช่น 13.75833, 100.50333'
+  };
+
+  // ผูกช่องพิมพ์พิกัดกับตัวเลือกรูปแบบ + ปุ่มดึงพิกัดกลางจอ (เปลี่ยนรูปแบบแล้วแปลงค่าที่พิมพ์ไว้ให้)
+  function bindCoord(input, sel, btn, getCenter, onFmt) {
+    function hint() { input.placeholder = 'ว่าง = กลางจอ · ' + FORMAT_HINT[sel.value]; }
+    hint();
+    sel.onchange = function () {
+      hint();
+      var p = parsePoint(input.value);
+      if (p) input.value = formatPoint(p.lat, p.lng, sel.value);
+      if (onFmt) onFmt(sel.value);
+    };
+    btn.onclick = function () {
+      var c = getCenter();
+      input.value = formatPoint(c.lat, c.lng, sel.value);
+    };
+  }
+
   root.TrailGeo = {
+    FORMAT_HINT: FORMAT_HINT,
+    bindCoord: bindCoord,
     convergence: convergence,
     destination: destination,
     D2R: D2R,

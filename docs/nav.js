@@ -535,6 +535,40 @@
     }
   }
 
+  /* ---------- ส่งออก/นำเข้า ---------- */
+  function exportModels(ids) {
+    return routes.filter(function (r) { return ids.indexOf(r.id) >= 0; }).map(function (r) {
+      var asc = 0, desc = 0, sad = 0;
+      r.legs.forEach(function (l) { asc += l.ascent || 0; desc += l.descent || 0; sad += (l.saddles || []).length; });
+      return {
+        name: r.name, wps: r.wps, pts: routePts(r), dist: r.dist, time: r.time,
+        legDist: r.legs.map(function (l) { return l.dist; }), legTime: r.legs.map(legTime),
+        ascent: asc, descent: desc, saddles: sad
+      };
+    });
+  }
+
+  // เพิ่มเส้นทางจากรายการ [{name, pts:[[lng,lat],...]}] คืนจำนวนที่เพิ่ม
+  function addRoutes(list) {
+    var n = 0;
+    list.forEach(function (it, idx) {
+      if (!it.pts || it.pts.length < 2) return;
+      var tol = 8, s = R.dpSimplify(it.pts, tol);
+      while (s.length > 150) { tol *= 1.6; s = R.dpSimplify(it.pts, tol); }
+      var wps = s.map(function (p) { return { lat: p[1], lng: p[0] }; });
+      var legs = [], d = 0, t = 0;
+      for (var i = 0; i < s.length - 1; i++) {
+        var seg = [s[i], s[i + 1]];
+        var l = { mode: 'free', pts: seg, dist: R.polyLength(seg), time: 0 };
+        legs.push(l); d += l.dist; t += legTime(l);
+      }
+      routes.push({ id: String(Date.now()) + '-' + idx, name: it.name || 'นำเข้า', wps: wps, legs: legs, dist: d, time: t, show: true });
+      n++;
+    });
+    if (n) { saveRoutes(); drawRoutes(); }
+    return n;
+  }
+
   /* ---------- แผงรายการเส้นทาง ---------- */
   function renderSheet(body) {
     var h = '<div class="btnrow"><button class="btn" id="rnew">สร้างเส้นทางใหม่</button></div>';
@@ -542,10 +576,21 @@
     routes.forEach(function (r) {
       var saddles = 0, trail = 0, trailN = 0;
       r.legs.forEach(function (l) { saddles += (l.saddles || []).length; if (l.mode === 'auto') { trail += l.trailPct * l.dist; trailN += l.dist; } });
-      h += '<div class="prow" data-id="' + r.id + '"><div class="opt"><span class="rname"></span></div>' +
+      h += '<div class="prow" data-id="' + r.id + '"><label class="opt"><input type="checkbox" class="rsel"><span class="rname"></span></label>' +
         '<div class="note rsub"></div>' +
-        '<div class="btnrow"><button class="btn rgo">นำทาง</button><button class="btn alt rsim">จำลอง</button><button class="btn alt rzoom">ดู</button><button class="btn alt rshow"></button><button class="btn alt rdel">ลบ</button></div></div>';
+        '<div class="btnrow"><button class="btn rgo">นำทาง</button><button class="btn alt rsim">จำลอง</button><button class="btn alt rzoom">ดู</button><button class="btn alt rshow"></button><button class="btn alt rren">ชื่อ</button><button class="btn alt rdel">ลบ</button></div></div>';
     });
+    if (routes.length) {
+      h += '<h4>ส่งออกเส้นทางที่ติ๊กเลือก</h4>' +
+        '<div class="btnrow"><button class="btn alt" id="xall">เลือกทั้งหมด</button><button class="btn alt" id="xnone">ไม่เลือก</button></div>';
+      Object.keys(TrailExport.FORMATS).forEach(function (k, i) {
+        h += '<label class="opt"><input type="radio" name="xfmt" value="' + k + '"' + (i === 0 ? ' checked' : '') + '><span>' + TrailExport.FORMATS[k].label + '</span></label>';
+      });
+      h += '<div class="btnrow"><button class="btn" id="xbuild">สร้างไฟล์</button></div><div id="xres" class="note"></div>';
+    }
+    h += '<h4>นำเข้าเส้นทาง</h4><div class="btnrow"><button class="btn alt" id="ximp">นำเข้าไฟล์ GPX / KML / GeoJSON</button></div>' +
+      '<input type="file" id="ximpf" accept=".gpx,.kml,.geojson,.json,application/gpx+xml,application/vnd.google-earth.kml+xml,application/json" multiple hidden>' +
+      '<div id="ximsg" class="note"></div>';
     h += '<h4>ตั้งค่า</h4>' +
       '<div class="field"><label>ความเร็วเดินตามแผน (กม./ชม.)</label><input type="number" id="npace" step="0.5" value="' + np.pace + '"></div>' +
       '<div class="field"><label>ออกนอกเส้นเกิน (ม.)</label><input type="number" id="ntol" step="5" value="' + np.tol + '"></div>' +
@@ -572,12 +617,59 @@
       row.querySelector('.rzoom').onclick = function () { r.show = true; saveRoutes(); drawRoutes(); ctx.closeSheet(); ctx.map().fitBounds(boundsOf(routePts(r)), { padding: 60, duration: 700 }); };
       row.querySelector('.rgo').onclick = function () { startNav(id, false); };
       row.querySelector('.rsim').onclick = function () { startNav(id, true); };
+      row.querySelector('.rren').onclick = function () {
+        var nn = prompt('ชื่อเส้นทาง', r.name);
+        if (nn === null || !nn.trim()) return;
+        r.name = nn.trim();
+        saveRoutes(); renderSheet(body);
+      };
       row.querySelector('.rdel').onclick = function () {
         if (!confirm('ลบเส้นทางนี้?\n' + r.name)) return;
         routes = routes.filter(function (x) { return x.id !== id; });
         saveRoutes(); drawRoutes(); renderSheet(body);
       };
     });
+    if (routes.length) {
+      var setAll = function (v) { Array.prototype.forEach.call(body.querySelectorAll('.rsel'), function (c) { c.checked = v; }); };
+      $('xall').onclick = function () { setAll(true); };
+      $('xnone').onclick = function () { setAll(false); };
+      $('xbuild').onclick = function () {
+        var ids = [];
+        Array.prototype.forEach.call(body.querySelectorAll('.prow'), function (row) { if (row.querySelector('.rsel').checked) ids.push(row.getAttribute('data-id')); });
+        if (!ids.length) { ctx.toast('ติ๊กเลือกเส้นทางที่จะส่งออกก่อน'); return; }
+        var fmt = body.querySelector('input[name=xfmt]:checked').value;
+        var res = $('xres'), btn = $('xbuild');
+        btn.disabled = true;
+        res.textContent = 'กำลังสร้างไฟล์…';
+        TrailExport.build(exportModels(ids), fmt, { fmtPoint: ctx.fmtPoint }, function (t) { res.textContent = t; }).then(function (file) {
+          btn.disabled = false;
+          res.innerHTML = '<b></b> · ' + Math.round(file.text.length / 1024 * 10) / 10 + ' KB' +
+            '<div class="btnrow"><button class="btn" id="xshare">แชร์ / ส่งไปแอพอื่น</button><button class="btn alt" id="xdl">ดาวน์โหลดไฟล์</button></div>';
+          res.querySelector('b').textContent = file.name;
+          $('xshare').onclick = function () {
+            TrailExport.share(file).then(function (ok) { if (!ok) { TrailExport.download(file); ctx.toast('เครื่องนี้แชร์ไฟล์ตรงไม่ได้ ดาวน์โหลดแทน (ดูในแอพไฟล์)'); } });
+          };
+          $('xdl').onclick = function () { TrailExport.download(file); };
+        }).catch(function (e) {
+          btn.disabled = false;
+          res.textContent = 'สร้างไฟล์ไม่สำเร็จ: ' + (e && e.message ? e.message : e);
+        });
+      };
+    }
+    $('ximp').onclick = function () { $('ximpf').click(); };
+    $('ximpf').onchange = function () {
+      var files = Array.prototype.slice.call(this.files || []);
+      var inp = this;
+      var msg = $('ximsg');
+      var added = 0, errs = [];
+      Promise.all(files.map(function (f) {
+        return f.text().then(function (t) { added += addRoutes(TrailExport.parseFile(t, f.name)); }).catch(function (e) { errs.push(f.name + ': ' + (e && e.message ? e.message : 'อ่านไม่ได้')); });
+      })).then(function () {
+        inp.value = '';
+        renderSheet(body);
+        $('ximsg').textContent = 'นำเข้า ' + added + ' เส้นทาง' + (errs.length ? ' · ผิดพลาด ' + errs.join('; ') : '');
+      });
+    };
     $('npace').onchange = function () { var v = parseFloat(this.value); np.pace = v > 0 ? v : 4; savePrefs(); };
     $('ntol').onchange = function () { var v = parseFloat(this.value); np.tol = v > 0 ? v : 30; savePrefs(); };
     $('nvoice').onchange = function () { np.voice = this.checked; savePrefs(); if (np.voice) speak('เปิดเสียงเตือนแล้ว'); };
@@ -587,6 +679,7 @@
     init: init,
     handleClick: handleClick,
     renderSheet: renderSheet,
-    isBusy: function () { return !!edit; }
+    isBusy: function () { return !!edit; },
+    visibleRoutes: function () { return routes.filter(function (r) { return r.show; }).map(function (r) { return { name: r.name, pts: routePts(r) }; }); }
   };
 })(typeof self !== 'undefined' ? self : this);

@@ -1,0 +1,51 @@
+name: Build iOS (unsigned ipa)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install JS dependencies
+        run: npm install
+
+      - name: Generate native iOS project
+        run: npx expo prebuild --platform ios
+
+      - name: Build (no code signing)
+        run: |
+          cd ios
+          WORKSPACE=$(ls -d *.xcworkspace | head -n 1)
+          SCHEME="${WORKSPACE%.xcworkspace}"
+          xcodebuild \
+            -workspace "$WORKSPACE" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build
+
+      - name: Package .ipa
+        run: |
+          cd ios
+          APP=$(ls -d build/Build/Products/Release-iphoneos/*.app | head -n 1)
+          rm -rf Payload TrailMap.ipa
+          mkdir Payload
+          cp -R "$APP" Payload/
+          zip -qr TrailMap.ipa Payload
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TrailMap-ipa
+          path: ios/TrailMap.ipa

@@ -1,0 +1,32 @@
+{
+  "expo": {
+    "name": "TrailMap",
+    "slug": "offline-trail-map",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "bundleIdentifier": "com.example.offlinetrailmap",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "ใช้แสดงตำแหน่งของคุณบนแผนที่ขณะเดินป่า",
+        "CFBundleDisplayName": "แผนที่เดินป่า"
+      }
+    },
+    "android": {
+      "package": "com.example.offlinetrailmap",
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
+      ]
+    },
+    "plugins": [
+      "@maplibre/maplibre-react-native",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "ใช้แสดงตำแหน่งของคุณบนแผนที่ขณะเดินป่า"
+        }
+      ]
+    ]
+  }
+}

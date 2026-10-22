@@ -24,10 +24,10 @@
   }
   #top { position: fixed; top: calc(env(safe-area-inset-top) + 10px); left: 10px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; z-index: 5; }
   #offline { background: #b3261e; color: #fff; }
-  #bottom { position: fixed; left: 0; right: 0; bottom: 0; padding: 12px 16px calc(env(safe-area-inset-bottom) + 12px); z-index: 5; }
+  #bottom { position: fixed; left: 10px; bottom: calc(env(safe-area-inset-bottom) + 64px); z-index: 5; }
   #download {
-    width: 100%; height: 52px; border: 0; border-radius: 26px; background: var(--green); color: #fff;
-    font-size: 16px; font-weight: 600; box-shadow: 0 2px 8px rgba(0,0,0,.3);
+    height: 36px; padding: 0 14px; border: 0; border-radius: 18px; background: var(--green); color: #fff;
+    font-size: 13px; font-weight: 600; box-shadow: 0 2px 6px rgba(0,0,0,.3);
   }
   #download:disabled { background: #6f9a7b; }
   #panel { position: fixed; inset: 0; background: #fff; z-index: 20; display: flex; flex-direction: column; padding-top: env(safe-area-inset-top); }
@@ -43,12 +43,12 @@
   .del { border: 0; background: none; color: #b3261e; font-size: 15px; padding: 16px; }
   .empty { padding: 24px; text-align: center; color: #666; line-height: 1.6; }
   #usage { padding: 12px 16px calc(env(safe-area-inset-bottom) + 12px); font-size: 13px; color: #666; border-top: 1px solid #eee; }
-  #toast { position: fixed; left: 16px; right: 16px; bottom: calc(env(safe-area-inset-bottom) + 80px); background: #222; color: #fff; padding: 12px 14px; border-radius: 12px; z-index: 30; font-size: 14px; }
+  #toast { position: fixed; left: 16px; right: 16px; bottom: calc(env(safe-area-inset-bottom) + 72px); background: #222; color: #fff; padding: 12px 14px; border-radius: 12px; z-index: 30; font-size: 14px; }
   #hint { position: fixed; left: 12px; right: 12px; top: calc(env(safe-area-inset-top) + 56px); background: #fff8d6; border: 1px solid #e6d98a; border-radius: 12px; padding: 12px 14px; z-index: 15; font-size: 14px; line-height: 1.5; }
   #hint button { float: right; border: 0; background: none; font-size: 18px; margin-left: 8px; }
   #fatal { position: fixed; inset: 0; background: #fff; z-index: 40; padding: 32px 24px; line-height: 1.7; }
-  .maplibregl-ctrl-bottom-right { bottom: 76px; }
-  .maplibregl-ctrl-bottom-left { bottom: 76px; }
+  .maplibregl-ctrl-bottom-right { bottom: calc(env(safe-area-inset-bottom) + 62px); }
+  .maplibregl-ctrl-bottom-left { bottom: calc(env(safe-area-inset-bottom) + 62px); left: 118px; }
 
   #coord { font-size: 13px; padding: 7px 12px; max-width: calc(100vw - 80px); font-variant-numeric: tabular-nums; border: 0; text-align: left; }
   #coord small { display: block; color: #666; font-size: 11px; }
@@ -79,7 +79,7 @@
   .btn { flex: 1; border: 0; border-radius: 10px; padding: 12px; font-size: 15px; background: var(--green); color: #fff; }
   .btn.alt { background: #e8efe9; color: var(--green); }
 
-  #azcard { position: fixed; left: 10px; right: 10px; bottom: calc(env(safe-area-inset-bottom) + 76px); background: rgba(255,255,255,.96); border-radius: 14px; box-shadow: 0 2px 8px rgba(0,0,0,.3); padding: 10px 14px; z-index: 6; font-size: 14px; line-height: 1.55; }
+  #azcard { position: fixed; left: 10px; right: 10px; bottom: calc(env(safe-area-inset-bottom) + 68px); background: rgba(255,255,255,.96); border-radius: 14px; box-shadow: 0 2px 8px rgba(0,0,0,.3); padding: 10px 14px; z-index: 6; font-size: 14px; line-height: 1.55; }
   #azcard .big { font-size: 20px; font-weight: 700; color: #c4501b; }
   #azcard .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
   #azcard .lbl { color: #666; font-size: 12px; }
@@ -87,7 +87,7 @@
   .pmark.a { background: #1a6ad6; }
   .pmark.b { background: #c4501b; }
   .prot { position: absolute; left: 50%; top: 50%; pointer-events: none; overflow: visible; }
-  #routecard, #navcard { position: fixed; left: 10px; right: 10px; bottom: calc(env(safe-area-inset-bottom) + 76px); background: rgba(255,255,255,.97); border-radius: 14px; box-shadow: 0 2px 8px rgba(0,0,0,.3); padding: 10px 14px; z-index: 7; font-size: 14px; line-height: 1.5; max-height: 55vh; overflow: auto; }
+  #routecard, #navcard { position: fixed; left: 10px; right: 10px; bottom: calc(env(safe-area-inset-bottom) + 68px); background: rgba(255,255,255,.97); border-radius: 14px; box-shadow: 0 2px 8px rgba(0,0,0,.3); padding: 10px 14px; z-index: 7; font-size: 14px; line-height: 1.5; max-height: 55vh; overflow: auto; }
   #navcard .big { font-size: 17px; font-weight: 700; color: #1f7a3a; }
   #navcard.bad { border: 3px solid #d6261c; }
   #navcard.bad .big { color: #d6261c; }
@@ -99,6 +99,27 @@
   .seg button { flex: 1; border: 1px solid #2e6b3f; background: #fff; color: #2e6b3f; border-radius: 10px; padding: 8px 4px; font-size: 14px; }
   .seg button[aria-pressed=true] { background: #2e6b3f; color: #fff; }
   .wpmark { width: 26px; height: 26px; border-radius: 50%; background: #0a84ff; border: 2px solid #fff; color: #fff; font-weight: 700; font-size: 13px; display: flex; align-items: center; justify-content: center; box-shadow: 0 1px 4px rgba(0,0,0,.5); touch-action: none; }
+  #statusbar { position: fixed; left: 0; right: 0; bottom: 0; background: rgba(255,255,255,.96); padding: 6px 12px calc(env(safe-area-inset-bottom) + 6px); font-size: 12px; line-height: 1.4; z-index: 6; box-shadow: 0 -1px 6px rgba(0,0,0,.2); font-variant-numeric: tabular-nums; }
+  #statusbar .sb1 { color: #333; }
+  #statusbar .sb2 { font-weight: 600; }
+  .bars { letter-spacing: -1px; font-size: 13px; }
+  #cam { position: fixed; inset: 0; z-index: 60; background: #000; color: #fff; }
+  #cam video, #cam canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  #cam video { object-fit: cover; }
+  #cam canvas { pointer-events: none; }
+  .camtop { position: absolute; top: 0; left: 0; right: 0; display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: calc(env(safe-area-inset-top) + 8px) 12px 8px; background: rgba(0,0,0,.5); font-size: 13px; }
+  .camtop button { border: 0; background: rgba(255,255,255,.25); color: #fff; font-size: 18px; border-radius: 16px; width: 32px; height: 32px; flex: none; }
+  .cambot { position: absolute; left: 0; right: 0; bottom: 0; padding: 24px 12px calc(env(safe-area-inset-bottom) + 12px); background: linear-gradient(transparent, rgba(0,0,0,.78) 28%); font-size: 12.5px; line-height: 1.45; text-shadow: 0 1px 2px rgba(0,0,0,.8); }
+  #camres { background: rgba(0,0,0,.6); border-radius: 10px; padding: 8px 10px; margin: 8px 0; max-height: 28vh; overflow: auto; }
+  #camres .obs a { color: #8ec5ff; margin-left: 8px; }
+  #camres .resok { color: #9bffb0; margin: 6px 0; }
+  .camrow { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+  .cambtn { flex: 1; padding: 10px 4px; border-radius: 10px; background: rgba(255,255,255,.2); color: #fff; border: 1px solid rgba(255,255,255,.5); font-size: 13px; }
+  .shutter { flex: none; width: 64px; height: 64px; border-radius: 50%; border: 4px solid #fff; background: rgba(255,255,255,.35); }
+  .cammark { font-size: 22px; filter: drop-shadow(0 1px 2px rgba(0,0,0,.6)); }
+  #photoview { position: fixed; inset: 0; z-index: 70; background: #111; color: #fff; display: flex; flex-direction: column; padding: env(safe-area-inset-top) 12px calc(env(safe-area-inset-bottom) + 12px); gap: 8px; }
+  #photoview img { flex: 1; min-height: 0; object-fit: contain; width: 100%; }
+  #photoview .pvinfo { white-space: pre-line; font-size: 13px; }
   .prow { border-bottom: 1px solid #eee; padding-bottom: 10px; margin-bottom: 4px; }
   #calib { position: fixed; inset: 0; z-index: 50; background: #111; color: #fff; display: flex; flex-direction: column; padding-top: env(safe-area-inset-top); }
   #calib .chead { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 16px; font-size: 15px; }
@@ -130,6 +151,7 @@
   <button class="tool" id="toolLayers"><b>◩</b>ชั้นแผนที่</button>
   <button class="tool" id="toolGrid"><b>▦</b>พิกัด</button>
   <button class="tool" id="toolProt"><b>◔</b>วัดมุม</button>
+  <button class="tool" id="toolCam"><b>◉</b>กล้อง</button>
   <button class="tool" id="toolRoute"><b>⚑</b>เส้นทาง</button>
   <button class="tool" id="toolSpecial"><b>★</b>พิเศษ</button>
 </div>
@@ -147,7 +169,7 @@
 </div>
 
 <div id="bottom">
-  <button id="download">ดาวน์โหลดพื้นที่ที่เห็นบนจอ</button>
+  <button id="download">⬇ ออฟไลน์</button>
 </div>
 
 <div id="panel" hidden>
@@ -155,6 +177,8 @@
   <div id="areaList"></div>
   <div id="usage"></div>
 </div>
+
+<div id="statusbar"><div class="sb1" id="sb1">GPS: แตะปุ่มตำแหน่ง (◎) เพื่อเริ่ม</div><div class="sb2" id="sb2"></div></div>
 
 <div id="toast" hidden></div>
 
@@ -168,8 +192,10 @@
 <script src="geo.js"></script>
 <script src="plate.js"></script>
 <script src="paper.js"></script>
+<script src="sensors.js"></script>
 <script src="route.js"></script>
 <script src="nav.js"></script>
+<script src="cam.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

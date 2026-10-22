@@ -332,7 +332,23 @@
     return { lat: lat, lng: lng };
   }
 
+  // มุมเบี่ยงเบนระหว่างเหนือจริงกับเหนือกริด (องศา, บวก = เหนือกริดอยู่ทางตะวันออกของเหนือจริง)
+  function convergence(lat, lng) {
+    var dl = (lng - zoneMeridian(zoneOf(lng))) * D2R;
+    return Math.atan(Math.tan(dl) * Math.sin(lat * D2R)) * R2D;
+  }
+
+  // จุดปลายจากจุดเริ่ม + มุมเหนือจริง + ระยะ (เมตร) บนทรงกลม
+  function destination(a, trueAz, distM) {
+    var d = distM / 6371008.8, br = trueAz * D2R, p1 = a.lat * D2R, l1 = a.lng * D2R;
+    var p2 = Math.asin(Math.sin(p1) * Math.cos(d) + Math.cos(p1) * Math.sin(d) * Math.cos(br));
+    var l2 = l1 + Math.atan2(Math.sin(br) * Math.sin(d) * Math.cos(p1), Math.cos(d) - Math.sin(p1) * Math.sin(p2));
+    return { lat: p2 * R2D, lng: ((l2 * R2D + 540) % 360) - 180 };
+  }
+
   root.TrailGeo = {
+    convergence: convergence,
+    destination: destination,
     D2R: D2R,
     R2D: R2D,
     zoneOf: zoneOf,

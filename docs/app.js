@@ -27,6 +27,8 @@
     grid: false,
     fmt: 'dms', // mgrs | utm | dms | dm | dd
     anchor: 'center', // จุดของแผ่นวัดมุมที่ตรงกับหมุด A: center | romer | sixty
+    camOffset: 0, // ค่าปรับแก้ทิศของกล้องเล็ง (องศา)
+    orient: 'north', // north = ล็อกทิศเหนือ, free = หมุนตามทิศที่เดิน
     decl: 0 // มุมเบี่ยงเบนแม่เหล็ก (องศา, ตะวันออกเป็นบวก)
   };
 
@@ -100,17 +102,19 @@
     });
     map.addControl(geolocate, 'bottom-right');
     map.addControl(new maplibregl.NavigationControl({ showZoom: false, showCompass: true, visualizePitch: false }), 'bottom-right');
+    map.addControl(new OrientControl(), 'bottom-right');
     map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-left');
 
     geolocate.on('geolocate', function (e) {
-      var alt = e.coords && e.coords.altitude;
-      var chip = $('alt');
-      if (alt !== null && alt !== undefined && !isNaN(alt)) {
-        chip.textContent = 'ความสูง (GPS) ' + Math.round(alt) + ' ม.';
-        chip.hidden = false;
-      }
+      var c = e.coords || {};
+      TrailSensors.setFix({
+        lat: c.latitude, lng: c.longitude, alt: c.altitude, altAcc: c.altitudeAccuracy, acc: c.accuracy,
+        speed: c.speed, heading: c.heading, t: e.timestamp || Date.now()
+      });
     });
     geolocate.on('error', function (e) {
+      sbMsg = 'GPS ใช้ไม่ได้: ' + (e && e.code === 1 ? 'ยังไม่ได้อนุญาตตำแหน่ง' : 'ไม่ได้สัญญาณ (ออกที่โล่ง)');
+      updateStatus();
       toast('ใช้ตำแหน่งไม่ได้: ' + (e && e.message ? e.message : 'กรุณาอนุญาตการเข้าถึงตำแหน่ง'));
     });
 
@@ -168,6 +172,16 @@
       vectorTpl: function () { return vectorTpl; }, prefs: prefs,
       fmtPoint: function (lat, lng) { return G.formatPoint(lat, lng, prefs.fmt); }
     });
+    TrailCam.init({
+      map: function () { return map; }, toast: toast, closeSheet: closeSheet, prefs: prefs, savePrefs: savePrefs,
+      vectorTpl: function () { return vectorTpl; },
+      fmtPoint: function (lat, lng) { return G.formatPoint(lat, lng, prefs.fmt); }
+    });
+    applyOrient();
+    updateStatus();
+    try {
+      navigator.permissions.query({ name: 'geolocation' }).then(function (p) { if (p.state === 'granted') geolocate.trigger(); });
+    } catch (e) { /* ไม่รองรับ */ }
 
     applyBase();
     applyTraffic();
@@ -227,6 +241,15 @@
   var pinMarker = null;
   var pinPos = null;
 
+  var centerEle = null, pinEle = null, eleTimer = null;
+  function scheduleElev() {
+    clearTimeout(eleTimer);
+    eleTimer = setTimeout(function () {
+      var c = map.getCenter();
+      TrailRoute.elevAsync(c.lat, c.lng).then(function (v) { centerEle = v; updateCoord(); }).catch(function () {});
+    }, 400);
+  }
+
   function updateCoord() {
     if (!map) return;
     var c = map.getCenter();
@@ -234,9 +257,9 @@
     var html = '<small></small><span></span>';
     el.innerHTML = html;
     el.querySelector('small').textContent = 'กลางจอ · ' + G.FORMAT_NAMES[prefs.fmt] + ' · ซูม ' + map.getZoom().toFixed(1);
-    var txt = G.formatPoint(c.lat, c.lng, prefs.fmt);
+    var txt = G.formatPoint(c.lat, c.lng, prefs.fmt) + (centerEle !== null ? '  ·  สูง ~' + Math.round(centerEle) + ' ม.' : '');
     if (pinPos) {
-      txt += '\n📍 ' + G.formatPoint(pinPos.lat, pinPos.lng, prefs.fmt);
+      txt += '\n📍 ' + G.formatPoint(pinPos.lat, pinPos.lng, prefs.fmt) + (pinEle !== null ? '  ·  สูง ~' + Math.round(pinEle) + ' ม.' : '');
       el.querySelector('span').style.whiteSpace = 'pre-line';
     }
     el.querySelector('span').textContent = txt;
@@ -244,6 +267,7 @@
 
   function onMove() {
     updateCoord();
+    scheduleElev();
     scheduleGrid();
     refreshProt();
   }
@@ -260,6 +284,8 @@
       el.className = 'pin';
       pinMarker = new maplibregl.Marker({ element: el }).setLngLat(e.lngLat).addTo(map);
       pinPos = { lat: e.lngLat.lat, lng: e.lngLat.lng };
+      pinEle = null;
+      TrailRoute.elevAsync(pinPos.lat, pinPos.lng).then(function (v) { pinEle = v; updateCoord(); }).catch(function () {});
     }
     updateCoord();
   }
@@ -674,7 +700,7 @@
   function setDownloadLabel() {
     if (downloading) return;
     var btn = $('download');
-    btn.textContent = 'ดาวน์โหลดพื้นที่ที่เห็นบนจอ' + (prefs.base === 'trail' ? '' : ' (+' + BASE_NAMES[prefs.base] + ')');
+    btn.textContent = '⬇ ออฟไลน์' + (prefs.base === 'trail' ? '' : ' +' + BASE_NAMES[prefs.base]);
   }
 
   async function downloadArea() {
@@ -767,7 +793,7 @@
       return;
     }
     btn.disabled = true;
-    btn.textContent = 'กำลังดาวน์โหลด ' + Math.round((done / total) * 100) + '%';
+    btn.textContent = '⬇ ' + Math.round((done / total) * 100) + '%';
   }
 
   /* ---------- รายการพื้นที่ ---------- */
@@ -838,6 +864,83 @@
     renderAreas();
   }
 
+  /* ---------- แถบสถานะ GPS ---------- */
+  var sbMsg = null, sbEle = null, sbEleAt = null;
+  function signalBars(acc) {
+    if (acc === null || acc === undefined) return ['', '#999'];
+    if (acc <= 5) return ['▂▄▆█', '#1f9d4a'];
+    if (acc <= 15) return ['▂▄▆', '#1f9d4a'];
+    if (acc <= 40) return ['▂▄', '#e08a00'];
+    if (acc <= 100) return ['▂', '#d6261c'];
+    return ['·', '#d6261c'];
+  }
+  function updateStatus() {
+    var l1 = $('sb1'), l2 = $('sb2');
+    if (!l1) return;
+    var f = TrailSensors.state.fix;
+    if (!f) { l1.textContent = sbMsg || 'GPS: แตะปุ่มตำแหน่ง (◎) เพื่อเริ่ม'; l2.textContent = ''; return; }
+    sbMsg = null;
+    if (!sbEleAt || G.haversine(sbEleAt, f) > 30) {
+      sbEleAt = { lat: f.lat, lng: f.lng };
+      TrailRoute.elevAsync(f.lat, f.lng).then(function (v) { sbEle = v; updateStatus(); }).catch(function () {});
+    }
+    var sb = signalBars(f.acc);
+    var age = Math.round((Date.now() - f.t) / 1000);
+    var alt = [];
+    if (f.alt !== null && f.alt !== undefined) alt.push('GPS ' + Math.round(f.alt) + (f.altAcc ? '±' + Math.round(f.altAcc) : ''));
+    if (sbEle !== null) alt.push('แผนที่ ' + Math.round(sbEle));
+    var h = TrailSensors.moveHeading();
+    l1.innerHTML = '<span style="color:' + sb[1] + '">●</span> ±' + (f.acc ? Math.round(f.acc) : '–') + ' ม. <span class="bars" style="color:' + sb[1] + '">' + sb[0] + '</span>' +
+      (alt.length ? ' · สูง ' + alt.join(' / ') + ' ม.' : '') +
+      ' · ' + (typeof f.speed === 'number' && f.speed >= 0 ? (f.speed * 3.6).toFixed(1) : '–') + ' กม./ชม.' +
+      (h !== null ? ' · ทิศ ' + Math.round(h) + '°' : '') +
+      (age > 10 ? ' · <b style="color:#d6261c">ไม่อัปเดต ' + age + ' วิ</b>' : '');
+    l2.textContent = G.formatPoint(f.lat, f.lng, prefs.fmt);
+  }
+
+  /* ---------- ปุ่มล็อกทิศเหนือ / หมุนตามทิศที่เดิน ---------- */
+  function OrientControl() {}
+  OrientControl.prototype.onAdd = function () {
+    var d = document.createElement('div');
+    d.className = 'maplibregl-ctrl maplibregl-ctrl-group';
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.id = 'orientBtn';
+    b.style.fontWeight = '700';
+    b.style.fontSize = '14px';
+    b.onclick = toggleOrient;
+    d.appendChild(b);
+    this._c = d;
+    return d;
+  };
+  OrientControl.prototype.onRemove = function () { this._c.remove(); };
+  function applyOrient() {
+    if (!map) return;
+    if (prefs.orient === 'north') {
+      map.dragRotate.disable();
+      map.touchZoomRotate.disableRotation();
+      map.rotateTo(0, { duration: 300 });
+    } else {
+      map.dragRotate.enable();
+      map.touchZoomRotate.enableRotation();
+    }
+    var b = $('orientBtn');
+    if (b) {
+      b.textContent = prefs.orient === 'north' ? 'N' : '↑';
+      b.style.color = prefs.orient === 'north' ? '#d00' : '#1a6ad6';
+      b.title = prefs.orient === 'north' ? 'ล็อกทิศเหนือ' : 'หมุนตามทิศที่เดิน';
+    }
+  }
+  function toggleOrient() {
+    prefs.orient = prefs.orient === 'north' ? 'free' : 'north';
+    savePrefs();
+    if (prefs.orient === 'free') {
+      TrailSensors.start().then(function (ok) { if (!ok) toast('ใช้ทิศจากการเดินเท่านั้น (ไม่ได้สิทธิ์เข็มทิศ)'); });
+    }
+    applyOrient();
+    toast(prefs.orient === 'north' ? 'ล็อกทิศเหนือ' : 'แผนที่หมุนตามทิศที่เดิน (ใช้เข็มทิศเมื่อหยุดเดิน)');
+  }
+
   /* ---------- ส่วนประกอบหน้าจอ ---------- */
   var toastTimer = null;
   function toast(msg) {
@@ -889,6 +992,21 @@
     $('toolProt').onclick = function () { openSheet('prot'); };
     $('toolSpecial').onclick = function () { openSheet('special'); };
     $('toolRoute').onclick = function () { openSheet('route'); };
+    $('toolCam').onclick = function () { TrailCam.open(); };
+    $('sb2').onclick = $('sb1').onclick = function () {
+      var i = G.FORMATS.indexOf(prefs.fmt);
+      prefs.fmt = G.FORMATS[(i + 1) % G.FORMATS.length];
+      savePrefs(); updateCoord(); updateGrid(); updateStatus();
+    };
+    TrailSensors.onFix(updateStatus);
+    setInterval(updateStatus, 1000);
+    setInterval(function () {
+      if (!map || prefs.orient !== 'free') return;
+      var h = TrailSensors.moveHeading();
+      if (h === null) return;
+      var diff = Math.abs(((h - map.getBearing() + 540) % 360) - 180);
+      if (diff > 4) map.rotateTo(h, { duration: 400 });
+    }, 600);
     $('coord').onclick = function () {
       var i = G.FORMATS.indexOf(prefs.fmt);
       prefs.fmt = G.FORMATS[(i + 1) % G.FORMATS.length];

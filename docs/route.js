@@ -30,9 +30,9 @@
     } while (b & 0x80);
     return r;
   };
+  var UTF8 = typeof TextDecoder !== 'undefined' ? new TextDecoder('utf-8') : null;
   Reader.prototype.str = function (len) {
-    var s = '';
-    for (var i = 0; i < len; i++) s += String.fromCharCode(this.b[this.p + i]);
+    var s = UTF8 ? UTF8.decode(this.b.subarray(this.p, this.p + len)) : String.fromCharCode.apply(null, this.b.subarray(this.p, this.p + len));
     this.p += len;
     return s;
   };
@@ -47,21 +47,21 @@
   function zz(v) { return v % 2 === 0 ? v / 2 : -(v + 1) / 2; }
 
   // คืนรายการ {cls, lines:[[[x,y]...]]} ของเลเยอร์ที่ต้องการ พิกัดเป็น 0..1 ของไทล์
-  function decodeLines(buf, layerName) {
+  function decodeLines(buf, layerName, geomType) {
     var out = [];
     var r = new Reader(buf);
     while (r.p < r.end) {
       var key = r.varint(), f = Math.floor(key / 8), wt = key % 8;
       if (f === 3 && wt === 2) {
         var len = r.varint(), end = r.p + len;
-        parseLayer(new Reader(buf, r.p, end), layerName, out);
+        parseLayer(new Reader(buf, r.p, end), layerName, out, geomType || 2);
         r.p = end;
       } else r.skip(wt);
     }
     return out;
   }
 
-  function parseLayer(r, wanted, out) {
+  function parseLayer(r, wanted, out, gt) {
     var name = '', keys = [], values = [], feats = [], extent = 4096;
     while (r.p < r.end) {
       var key = r.varint(), f = Math.floor(key / 8), wt = key % 8;
@@ -73,6 +73,10 @@
         while (r.p < vend) {
           var vk = r.varint(), vf = Math.floor(vk / 8), vw = vk % 8;
           if (vf === 1 && vw === 2) val = r.str(r.varint());
+          else if (vf === 2 && vw === 5) { val = new DataView(r.b.buffer, r.b.byteOffset + r.p, 4).getFloat32(0, true); r.p += 4; }
+          else if (vf === 3 && vw === 1) { val = new DataView(r.b.buffer, r.b.byteOffset + r.p, 8).getFloat64(0, true); r.p += 8; }
+          else if ((vf === 4 || vf === 5) && vw === 0) val = r.varint();
+          else if (vf === 6 && vw === 0) val = zz(r.varint());
           else r.skip(vw);
         }
         r.p = vend;
@@ -91,9 +95,12 @@
         else if (ff === 4 && w === 2) { var gl = fr.varint(), ge = fr.p + gl; geom = []; while (fr.p < ge) geom.push(fr.varint()); }
         else fr.skip(w);
       }
-      if (type !== 2 || !geom) return;
-      var cls = null;
-      for (var t = 0; t + 1 < tags.length; t += 2) if (keys[tags[t]] === 'class') cls = values[tags[t + 1]];
+      if (type !== gt || !geom) return;
+      var cls = null, props = {};
+      for (var t = 0; t + 1 < tags.length; t += 2) {
+        props[keys[tags[t]]] = values[tags[t + 1]];
+        if (keys[tags[t]] === 'class') cls = values[tags[t + 1]];
+      }
       var lines = [], cur = null, x = 0, y = 0, i = 0;
       while (i < geom.length) {
         var cmd = geom[i] % 8, cnt = Math.floor(geom[i] / 8);
@@ -107,7 +114,7 @@
           }
         }
       }
-      out.push({ cls: cls, lines: lines });
+      out.push({ cls: cls, props: props, lines: lines });
     });
   }
 
@@ -454,7 +461,113 @@
     return { lng: l[0], lat: l[1] };
   }
 
+  /* ---------- ความสูงของจุดใด ๆ (ไทล์ DEM ระดับ 12) และยอดเขา ---------- */
+  var DEM_Z = 12;
+  var demTiles = {}; // key -> Promise
+  var demData = {}; // key -> Float32Array (พร้อมอ่านแบบทันที)
+  var demOrder = [];
+
+  function demTile(x, y) {
+    var key = x + '/' + y;
+    if (demTiles[key]) return demTiles[key];
+    var p = fetchImg(C.fillTemplate(C.DEM_TEMPLATE, { z: DEM_Z, x: x, y: y })).then(function (bm) {
+      if (!bm) { delete demTiles[key]; return null; }
+      var cv = document.createElement('canvas');
+      cv.width = cv.height = 256;
+      var cx = cv.getContext('2d', { willReadFrequently: true });
+      cx.drawImage(bm, 0, 0);
+      var d = cx.getImageData(0, 0, 256, 256).data, out = new Float32Array(65536);
+      for (var i = 0; i < 65536; i++) out[i] = d[i * 4] * 256 + d[i * 4 + 1] + d[i * 4 + 2] / 256 - 32768;
+      demData[key] = out;
+      return out;
+    });
+    demTiles[key] = p;
+    demOrder.push(key);
+    if (demOrder.length > 64) { var old = demOrder.shift(); delete demTiles[old]; delete demData[old]; }
+    return p;
+  }
+
+  function demAt(ix, iy) {
+    var tx = Math.floor(ix / 256), ty = Math.floor(iy / 256);
+    var t = demData[tx + '/' + ty];
+    return t ? t[(iy - ty * 256) * 256 + (ix - tx * 256)] : null;
+  }
+
+  // ความสูงจากข้อมูลที่โหลดไว้แล้ว (null ถ้ายังไม่มีไทล์)
+  function elevSync(lat, lng) {
+    var p = px(lng, lat, DEM_Z), gx = p[0] - 0.5, gy = p[1] - 0.5;
+    var x0 = Math.floor(gx), y0 = Math.floor(gy), fx = gx - x0, fy = gy - y0;
+    var a = demAt(x0, y0), b = demAt(x0 + 1, y0), c = demAt(x0, y0 + 1), d = demAt(x0 + 1, y0 + 1);
+    if (a === null || b === null || c === null || d === null) return null;
+    return (a * (1 - fx) + b * fx) * (1 - fy) + (c * (1 - fx) + d * fx) * fy;
+  }
+
+  function elevAsync(lat, lng) {
+    var p = px(lng, lat, DEM_Z), gx = p[0] - 0.5, gy = p[1] - 0.5;
+    var tx0 = Math.floor(gx / 256), tx1 = Math.floor((gx + 1) / 256), ty0 = Math.floor(gy / 256), ty1 = Math.floor((gy + 1) / 256);
+    var jobs = [];
+    for (var y = ty0; y <= ty1; y++) for (var x = tx0; x <= tx1; x++) jobs.push(demTile(x, y));
+    return Promise.all(jobs).then(function () { return elevSync(lat, lng); });
+  }
+
+  // โหลดไทล์ความสูงรอบจุดล่วงหน้า
+  function demPrefetch(lat, lng, radiusM) {
+    var dLat = radiusM / 110540, dLng = radiusM / (111320 * Math.max(0.2, Math.cos(lat * D2R)));
+    var a = px(lng - dLng, lat + dLat, DEM_Z), b = px(lng + dLng, lat - dLat, DEM_Z);
+    var jobs = [];
+    for (var y = Math.floor(a[1] / 256); y <= Math.floor(b[1] / 256); y++) {
+      for (var x = Math.floor(a[0] / 256); x <= Math.floor(b[0] / 256); x++) jobs.push(demTile(x, y));
+    }
+    return Promise.all(jobs);
+  }
+
+  var peakTiles = {};
+  function peakTile(x, y, vectorTpl) {
+    var key = x + '/' + y;
+    if (peakTiles[key]) return peakTiles[key];
+    var p = fetchBuf(C.fillTemplate(vectorTpl, { z: 12, x: x, y: y })).then(function (buf) {
+      if (!buf) { delete peakTiles[key]; return []; }
+      var out = [];
+      try {
+        decodeLines(new Uint8Array(buf), 'mountain_peak', 1).forEach(function (ft) {
+          if (!ft.lines.length || !ft.lines[0].length) return;
+          var pt = ft.lines[0][0];
+          var ll = unpx((x + pt[0]) * 256, (y + pt[1]) * 256, 12);
+          var ele = parseFloat(ft.props.ele);
+          out.push({ lng: ll[0], lat: ll[1], name: ft.props['name:th'] || ft.props.name || '', ele: isNaN(ele) ? null : ele });
+        });
+      } catch (e) { /* ข้ามไทล์ที่อ่านไม่ได้ */ }
+      return out;
+    });
+    peakTiles[key] = p;
+    return p;
+  }
+
+  // ยอดเขาในรัศมี radiusM เมตร (มีชื่อหรือความสูง)
+  function peaksNear(lat, lng, radiusM, vectorTpl) {
+    var dLat = radiusM / 110540, dLng = radiusM / (111320 * Math.max(0.2, Math.cos(lat * D2R)));
+    var a = px(lng - dLng, lat + dLat, 12), b = px(lng + dLng, lat - dLat, 12);
+    var jobs = [];
+    for (var y = Math.floor(a[1] / 256); y <= Math.floor(b[1] / 256); y++) {
+      for (var x = Math.floor(a[0] / 256); x <= Math.floor(b[0] / 256); x++) jobs.push(peakTile(x, y, vectorTpl));
+    }
+    return Promise.all(jobs).then(function (lists) {
+      var out = [];
+      lists.forEach(function (l) {
+        l.forEach(function (p) {
+          var d = G.haversine({ lat: lat, lng: lng }, p);
+          if (d <= radiusM && d > 50) out.push({ lat: p.lat, lng: p.lng, name: p.name, ele: p.ele, dist: d });
+        });
+      });
+      return out;
+    });
+  }
+
   root.TrailRoute = {
+    elevSync: elevSync,
+    elevAsync: elevAsync,
+    demPrefetch: demPrefetch,
+    peaksNear: peaksNear,
     autoRoute: autoRoute,
     dpSimplify: dpSimplify,
     polyLength: polyLength,

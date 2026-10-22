@@ -26,6 +26,7 @@
     traffic: false,
     grid: false,
     fmt: 'dms', // mgrs | utm | dms | dm | dd
+    anchor: 'center', // จุดของแผ่นวัดมุมที่ตรงกับหมุด A: center | romer | sixty
     decl: 0 // มุมเบี่ยงเบนแม่เหล็ก (องศา, ตะวันออกเป็นบวก)
   };
 
@@ -153,6 +154,15 @@
       layout: { 'line-cap': 'round' },
       paint: { 'line-color': '#c4501b', 'line-width': 3, 'line-dasharray': [2, 1.5] }
     });
+    try {
+      map.addSource('plate', { type: 'image', url: TrailPlate.draw(2400).toDataURL('image/png'), coordinates: [[0, 1], [1, 1], [1, 0], [0, 0]] });
+      map.addLayer({
+        id: 'plate', type: 'raster', source: 'plate', layout: { visibility: 'none' },
+        paint: { 'raster-fade-duration': 0, 'raster-resampling': 'linear' }
+      }, 'az-line');
+    } catch (e) { /* ไม่มีแผ่นวัดมุม */ }
+    TrailPaper.init({ map: function () { return map; }, toast: toast, closeSheet: closeSheet });
+    TrailPaper.loadAll();
 
     applyBase();
     applyTraffic();
@@ -417,8 +427,25 @@
   }
 
   /* ---------- แผ่นวัดมุม (ฝึกใช้แผนที่) ---------- */
-  var prot = { on: false, a: null, b: null, markA: null, markB: null, svgG: null, needle: null, hide: false, revealed: false };
-  var PROT_R = 120;
+  var prot = { on: false, a: null, b: null, markA: null, markB: null, hide: false, revealed: false };
+
+  // วางแผ่นวัดมุมสี่เหลี่ยม 1:50,000 บนแผนที่ โดยให้จุดอ้างอิงที่เลือกตรงกับหมุด A และหันเหนือกริด
+  function updatePlate() {
+    var src = map.getSource("plate");
+    if (!src) return;
+    var show = prot.on && prot.a;
+    map.setLayoutProperty("plate", "visibility", show ? "visible" : "none");
+    if (!show) return;
+    var zone = G.zoneOf(prot.a.lng);
+    var u = G.toUTM(prot.a.lat, prot.a.lng, zone);
+    var off = TrailPlate.ANCHORS[prefs.anchor] || TrailPlate.ANCHORS.center;
+    var cE = u.e - off.x, cN = u.n - off.y, h = TrailPlate.SIDE / 2;
+    function pt(dx, dy) {
+      var p = G.fromUTM(zone, u.north, cE + dx, cN + dy);
+      return [p.lng, p.lat];
+    }
+    src.setCoordinates([pt(-h, h), pt(h, h), pt(h, -h), pt(-h, -h)]);
+  }
 
   function protTap(ll) {
     var p = { lat: ll.lat, lng: ll.lng };
@@ -438,21 +465,6 @@
     var el = document.createElement('div');
     el.className = 'pmark ' + which;
     el.textContent = which.toUpperCase();
-    if (which === 'a') {
-      var NS = 'http://www.w3.org/2000/svg';
-      var S = PROT_R + 30;
-      var svg = document.createElementNS(NS, 'svg');
-      svg.setAttribute('class', 'prot');
-      svg.setAttribute('viewBox', [-S, -S, 2 * S, 2 * S].join(' '));
-      svg.setAttribute('width', 2 * S);
-      svg.setAttribute('height', 2 * S);
-      svg.style.marginLeft = -S + 'px';
-      svg.style.marginTop = -S + 'px';
-      svg.innerHTML = protractorSVG(PROT_R);
-      el.appendChild(svg);
-      prot.svgG = svg.querySelector('#protRot');
-      prot.needle = svg.querySelector('#protNeedle');
-    }
     var m = new maplibregl.Marker({ element: el, draggable: true }).setLngLat([0, 0]).addTo(map);
     m.on('drag', function () {
       var l = m.getLngLat();
@@ -462,49 +474,6 @@
     prot[which === 'a' ? 'markA' : 'markB'] = m;
   }
 
-  // วาดแผ่นวัดมุม: วงนอกเป็นองศา วงในเป็นมิลเลียม (6400 มิล)
-  function protractorSVG(R) {
-    var out = [];
-    out.push('<g id="protRot">');
-    out.push('<circle r="' + R + '" fill="rgba(255,255,255,0.35)" stroke="#1a6ad6" stroke-width="1.5"/>');
-    out.push('<circle r="' + (R - 30) + '" fill="none" stroke="#1a6ad6" stroke-width="0.8"/>');
-    var d, a, c, sn, len, tx, ty;
-    for (d = 0; d < 360; d += 1) {
-      a = (d * Math.PI) / 180; sn = Math.sin(a); c = Math.cos(a);
-      len = d % 10 === 0 ? 10 : d % 5 === 0 ? 7 : 4;
-      out.push('<line x1="' + (sn * R).toFixed(1) + '" y1="' + (-c * R).toFixed(1) + '" x2="' + (sn * (R - len)).toFixed(1) + '" y2="' + (-c * (R - len)).toFixed(1) + '" stroke="#1a3a7a" stroke-width="' + (d % 10 === 0 ? 1 : 0.6) + '"/>');
-    }
-    for (d = 0; d < 360; d += 10) {
-      a = (d * Math.PI) / 180; sn = Math.sin(a); c = Math.cos(a);
-      tx = sn * (R - 19); ty = -c * (R - 19);
-      out.push('<text x="' + tx.toFixed(1) + '" y="' + ty.toFixed(1) + '" font-size="8" fill="#1a3a7a" text-anchor="middle" dominant-baseline="middle" transform="rotate(' + d + ' ' + tx.toFixed(1) + ' ' + ty.toFixed(1) + ')">' + d + '</text>');
-    }
-    // วงมิลเลียม: ขีดทุก 100 มิล ตัวเลขทุก 400 มิล (แสดงเป็นหลักร้อย)
-    var r2 = R - 30;
-    for (var m = 0; m < 6400; m += 100) {
-      a = (m / 6400) * 2 * Math.PI; sn = Math.sin(a); c = Math.cos(a);
-      len = m % 400 === 0 ? 8 : 4;
-      out.push('<line x1="' + (sn * r2).toFixed(1) + '" y1="' + (-c * r2).toFixed(1) + '" x2="' + (sn * (r2 - len)).toFixed(1) + '" y2="' + (-c * (r2 - len)).toFixed(1) + '" stroke="#c4501b" stroke-width="0.8"/>');
-      if (m % 400 === 0) {
-        tx = sn * (r2 - 16); ty = -c * (r2 - 16);
-        out.push('<text x="' + tx.toFixed(1) + '" y="' + ty.toFixed(1) + '" font-size="8" fill="#c4501b" text-anchor="middle" dominant-baseline="middle" transform="rotate(' + (m * 360 / 6400) + ' ' + tx.toFixed(1) + ' ' + ty.toFixed(1) + ')">' + (m / 100) + '</text>');
-      }
-    }
-    out.push('<polygon points="0,' + (-R - 14) + ' -6,' + (-R - 2) + ' 6,' + (-R - 2) + '" fill="#d00"/>');
-    out.push('<text x="0" y="' + (-R - 18) + '" font-size="11" font-weight="700" fill="#d00" text-anchor="middle">N</text>');
-    out.push('<line x1="0" y1="' + (-R) + '" x2="0" y2="' + R + '" stroke="rgba(26,106,214,0.4)" stroke-width="0.6"/>');
-    out.push('<line x1="' + (-R) + '" y1="0" x2="' + R + '" y2="0" stroke="rgba(26,106,214,0.4)" stroke-width="0.6"/>');
-    out.push('<g id="protNeedle"><line x1="0" y1="0" x2="0" y2="' + (-R - 8) + '" stroke="#c4501b" stroke-width="2.5"/><circle cx="0" cy="' + (-R - 8) + '" r="3.5" fill="#c4501b"/></g>');
-    out.push('</g>');
-    return out.join('');
-  }
-
-  // มุมเบี่ยงเบนระหว่างเหนือจริงกับเหนือกริด ณ จุดหนึ่ง (องศา, บวก = เหนือกริดอยู่ทางตะวันออก)
-  function convergence(p) {
-    var zone = G.zoneOf(p.lng);
-    var dl = (p.lng - G.zoneMeridian(zone)) * G.D2R;
-    return Math.atan(Math.tan(dl) * Math.sin(p.lat * G.D2R)) * G.R2D;
-  }
 
   function protReadout() {
     if (!prot.a || !prot.b) return null;
@@ -516,8 +485,7 @@
       back: G.norm360(ga.az + 180),
       trueAz: trueAz,
       mag: G.norm360(trueAz - prefs.decl),
-      dist: G.haversine(prot.a, prot.b),
-      conv: convergence(prot.a)
+      dist: G.haversine(prot.a, prot.b)
     };
   }
 
@@ -534,13 +502,7 @@
     map.getSource('az').setData(fc);
 
     var r = protReadout();
-    if (prot.svgG) {
-      // แผ่นวัดมุมหมุนตามแผนที่และให้เลข 0 ชี้เหนือกริด ณ จุด A
-      var rot = (prot.a ? convergence(prot.a) : 0) - map.getBearing();
-      prot.svgG.setAttribute('transform', 'rotate(' + rot.toFixed(2) + ')');
-      if (r) prot.needle.setAttribute('transform', 'rotate(' + r.az.toFixed(2) + ')');
-      prot.needle.style.display = r ? '' : 'none';
-    }
+    updatePlate();
 
     var card = $('azcard');
     if (!prot.on) { card.hidden = true; return; }
@@ -581,7 +543,7 @@
   function clearProt() {
     if (prot.markA) prot.markA.remove();
     if (prot.markB) prot.markB.remove();
-    prot.a = prot.b = prot.markA = prot.markB = prot.svgG = prot.needle = null;
+    prot.a = prot.b = prot.markA = prot.markB = null;
     prot.revealed = false;
     refreshProt();
   }
@@ -601,13 +563,14 @@
     sheetKind = kind;
     var sh = $('sheet');
     sh.hidden = false;
-    var title = kind === 'layers' ? 'ชั้นแผนที่' : kind === 'grid' ? 'พิกัดและตารางกริด' : 'วัดมุมด้วยแผ่นวัดมุม';
+    var title = kind === 'layers' ? 'ชั้นแผนที่' : kind === 'grid' ? 'พิกัดและตารางกริด' : kind === 'special' ? 'หมวดพิเศษ' : 'วัดมุมด้วยแผ่นวัดมุม';
     sh.innerHTML = '<div class="shead"><h3></h3><button id="sheetClose">ปิด</button></div><div id="sheetBody"></div>';
     sh.querySelector('h3').textContent = title;
     $('sheetClose').onclick = closeSheet;
     $('toolLayers').classList.toggle('on', kind === 'layers');
     if (kind === 'layers') renderLayersSheet();
     else if (kind === 'grid') renderGridSheet();
+    else if (kind === 'special') TrailPaper.renderSheet($('sheetBody'));
     else renderProtSheet();
   }
 
@@ -660,8 +623,11 @@
   function renderProtSheet() {
     var h = '<div class="btnrow"><button class="btn" id="protToggle">' + (prot.on ? 'ปิดแผ่นวัดมุม' : 'เปิดแผ่นวัดมุม') + '</button>' +
       '<button class="btn alt" id="protClear">ล้างจุด</button></div>' +
-      '<p class="note">วิธีใช้: แตะแผนที่วางจุด A (ศูนย์กลางแผ่นวัดมุม) แล้วแตะวางจุด B ลากหมุดเพื่อปรับ ' +
-      'แผ่นวัดมุมจะหมุนตามแผนที่และเลข 0 ชี้เหนือกริด อ่านมุมที่เข็มสีส้มชี้บนวงองศา (วงนอก) หรือวงมิลเลียม (วงใน) เทียบกับค่าที่แอพคำนวณ</p>' +
+      '<p class="note">วิธีใช้: แตะแผนที่วางจุด A แล้วแตะวางจุด B ลากหมุดเพื่อปรับ แผ่นวัดมุมสี่เหลี่ยม 1:50,000 (5 กม. × 5 กม.) จะวางทับตามขนาดจริงของมาตราส่วน หันเหนือกริดเสมอ ซูมเข้าให้เห็นสเกลแล้วอ่านมุมที่เส้นประส้มตัดขอบแผ่น เทียบกับค่าที่แอพคำนวณ</p>' +
+      '<h4>จุดของแผ่นที่ตรงกับหมุด A</h4>' +
+      radio('anchor', 'center', 'ศูนย์กลางแผ่น', 'วัดมุม A→B ด้วยสเกลองศา', prefs.anchor === 'center') +
+      radio('anchor', 'romer', 'มุมสเกล 1000 ม. (จุดแดง)', 'อ่านพิกัดกริดด้วยสเกลโรเมอร์', prefs.anchor === 'romer') +
+      radio('anchor', 'sixty', 'มุมสเกล 60 ฟิลิปดา (จุดน้ำเงิน)', 'อ่านพิกัดภูมิศาสตร์ (ลิปดา/ฟิลิปดา)', prefs.anchor === 'sixty') +
       '<h4>ฝึกอ่านมุม</h4>' +
       check('protHide', 'ซ่อนคำตอบ', 'อ่านมุมจากแผ่นวัดมุมเองก่อน แล้วกด "เฉลย"', prot.hide) +
       '<h4>มุมเบี่ยงเบนแม่เหล็ก</h4>' +
@@ -677,6 +643,9 @@
       closeSheet();
     };
     $('protClear').onclick = function () { clearProt(); };
+    Array.prototype.forEach.call(document.querySelectorAll('input[name=anchor]'), function (el) {
+      el.onchange = function () { prefs.anchor = el.value; savePrefs(); updatePlate(); };
+    });
     $('protHide').onchange = function () { prot.hide = this.checked; prot.revealed = false; refreshProt(); };
     $('declIn').onchange = function () {
       var v = parseFloat(this.value);
@@ -904,6 +873,7 @@
     $('toolLayers').onclick = function () { openSheet('layers'); };
     $('toolGrid').onclick = function () { openSheet('grid'); };
     $('toolProt').onclick = function () { openSheet('prot'); };
+    $('toolSpecial').onclick = function () { openSheet('special'); };
     $('coord').onclick = function () {
       var i = G.FORMATS.indexOf(prefs.fmt);
       prefs.fmt = G.FORMATS[(i + 1) % G.FORMATS.length];

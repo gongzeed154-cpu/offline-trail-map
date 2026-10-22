@@ -17,6 +17,9 @@ jobs:
       - name: Install JS dependencies
         run: npm install
 
+      - name: Align dependency versions with Expo
+        run: npx expo install --fix
+
       - name: Generate native iOS project
         run: npx expo prebuild --platform ios
 

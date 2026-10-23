@@ -211,7 +211,8 @@
     c.fillStyle = '#ffffff'; c.fillRect(0, 0, W, H);
     function mm(v) { return v * pxmm; }
 
-    var M = 8, L = 6, HD = 12, FT = Math.min(40, Math.max(30, hmm * 0.13));
+    // ขอบแคบ: M = ระยะขอบกระดาษ, L = ที่ว่างสำหรับตัวเลขกริดนอกกรอบ, HD = หัวกระดาษ, FT = ท้ายกระดาษ
+    var M = 6, L = 6, HD = 9, FT = Math.min(28, Math.max(24, hmm * 0.095));
     var fx = Math.round(mm(M + L)), fy = Math.round(mm(M + HD + L));
     var fw = Math.round(W - 2 * mm(M + L)), fh = Math.round(H - mm(M + HD + L) - mm(L + FT + M));
     if (fw < 100 || fh < 100) throw new Error('กระดาษเล็กเกินไปสำหรับค่านี้');
@@ -219,6 +220,7 @@
     var cl = o.center ? G.parsePoint(o.center) : null;
     if (o.center && !cl) throw new Error('อ่านพิกัดศูนย์กลางไม่ได้ ตรวจรูปแบบ: ' + G.FORMAT_HINT[o.cfmt]);
     if (!cl) { var mc0 = ctx.map().getCenter(); cl = { lat: mc0.lat, lng: mc0.lng }; }
+    var cf = G.FORMATS.indexOf(o.cfmt) >= 0 ? o.cfmt : 'mgrs'; // รูปแบบพิกัดที่พิมพ์บนแผ่น (ตามช่อง "รูปแบบพิกัด")
     if (cl.lat <= -80 || cl.lat >= 84) throw new Error('พิกัดอยู่นอกช่วง UTM');
     var u0 = G.toUTM(cl.lat, cl.lng);
     var g = { fx: fx, fy: fy, fw: fw, fh: fh, cx: fx + fw / 2, cy: fy + fh / 2, mpp: mpp, E0: u0.e, N0: u0.n, zone: u0.zone, north: u0.north };
@@ -324,10 +326,10 @@
     // หัวกระดาษ
     var sw = G.fromUTM(g.zone, g.north, Emin, Nmin), ne = G.fromUTM(g.zone, g.north, Emax, Nmax);
     var conv = G.convergence(cl.lat, cl.lng), decl = (ctx.prefs && ctx.prefs.decl) || 0;
-    text(o.title || 'แผนที่ฝึก', mm(M), mm(M + 6), 6, true, 'left');
-    text('1 : ' + o.scale.toLocaleString('en-US'), W - mm(M), mm(M + 6), 6, true, 'right');
-    text('UTM โซน ' + g.zone + G.bandOf(cl.lat) + ' · WGS84 · ศูนย์กลาง ' + G.formatPoint(cl.lat, cl.lng, 'mgrs') + ' · กริดทุก ' + fmtLen(I) + ' · กระดาษ ' + o.paper + (o.land ? ' แนวนอน' : ' แนวตั้ง'),
-      mm(M), mm(M + 10.5), 2.7, false, 'left', '#333');
+    text(o.title || 'แผนที่ฝึก', mm(M), mm(M + 5), 6, true, 'left');
+    text('1 : ' + o.scale.toLocaleString('en-US'), W - mm(M), mm(M + 5), 6, true, 'right');
+    text('UTM ' + g.zone + G.bandOf(cl.lat) + ' · WGS84 · ศูนย์กลาง ' + G.formatPoint(cl.lat, cl.lng, cf) + ' · กริดทุก ' + fmtLen(I),
+      mm(M), mm(M + 9), 2.7, false, 'left', '#333');
 
     // ส่วนท้าย: แถบสเกล
     var y0 = fy + fh + mm(L + 4);
@@ -359,7 +361,7 @@
     text('มาตราส่วน 1:' + o.scale.toLocaleString('en-US') + '  (แถบยาว ' + (Lm * mmPerM).toFixed(0) + ' มม. = ' + fmtLen(Lm) + ')', fx, yb - mm(1.2), 2.4, true, 'left');
 
     // แผนภาพทิศ GN/TN/MN
-    var ox = fx + fw - mm(40), oy = y0 + mm(19), len = mm(15);
+    var ox = fx + fw - mm(36), oy = y0 + mm(14), len = mm(11);
     function ray(angDeg, label, dash) {
       var a = angDeg * Math.PI / 180, ex = ox + len * Math.sin(a), ey = oy - len * Math.cos(a);
       c.save();
@@ -373,18 +375,18 @@
     ray(-conv, 'TN', true);
     ray(decl - conv, 'MN');
     var gm = decl - conv;
-    text('γ (TN→GN) = ' + conv.toFixed(2) + '°', ox + mm(4), oy - mm(7), 2.2, false, 'left');
     text(decl ? 'MN ' + (decl >= 0 ? 'ตะวันออก' : 'ตะวันตก') + ' ' + Math.abs(decl).toFixed(1) + '° จาก TN' : 'ยังไม่ตั้งมุมแม่เหล็ก', ox + mm(4), oy - mm(3.5), 2.2, false, 'left');
     text('GM = ' + gm.toFixed(2) + '° ≈ ' + Math.round(gm * 6400 / 360) + ' มิล', ox + mm(4), oy, 2.2, false, 'left');
 
-    // หมายเหตุ
+    // หมายเหตุ (ย่อให้เหลือเท่าที่จำเป็น)
     var notes = [
-      'ช่องกริด 1 ช่อง = ' + (I * mmPerM).toFixed(1) + ' มม. บนกระดาษ · พิมพ์ที่ 100% (ห้ามเลือก "พอดีหน้า/Fit to page") แล้ววัดแถบสเกลตรวจ',
-      'มุมล่างซ้าย ' + G.formatPoint(sw.lat, sw.lng, 'mgrs') + ' · มุมบนขวา ' + G.formatPoint(ne.lat, ne.lng, 'mgrs'),
-      o.scale === 50000 ? 'ใช้กับแผ่นวัดมุมสี่เหลี่ยม 1:50,000 ได้ (1 กม. = 20 มม.)' : 'แผ่นวัดมุมใช้ได้เมื่อสเกลตรงกัน: พิมพ์แผ่นสเกล 1:' + o.scale.toLocaleString('en-US') + ' ได้จากเมนูเดียวกัน',
-      o.base === 'topo' ? 'พื้นหลัง: © OpenTopoMap (CC-BY-SA) · ข้อมูล © ผู้ร่วมจัดทำ OpenStreetMap' : o.base === 'sat' ? 'พื้นหลัง: Esri World Imagery' : o.base === 'paper' ? 'พื้นหลัง: แผนที่กระดาษที่นำเข้า (ดัดเข้ากริด UTM ตามพิกัดที่ปรับไว้ ความแม่นยำขึ้นกับการปรับ)' : 'กริดเปล่า สำหรับฝึกอ่าน/ลงพิกัด'
+      'ช่องกริด 1 ช่อง = ' + (I * mmPerM).toFixed(1) + ' มม. · พิมพ์ที่ 100% (ห้ามเลือก "พอดีหน้า/Fit to page") แล้ววัดแถบสเกลตรวจ',
+      'มุมล่างซ้าย ' + G.formatPoint(sw.lat, sw.lng, cf) + ' · มุมบนขวา ' + G.formatPoint(ne.lat, ne.lng, cf)
     ];
-    notes.forEach(function (n, i) { text(n, fx, yb + mm(11 + i * 3.6), 2.2, false, 'left', '#333'); });
+    if (o.base === 'topo') notes.push('พื้นหลัง: © OpenTopoMap (CC-BY-SA) · ข้อมูล © ผู้ร่วมจัดทำ OpenStreetMap');
+    else if (o.base === 'sat') notes.push('พื้นหลัง: Esri World Imagery');
+    else if (o.base === 'paper') notes.push('พื้นหลัง: แผนที่กระดาษที่นำเข้า (ความแม่นยำขึ้นกับการปรับพิกัด)');
+    notes.forEach(function (n, i) { text(n, fx, yb + mm(10.5 + i * 3.4), 2.2, false, 'left', '#333'); });
 
     return { cv: cv, wmm: wmm, hmm: hmm, w: W, h: H, nsym: nsym };
   }
@@ -474,6 +476,7 @@
       '<div class="btnrow"><button class="btn" id="pBuild">สร้างแผนที่ฝึก</button><button class="btn alt" id="pPlate">แผ่นวัดมุมขนาดจริง</button></div>' +
       '<div id="pStat" class="note"></div><div id="pOut"></div>' +
       '<p class="note">พื้นหลังภูมิประเทศ/ดาวเทียมต้องออนไลน์ หรือดาวน์โหลดพื้นที่นั้นไว้แล้ว ส่วนแผนที่กระดาษใช้ออฟไลน์ได้ (ต้องนำเข้าและปรับพิกัดไว้ที่ ★ พิเศษ ก่อน และศูนย์กลางแผ่นต้องอยู่ในพื้นที่ของแผนที่กระดาษ) ภาพถูกดัดให้ตรงกับกริด UTM จึงถูกต้องตามสเกล ' +
+      'รูปแบบพิกัดใช้กับตำแหน่งศูนย์กลางและมุมแผ่นที่พิมพ์ ส่วนตัวเลขบนเส้นกริดเป็น UTM (กม.) เสมอ ' +
       'ถ้าพื้นที่ในแผนที่ลับ/หวงห้าม อย่าส่งไฟล์ออกนอกหน่วยงาน · พิมพ์ที่ขนาด 100% เสมอ</p>';
     box.innerHTML = h;
     $('pTitle').value = cfg.title;

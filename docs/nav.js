@@ -682,6 +682,7 @@
     renderSheet: renderSheet,
     isBusy: function () { return !!edit; },
     items: function () { return routes; },
+    points: routePts,
     commit: function () { saveRoutes(); drawRoutes(); },
     removeRoute: function (id) { routes = routes.filter(function (x) { return x.id !== id; }); saveRoutes(); drawRoutes(); },
     zoomRoute: function (r) { ctx.closeSheet(); ctx.map().fitBounds(boundsOf(routePts(r)), { padding: 60, duration: 700 }); },

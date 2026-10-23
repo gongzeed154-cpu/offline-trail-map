@@ -202,6 +202,14 @@
       map: function () { return map; }, toast: toast,
       showSheet: function (k) { if (sheetKind !== k) openSheet(k); else TrailWind.renderSheet($('sheetBody')); }
     });
+    TrailRec.init({
+      map: function () { return map; }, toast: toast, closeSheet: closeSheet, geolocate: geolocate,
+      showSheet: function (k) { if (sheetKind !== k) openSheet(k); else TrailRec.renderSheet($('sheetBody')); }
+    });
+    TrailTeam.init({
+      map: function () { return map; }, toast: toast, closeSheet: closeSheet, geolocate: geolocate,
+      showSheet: function (k) { if (sheetKind !== k) openSheet(k); else TrailTeam.renderSheet($('sheetBody')); }
+    });
     TrailSky.init({
       map: function () { return map; }, toast: toast, prefs: prefs, savePrefs: savePrefs,
       fmtPoint: function (lat, lng) { return G.formatPoint(lat, lng, prefs.fmt); }
@@ -652,7 +660,7 @@
     sheetKind = kind;
     var sh = $('sheet');
     sh.hidden = false;
-    var title = kind === 'layers' ? 'ชั้นแผนที่และหน้าจอ' : kind === 'grid' ? 'พิกัดและตารางกริด' : kind === 'special' ? 'หมวดพิเศษ' : kind === 'route' ? 'เส้นทางและนำทาง' : kind === 'sky' ? 'ดวงดาวนำทาง' : kind === 'mil' ? 'สัญลักษณ์ทหารและพิมพ์แผนที่ฝึก' : kind === 'proj' ? 'งาน (เส้นทาง · สัญลักษณ์ · หมุด)' : kind === 'snd' ? 'ฟังเสียง (วิเคราะห์ชนิดและระยะ)' : kind === 'wind' ? 'ทิศทางและความเร็วลม' : kind === 'jump' ? 'โหมดโดดร่ม (วางแผน/ฝึก)' : 'วัดมุมด้วยแผ่นวัดมุม';
+    var title = kind === 'layers' ? 'ชั้นแผนที่และหน้าจอ' : kind === 'grid' ? 'พิกัดและตารางกริด' : kind === 'special' ? 'หมวดพิเศษ' : kind === 'route' ? 'เส้นทางและนำทาง' : kind === 'sky' ? 'ดวงดาวนำทาง' : kind === 'mil' ? 'สัญลักษณ์ทหารและพิมพ์แผนที่ฝึก' : kind === 'proj' ? 'งาน (เส้นทาง · สัญลักษณ์ · หมุด)' : kind === 'snd' ? 'ฟังเสียง (วิเคราะห์ชนิดและระยะ)' : kind === 'wind' ? 'ทิศทางและความเร็วลม' : kind === 'jump' ? 'โหมดโดดร่ม (วางแผน/ฝึก)' : kind === 'rec' ? 'บันทึกการเดินทาง' : kind === 'team' ? 'ทีมเดินป่า' : 'วัดมุมด้วยแผ่นวัดมุม';
     sh.innerHTML = '<div class="shead"><h3></h3><button id="sheetClose">ปิด</button></div><div id="sheetBody"></div>';
     sh.querySelector('h3').textContent = title;
     $('sheetClose').onclick = closeSheet;
@@ -667,6 +675,8 @@
     else if (kind === 'snd') TrailSound.renderSheet($('sheetBody'));
     else if (kind === 'wind') TrailWind.renderSheet($('sheetBody'));
     else if (kind === 'jump') TrailJump.renderSheet($('sheetBody'));
+    else if (kind === 'rec') TrailRec.renderSheet($('sheetBody'));
+    else if (kind === 'team') TrailTeam.renderSheet($('sheetBody'));
     else renderProtSheet();
   }
 
@@ -1083,6 +1093,8 @@
     $('toolProj').onclick = function () { openSheet('proj'); };
     $('toolSnd').onclick = function () { openSheet('snd'); };
     $('toolJump').onclick = function () { openSheet('jump'); };
+    $('toolRec').onclick = function () { openSheet('rec'); };
+    $('toolTeam').onclick = function () { openSheet('team'); };
     $('dispBtn').onclick = cycleDisplay;
     $('muteBtn').onclick = function () {
       if (prefs.display === 'stealth') { toast('โหมดพรางตัวปิดเสียงอยู่ เปลี่ยนโหมดก่อนจึงเปิดเสียงได้'); return; }

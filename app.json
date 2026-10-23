@@ -9,14 +9,22 @@
       "bundleIdentifier": "com.example.offlinetrailmap",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "ใช้แสดงตำแหน่งของคุณบนแผนที่ขณะเดินป่า",
-        "CFBundleDisplayName": "แผนที่เดินป่า"
+        "CFBundleDisplayName": "แผนที่เดินป่า",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "ใช้บันทึกเส้นทางการเดินทางต่อเนื่องแม้ล็อคหน้าจอหรือสลับไปแอพอื่น",
+        "UIBackgroundModes": [
+          "location"
+        ]
       }
     },
     "android": {
       "package": "com.example.offlinetrailmap",
       "permissions": [
         "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION"
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION",
+        "POST_NOTIFICATIONS"
       ]
     },
     "plugins": [
@@ -24,7 +32,11 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "ใช้แสดงตำแหน่งของคุณบนแผนที่ขณะเดินป่า"
+          "locationWhenInUsePermission": "ใช้แสดงตำแหน่งของคุณบนแผนที่ขณะเดินป่า",
+          "locationAlwaysAndWhenInUsePermission": "ใช้บันทึกเส้นทางการเดินทางต่อเนื่องแม้ล็อคหน้าจอหรือสลับไปแอพอื่น",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true,
+          "isIosBackgroundLocationEnabled": true
         }
       ]
     ]

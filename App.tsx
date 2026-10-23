@@ -4,6 +4,7 @@ import {
   Alert,
   FlatList,
   Modal,
+  Platform,
   Pressable,
   SafeAreaView,
   StatusBar,
@@ -13,6 +14,8 @@ import {
 } from 'react-native';
 import {
   Camera,
+  GeoJSONSource,
+  Layer,
   Map,
   OfflineManager,
   UserLocation,
@@ -26,6 +29,19 @@ import * as Location from 'expo-location';
 import { useKeepAwake } from 'expo-keep-awake';
 import { File, Paths } from 'expo-file-system';
 import { buildTrailStyle } from './trailStyle';
+import {
+  deleteTrack,
+  ensureTrackPermissions,
+  exportTrackGPX,
+  getActiveTrackId,
+  listTracks,
+  measure,
+  readTrackPoints,
+  renameTrack,
+  startTrack,
+  stopTrack,
+  type TrackSummary,
+} from './tracker';
 
 // สไตล์แผนที่เดินป่าของเรา เขียนเป็นไฟล์ในเครื่อง เพื่อให้เปิดแผนที่ได้แม้ไม่มีสัญญาณ
 function writeStyleFile(): string {
@@ -79,6 +95,16 @@ function formatMB(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function formatKm(m: number) {
+  return m < 1000 ? `${Math.round(m)} ม.` : `${(m / 1000).toFixed(2)} กม.`;
+}
+
+function formatDuration(ms: number) {
+  const t = Math.max(0, Math.floor(ms / 1000));
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${p(Math.floor(t / 3600))}:${p(Math.floor((t % 3600) / 60))}:${p(t % 60)}`;
+}
+
 function defaultName() {
   const d = new Date();
   const p = (n: number) => String(n).padStart(2, '0');
@@ -96,9 +122,130 @@ export default function App() {
   const [progress, setProgress] = useState<number | null>(null);
   const [areas, setAreas] = useState<SavedArea[]>([]);
   const [listOpen, setListOpen] = useState(false);
+  const [activeTrackId, setActiveTrackId] = useState<string | null>(null);
+  const [trackStart, setTrackStart] = useState<number | null>(null);
+  const [now, setNow] = useState(Date.now());
+  const [tracks, setTracks] = useState<TrackSummary[]>([]);
+  const [tracksOpen, setTracksOpen] = useState(false);
+  const [lineCoords, setLineCoords] = useState<[number, number][]>([]);
+  const [liveDistance, setLiveDistance] = useState(0);
 
   // กันหน้าจอดับระหว่างดาวน์โหลด
   useKeepAwake();
+
+  const refreshTracks = useCallback(() => {
+    try {
+      setTracks(listTracks());
+    } catch (e) {
+      Alert.alert('อ่านรายการเส้นทางไม่ได้', String(e));
+    }
+  }, []);
+
+  // กลับเข้าแอพแล้วดูว่ายังบันทึกค้างอยู่ไหม (แอพอาจถูกปิดไประหว่างบันทึก)
+  useEffect(() => {
+    try {
+      const id = getActiveTrackId();
+      setActiveTrackId(id);
+      if (id) {
+        const t = listTracks().find((x) => x.id === id);
+        setTrackStart(t?.startedAt ?? Date.now());
+      }
+      refreshTracks();
+    } catch {
+      // ยังไม่เคยบันทึก
+    }
+  }, [refreshTracks]);
+
+  // ระหว่างบันทึก: ทุก 5 วินาทีอ่านจุดที่งานเบื้องหลังเขียนไว้ มาวาดเส้นบนแผนที่
+  useEffect(() => {
+    if (!activeTrackId) return;
+    const tick = () => {
+      setNow(Date.now());
+      try {
+        const pts = readTrackPoints(activeTrackId);
+        setLineCoords(pts.map((p) => [p.lng, p.lat]));
+        setLiveDistance(measure(pts).distanceM);
+      } catch {
+        // อ่านไม่ทันตอนกำลังเขียน ลองใหม่รอบหน้า
+      }
+    };
+    tick();
+    const timer = setInterval(tick, 5000);
+    return () => clearInterval(timer);
+  }, [activeTrackId]);
+
+  const toggleRecording = useCallback(async () => {
+    try {
+      if (activeTrackId) {
+        await stopTrack();
+        setActiveTrackId(null);
+        setTrackStart(null);
+        refreshTracks();
+        Alert.alert('บันทึกการเดินทางแล้ว', 'ดูและส่งออกไฟล์ได้ที่ "การเดินทางที่บันทึกไว้"');
+        return;
+      }
+      const perm = await ensureTrackPermissions();
+      if (perm === 'denied') {
+        Alert.alert('ยังไม่ได้อนุญาตตำแหน่ง', 'กรุณาเปิดสิทธิ์ตำแหน่งในการตั้งค่าเครื่อง แล้วลองใหม่');
+        return;
+      }
+      if (perm === 'foreground-only') {
+        Alert.alert(
+          'บันทึกตอนล็อคจอไม่ได้',
+          'ต้องเลือกอนุญาตตำแหน่ง "ตลอดเวลา" ในการตั้งค่าเครื่อง ตอนนี้จะบันทึกได้เฉพาะตอนเปิดแอพค้างไว้',
+        );
+      }
+      const id = await startTrack();
+      setLineCoords([]);
+      setLiveDistance(0);
+      setTrackStart(Date.now());
+      setActiveTrackId(id);
+    } catch (e) {
+      Alert.alert('บันทึกการเดินทางไม่ได้', String(e));
+    }
+  }, [activeTrackId, refreshTracks]);
+
+  const showTrack = useCallback((t: TrackSummary) => {
+    const pts = readTrackPoints(t.id);
+    if (pts.length === 0) {
+      Alert.alert('เส้นทางนี้ยังไม่มีจุดบันทึก');
+      return;
+    }
+    setLineCoords(pts.map((p) => [p.lng, p.lat]));
+    setFollowing(false);
+    setTracksOpen(false);
+    const lngs = pts.map((p) => p.lng);
+    const lats = pts.map((p) => p.lat);
+    cameraRef.current?.fitBounds(
+      [Math.min(...lngs), Math.min(...lats), Math.max(...lngs), Math.max(...lats)],
+      { duration: 800, padding: { top: 120, bottom: 160, left: 40, right: 40 } },
+    );
+  }, []);
+
+  const exportTrack = useCallback(async (t: TrackSummary) => {
+    try {
+      await exportTrackGPX(t.id);
+    } catch (e) {
+      Alert.alert('ส่งออกไม่สำเร็จ', String(e));
+    }
+  }, []);
+
+  const removeTrack = useCallback(
+    (t: TrackSummary) => {
+      Alert.alert('ลบการเดินทางนี้?', t.name, [
+        { text: 'ยกเลิก', style: 'cancel' },
+        {
+          text: 'ลบ',
+          style: 'destructive',
+          onPress: () => {
+            deleteTrack(t.id);
+            refreshTracks();
+          },
+        },
+      ]);
+    },
+    [refreshTracks],
+  );
 
   const refreshAreas = useCallback(async () => {
     const packs: OfflinePack[] = await OfflineManager.getPacks();
@@ -248,6 +395,23 @@ export default function App() {
             setFollowing(e.nativeEvent.trackUserLocation !== null)
           }
         />
+        {lineCoords.length > 1 && (
+          <GeoJSONSource
+            id="track-src"
+            data={{
+              type: 'Feature',
+              properties: {},
+              geometry: { type: 'LineString', coordinates: lineCoords },
+            }}
+          >
+            <Layer
+              id="track-line"
+              type="line"
+              layout={{ 'line-cap': 'round', 'line-join': 'round' }}
+              paint={{ 'line-color': '#d6261c', 'line-width': 5 }}
+            />
+          </GeoJSONSource>
+        )}
         {hasLocation && <UserLocation accuracy heading />}
       </Map>
       )}
@@ -256,6 +420,22 @@ export default function App() {
         <Pressable style={styles.chip} onPress={() => setListOpen(true)}>
           <Text style={styles.chipText}>แผนที่ที่ดาวน์โหลดไว้ ({areas.length})</Text>
         </Pressable>
+        <Pressable
+          style={[styles.chip, styles.altChip]}
+          onPress={() => {
+            refreshTracks();
+            setTracksOpen(true);
+          }}
+        >
+          <Text style={styles.chipText}>การเดินทางที่บันทึกไว้ ({tracks.length})</Text>
+        </Pressable>
+        {activeTrackId && trackStart !== null && (
+          <View style={[styles.chip, styles.altChip, styles.recChip]}>
+            <Text style={styles.chipText}>
+              ● กำลังบันทึก {formatDuration(now - trackStart)} · {formatKm(liveDistance)}
+            </Text>
+          </View>
+        )}
         {altitude !== null && (
           <View style={[styles.chip, styles.altChip]}>
             <Text style={styles.chipText}>ความสูง (GPS) {Math.round(altitude)} ม.</Text>
@@ -270,6 +450,16 @@ export default function App() {
           accessibilityLabel="ไปที่ตำแหน่งของฉัน"
         >
           <Text style={styles.roundBtnText}>◎</Text>
+        </Pressable>
+
+        <Pressable
+          style={[styles.roundBtn, activeTrackId && styles.recBtnActive]}
+          onPress={toggleRecording}
+          accessibilityLabel={activeTrackId ? 'หยุดบันทึกการเดินทาง' : 'เริ่มบันทึกการเดินทาง'}
+        >
+          <Text style={[styles.roundBtnText, styles.recDot, activeTrackId && styles.recDotActive]}>
+            {activeTrackId ? '■' : '●'}
+          </Text>
         </Pressable>
 
         <Pressable
@@ -330,6 +520,63 @@ export default function App() {
           />
         </SafeAreaView>
       </Modal>
+
+      <Modal
+        visible={tracksOpen}
+        animationType="slide"
+        onRequestClose={() => setTracksOpen(false)}
+      >
+        <SafeAreaView style={styles.modal}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>การเดินทางที่บันทึกไว้</Text>
+            <Pressable onPress={() => setTracksOpen(false)}>
+              <Text style={styles.close}>ปิด</Text>
+            </Pressable>
+          </View>
+          <FlatList
+            data={tracks}
+            keyExtractor={(t) => t.id}
+            ListEmptyComponent={
+              <Text style={styles.empty}>
+                ยังไม่มีการเดินทางที่บันทึกไว้{'\n'}กดปุ่ม ● ที่มุมล่างเพื่อเริ่มบันทึก แอพจะเก็บเส้นทางต่อเนื่องแม้ล็อคหน้าจอ
+              </Text>
+            }
+            renderItem={({ item }) => (
+              <View style={styles.item}>
+                <Pressable style={styles.itemInfo} onPress={() => showTrack(item)}>
+                  <Text style={styles.itemName}>
+                    {item.active ? '● ' : ''}
+                    {item.name}
+                  </Text>
+                  <Text style={styles.itemSub}>
+                    {formatKm(item.distanceM)} · ขึ้น {Math.round(item.ascentM)} ม. ·{' '}
+                    {item.endedAt ? formatDuration(item.endedAt - item.startedAt) : 'กำลังบันทึก'} ·{' '}
+                    {item.points} จุด
+                  </Text>
+                </Pressable>
+                {Platform.OS === 'ios' && (
+                  <Pressable
+                    onPress={() =>
+                      Alert.prompt('เปลี่ยนชื่อ', undefined, (name) => {
+                        renameTrack(item.id, name ?? '');
+                        refreshTracks();
+                      }, 'plain-text', item.name)
+                    }
+                  >
+                    <Text style={styles.action}>ชื่อ</Text>
+                  </Pressable>
+                )}
+                <Pressable onPress={() => exportTrack(item)} disabled={item.active}>
+                  <Text style={[styles.action, item.active && styles.actionOff]}>ส่งออก</Text>
+                </Pressable>
+                <Pressable onPress={() => removeTrack(item)} disabled={item.active}>
+                  <Text style={[styles.delete, item.active && styles.actionOff]}>ลบ</Text>
+                </Pressable>
+              </View>
+            )}
+          />
+        </SafeAreaView>
+      </Modal>
     </View>
   );
 }
@@ -354,6 +601,12 @@ const styles = StyleSheet.create({
   },
   chipText: { fontSize: 15, color: '#222' },
   altChip: { marginTop: 8 },
+  recChip: { backgroundColor: '#ffe3e0' },
+  recBtnActive: { backgroundColor: '#d6261c' },
+  recDot: { color: '#d6261c', fontSize: 22 },
+  recDotActive: { color: '#fff', fontSize: 20 },
+  action: { color: GREEN, fontSize: 15, padding: 8 },
+  actionOff: { opacity: 0.35 },
   bottomBar: {
     position: 'absolute',
     bottom: 0,

@@ -30,6 +30,8 @@ Project language: README, manual and UI text are in **Thai**. Keep new user-faci
 - `team.ts` + `TeamPanel.tsx`: WebSocket client for `server/` (Node + `ws`, in-memory teams). Limits: 10 members, name ≤16 chars, 10 unique colors. `TEAM_COLORS` in `team.ts` must match `COLORS` in `server/index.js`.
 - Server changes: run `cd server && npm test`. Protocol is documented in `server/README.md`.
 
+- PWA counterparts: `docs/rec.js` (TrailRec: trips in localStorage, GPX via TrailExport.share) and `docs/team.js` (TrailTeam, same server protocol; shares the screen wake lock through `TrailRec.holdWake`). Browser E2E was done with Playwright against a local `server/` and stubbed map tiles.
+
 ## Workflow
 1. Read the relevant file(s) fully before editing; files are 80–1100 lines.
 2. Make the smallest change that fits the existing style.

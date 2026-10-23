@@ -1,7 +1,7 @@
 /* service worker: เก็บไฟล์แอพและไทล์แผนที่ไว้ใช้ตอนไม่มีสัญญาณ */
 importScripts('./common.js');
 
-var SHELL_CACHE = 'shell-v14';
+var SHELL_CACHE = 'shell-v15';
 var TILE_CACHE = 'tiles-v1';
 var SHELL_FILES = [
   './',
@@ -22,6 +22,8 @@ var SHELL_FILES = [
   './jump.js',
   './projects.js',
   './symbols.js',
+  './rec.js',
+  './team.js',
   './print.js',
   './manifest.webmanifest',
   './lib/maplibre-gl.js',

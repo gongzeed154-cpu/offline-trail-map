@@ -11,7 +11,7 @@
   var CONCURRENCY = 8;
   var MAX_ZOOM = 20;
 
-  var BASE_NAMES = { trail: 'เดินป่า', sat: 'ดาวเทียม', topo: 'ภูมิประเทศ' };
+  var BASE_NAMES = { trail: 'เดินป่า', sat: 'ดาวเทียม', topo: 'ภูมิประเทศ', paper: 'แผนที่กระดาษ' };
   var NON_TRAIL = { background: 1, sat: 1, topo: 1, traffic: 1 };
 
   var map = null;
@@ -21,7 +21,8 @@
   var trailLayerIds = [];
 
   var prefs = {
-    base: 'trail', // trail | sat | topo
+    base: 'trail', // trail | sat | topo | paper
+    contour: false, // เส้นชั้นความสูง 20 ม. (สร้างบนเครื่อง)
     weather: 'off', // off | radar
     traffic: false,
     grid: false,
@@ -202,6 +203,7 @@
       map: function () { return map; }, toast: toast,
       showSheet: function (k) { if (sheetKind !== k) openSheet(k); else TrailWind.renderSheet($('sheetBody')); }
     });
+    TrailContour.init({ map: function () { return map; }, toast: toast });
     TrailRec.init({
       map: function () { return map; }, toast: toast, closeSheet: closeSheet, geolocate: geolocate,
       showSheet: function (k) { if (sheetKind !== k) openSheet(k); else TrailRec.renderSheet($('sheetBody')); }
@@ -237,6 +239,8 @@
     });
     map.setLayoutProperty('sat', 'visibility', prefs.base === 'sat' ? 'visible' : 'none');
     map.setLayoutProperty('topo', 'visibility', prefs.base === 'topo' ? 'visible' : 'none');
+    TrailPaper.setSolo(prefs.base === 'paper');
+    TrailContour.apply(!!prefs.contour);
   }
 
   function applyTraffic() {
@@ -698,6 +702,9 @@
       radio('base', 'trail', 'แผนที่เดินป่า', 'ทางเดินเท้า ป่า น้ำ เงาภูเขา ยอดเขา ซูมเห็นอาคาร/ชื่อถนน', prefs.base === 'trail') +
       radio('base', 'sat', 'ภาพถ่ายดาวเทียม', 'ซูมได้ละเอียดสุด · ดาวน์โหลดเก็บไว้ใช้ออฟไลน์ได้', prefs.base === 'sat') +
       radio('base', 'topo', 'ภูมิประเทศ (เส้นชั้นความสูง)', 'แผนที่ตามแบบ topo · ดาวน์โหลดเก็บไว้ใช้ออฟไลน์ได้', prefs.base === 'topo') +
+      radio('base', 'paper', 'แผนที่กระดาษ (ที่นำเข้า)', 'แสดงเฉพาะแผนที่กระดาษที่นำเข้าไว้ ใช้ออฟไลน์ได้ · นำเข้าที่ปุ่ม ★ พิเศษ', prefs.base === 'paper') +
+      '<h4>เส้นชั้นความสูง</h4>' +
+      check('ovContour', 'เส้นชั้นความสูง 20 ม.', 'ซูม 13 ขึ้นไปเป็นเส้นละ 20 ม. เส้นหนาทุก 100 ม. มีตัวเลข · ซูมออกระยะห่างเพิ่มเองให้อ่านออก · ใช้ข้อมูลความสูงละเอียดราว 30-40 ม. ที่ราบจะไม่เนียน', prefs.contour) +
       '<h4>ซ้อนทับ (ต้องมีอินเทอร์เน็ต)</h4>' +
       check('ovWeather', 'สภาพอากาศ: เรดาร์ฝน', 'ข้อมูลล่าสุดจาก RainViewer', prefs.weather === 'radar') +
       check('ovTraffic', 'การจราจร', 'สีแสดงความหนาแน่นของรถบนถนน', prefs.traffic) +
@@ -706,6 +713,7 @@
     Array.prototype.forEach.call(document.querySelectorAll('input[name=base]'), function (el) {
       el.onchange = function () { prefs.base = el.value; savePrefs(); applyBase(); setDownloadLabel(); };
     });
+    $('ovContour').onchange = function () { prefs.contour = this.checked; savePrefs(); TrailContour.apply(prefs.contour); };
     $('ovWeather').onchange = function () { prefs.weather = this.checked ? 'radar' : 'off'; savePrefs(); applyWeather(); };
     $('ovTraffic').onchange = function () { prefs.traffic = this.checked; savePrefs(); applyTraffic(); };
     Array.prototype.forEach.call(document.querySelectorAll('input[name=disp]'), function (el) {
@@ -781,12 +789,12 @@
   function setDownloadLabel() {
     if (downloading) return;
     var btn = $('download');
-    btn.textContent = '⬇ ออฟไลน์' + (prefs.base === 'trail' ? '' : ' +' + BASE_NAMES[prefs.base]);
+    btn.textContent = '⬇ ออฟไลน์' + (prefs.base === 'trail' || prefs.base === 'paper' ? '' : ' +' + BASE_NAMES[prefs.base]);
   }
 
   async function downloadArea() {
     if (downloading || !map || !vectorTpl) return;
-    var base = prefs.base;
+    var base = prefs.base === 'paper' ? 'trail' : prefs.base; // แผนที่กระดาษอยู่ในเครื่องอยู่แล้ว ดาวน์โหลดเฉพาะแผนที่เดินป่า + ความสูง
     var b = map.getBounds();
     var bounds = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
     var n = C.countTiles(bounds, base);

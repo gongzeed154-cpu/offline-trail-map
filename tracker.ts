@@ -55,18 +55,58 @@ export function getActiveTrackId(): string | null {
   return id || null;
 }
 
+// ผู้ฟังตำแหน่งจากภายนอก (ฟีเจอร์ทีมใช้ส่งตำแหน่งให้เพื่อน) ทำงานในงานเบื้องหลังเดียวกัน
+let locationListener: ((l: Location.LocationObject) => void) | null = null;
+
+export function setLocationListener(fn: ((l: Location.LocationObject) => void) | null) {
+  locationListener = fn;
+}
+
+async function startLocationTask() {
+  if (await Location.hasStartedLocationUpdatesAsync(TRACK_TASK).catch(() => false)) return;
+  await Location.startLocationUpdatesAsync(TRACK_TASK, {
+    accuracy: Location.Accuracy.BestForNavigation,
+    timeInterval: 5000,
+    distanceInterval: 5,
+    pausesUpdatesAutomatically: false,
+    showsBackgroundLocationIndicator: true,
+    foregroundService: {
+      notificationTitle: 'แผนที่เดินป่ากำลังใช้ตำแหน่ง',
+      notificationBody: 'กำลังบันทึกการเดินทางหรือแชร์ตำแหน่งในทีม',
+      killServiceOnDestroy: false,
+    },
+  });
+}
+
+// หยุดงานตำแหน่งเมื่อไม่มีทั้งการบันทึกการเดินทางและทีม
+async function stopLocationTaskIfIdle() {
+  if (getActiveTrackId() || locationListener) return;
+  if (await Location.hasStartedLocationUpdatesAsync(TRACK_TASK).catch(() => false)) {
+    await Location.stopLocationUpdatesAsync(TRACK_TASK);
+  }
+}
+
+export async function acquireLocationForTeam() {
+  await startLocationTask();
+}
+
+export async function releaseLocationForTeam() {
+  locationListener = null;
+  await stopLocationTaskIfIdle();
+}
+
 // ต้องประกาศที่ระดับบนสุดของโมดูล เพื่อให้ระบบปลุกงานนี้ได้ตอนแอพอยู่เบื้องหลัง
 TaskManager.defineTask(TRACK_TASK, async ({ data, error }) => {
   if (error) return;
-  const id = getActiveTrackId();
-  if (!id) return;
-  const file = trackFile(id);
-  if (!file.exists) return;
   const { locations } = data as { locations: Location.LocationObject[] };
+  const id = getActiveTrackId();
+  const file = id ? trackFile(id) : null;
   let lines = '';
   for (const l of locations) {
     const acc = l.coords.accuracy;
     if (acc !== null && acc > MAX_ACCURACY_M) continue;
+    locationListener?.(l);
+    if (!file?.exists) continue;
     lines +=
       JSON.stringify({
         t: 'p',
@@ -77,7 +117,7 @@ TaskManager.defineTask(TRACK_TASK, async ({ data, error }) => {
         ts: l.timestamp,
       }) + '\n';
   }
-  if (lines) file.write(lines, { append: true });
+  if (lines && file) file.write(lines, { append: true });
 });
 
 function newId(): string {
@@ -110,18 +150,7 @@ export async function startTrack(name?: string): Promise<string> {
   activeFile().create({ overwrite: true });
   activeFile().write(id);
   try {
-    await Location.startLocationUpdatesAsync(TRACK_TASK, {
-      accuracy: Location.Accuracy.BestForNavigation,
-      timeInterval: 5000,
-      distanceInterval: 5,
-      pausesUpdatesAutomatically: false,
-      showsBackgroundLocationIndicator: true,
-      foregroundService: {
-        notificationTitle: 'กำลังบันทึกการเดินทาง',
-        notificationBody: 'แผนที่เดินป่ากำลังเก็บเส้นทางของคุณ',
-        killServiceOnDestroy: false,
-      },
-    });
+    await startLocationTask();
   } catch (e) {
     activeFile().delete();
     file.delete();
@@ -132,13 +161,11 @@ export async function startTrack(name?: string): Promise<string> {
 
 export async function stopTrack(): Promise<string | null> {
   const id = getActiveTrackId();
-  if (await Location.hasStartedLocationUpdatesAsync(TRACK_TASK).catch(() => false)) {
-    await Location.stopLocationUpdatesAsync(TRACK_TASK);
-  }
   if (!id) return null;
   const file = trackFile(id);
   if (file.exists) appendLine(file, { t: 'end', ts: Date.now() });
   activeFile().delete();
+  await stopLocationTaskIfIdle();
   return id;
 }
 

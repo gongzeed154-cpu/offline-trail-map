@@ -29,6 +29,8 @@ import * as Location from 'expo-location';
 import { useKeepAwake } from 'expo-keep-awake';
 import { File, Paths } from 'expo-file-system';
 import { buildTrailStyle } from './trailStyle';
+import TeamPanel from './TeamPanel';
+import { getTeamState, resumeTeam, subscribeTeam, type TeamState } from './team';
 import {
   deleteTrack,
   ensureTrackPermissions,
@@ -129,6 +131,14 @@ export default function App() {
   const [tracksOpen, setTracksOpen] = useState(false);
   const [lineCoords, setLineCoords] = useState<[number, number][]>([]);
   const [liveDistance, setLiveDistance] = useState(0);
+  const [team, setTeam] = useState<TeamState>(getTeamState());
+  const [teamOpen, setTeamOpen] = useState(false);
+
+  useEffect(() => {
+    const unsub = subscribeTeam(setTeam);
+    resumeTeam().catch(() => {});
+    return unsub;
+  }, []);
 
   // กันหน้าจอดับระหว่างดาวน์โหลด
   useKeepAwake();
@@ -412,6 +422,62 @@ export default function App() {
             />
           </GeoJSONSource>
         )}
+        {team.route && team.route.length > 1 && (
+          <GeoJSONSource
+            id="team-route-src"
+            data={{
+              type: 'Feature',
+              properties: {},
+              geometry: { type: 'LineString', coordinates: team.route },
+            }}
+          >
+            <Layer
+              id="team-route-line"
+              type="line"
+              layout={{ 'line-cap': 'round', 'line-join': 'round' }}
+              paint={{ 'line-color': '#1a5fd0', 'line-width': 5, 'line-opacity': 0.8, 'line-dasharray': [2, 1.5] }}
+            />
+          </GeoJSONSource>
+        )}
+        {team.status !== 'off' && (
+          <GeoJSONSource
+            id="team-members-src"
+            data={{
+              type: 'FeatureCollection',
+              features: team.members
+                .filter((m) => m.pos && m.id !== team.you)
+                .map((m) => ({
+                  type: 'Feature' as const,
+                  properties: { name: m.name, color: m.color, online: m.online ? 1 : 0 },
+                  geometry: { type: 'Point' as const, coordinates: [m.pos!.lng, m.pos!.lat] },
+                })),
+            }}
+          >
+            <Layer
+              id="team-members-dot"
+              type="circle"
+              paint={{
+                'circle-radius': 9,
+                'circle-color': ['get', 'color'],
+                'circle-stroke-color': '#fff',
+                'circle-stroke-width': 3,
+                'circle-opacity': ['case', ['==', ['get', 'online'], 1], 1, 0.45],
+              }}
+            />
+            <Layer
+              id="team-members-label"
+              type="symbol"
+              layout={{
+                'text-field': ['get', 'name'],
+                'text-font': ['Noto Sans Bold'],
+                'text-size': 13,
+                'text-offset': [0, 1.4],
+                'text-allow-overlap': true,
+              }}
+              paint={{ 'text-color': '#000', 'text-halo-color': '#fff', 'text-halo-width': 2 }}
+            />
+          </GeoJSONSource>
+        )}
         {hasLocation && <UserLocation accuracy heading />}
       </Map>
       )}
@@ -428,6 +494,21 @@ export default function App() {
           }}
         >
           <Text style={styles.chipText}>การเดินทางที่บันทึกไว้ ({tracks.length})</Text>
+        </Pressable>
+        <Pressable
+          style={[styles.chip, styles.altChip, team.status !== 'off' && styles.teamChip]}
+          onPress={() => {
+            refreshTracks();
+            setTeamOpen(true);
+          }}
+        >
+          <Text style={styles.chipText}>
+            {team.status === 'off'
+              ? 'ทีมเดินป่า'
+              : `ทีม ${team.code} · ${team.members.filter((m) => m.online).length}/${team.members.length} ออนไลน์${
+                  team.status === 'online' ? '' : ' (กำลังเชื่อมต่อ)'
+                }`}
+          </Text>
         </Pressable>
         {activeTrackId && trackStart !== null && (
           <View style={[styles.chip, styles.altChip, styles.recChip]}>
@@ -521,6 +602,8 @@ export default function App() {
         </SafeAreaView>
       </Modal>
 
+      <TeamPanel visible={teamOpen} onClose={() => setTeamOpen(false)} team={team} tracks={tracks} />
+
       <Modal
         visible={tracksOpen}
         animationType="slide"
@@ -601,6 +684,7 @@ const styles = StyleSheet.create({
   },
   chipText: { fontSize: 15, color: '#222' },
   altChip: { marginTop: 8 },
+  teamChip: { backgroundColor: '#dde9ff' },
   recChip: { backgroundColor: '#ffe3e0' },
   recBtnActive: { backgroundColor: '#d6261c' },
   recDot: { color: '#d6261c', fontSize: 22 },

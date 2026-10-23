@@ -370,7 +370,6 @@
     init: function (c) { ctx = c; },
     loadAll: loadAll,
     setSolo: setSolo,
-    all: getAll,
     renderSheet: renderSheet,
     parseAngle: parseAngle,
     imageCoords: imageCoords

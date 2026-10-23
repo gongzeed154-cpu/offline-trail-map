@@ -111,87 +111,6 @@
     c.putImageData(out, g.fx, g.fy);
   }
 
-  /* ---------- พื้นหลังแผนที่กระดาษที่นำเข้า (ดัดเข้ากริด UTM) ---------- */
-  function mercXY(ll) {
-    var s = Math.sin(ll.lat * Math.PI / 180);
-    return [(ll.lng + 180) / 360, 0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)];
-  }
-
-  // เมทริกซ์ผกผัน (3x3 แบบ adjugate) ของการแปลงจากสี่เหลี่ยมจัตุรัสหนึ่งหน่วย -> สี่มุมใด ๆ (โปรเจกทีฟ)
-  // q = มุม (0,0) (1,0) (1,1) (0,1) ตามลำดับ
-  function quadInverse(q) {
-    var x0 = q[0][0], y0 = q[0][1], x1 = q[1][0], y1 = q[1][1], x2 = q[2][0], y2 = q[2][1], x3 = q[3][0], y3 = q[3][1];
-    var dx1 = x1 - x2, dx2 = x3 - x2, dx3 = x0 - x1 + x2 - x3, dy1 = y1 - y2, dy2 = y3 - y2, dy3 = y0 - y1 + y2 - y3;
-    var gg = 0, hh = 0;
-    if (Math.abs(dx3) > 1e-12 || Math.abs(dy3) > 1e-12) {
-      var den = dx1 * dy2 - dx2 * dy1;
-      if (Math.abs(den) < 1e-18) return null;
-      gg = (dx3 * dy2 - dx2 * dy3) / den;
-      hh = (dx1 * dy3 - dx3 * dy1) / den;
-    }
-    var a = x1 - x0 + gg * x1, b = x3 - x0 + hh * x3, c = x0, d = y1 - y0 + gg * y1, e = y3 - y0 + hh * y3, f = y0;
-    return [e - f * hh, c * hh - b, b * f - c * e, f * gg - d, a - c * gg, c * d - a * f, d * hh - e * gg, b * gg - a * hh, a * e - b * d];
-  }
-
-  async function drawPaper(c, o, g, onStatus) {
-    var recs = await TrailPaper.all();
-    if (!recs.length) throw new Error('ยังไม่มีแผนที่กระดาษที่นำเข้า (นำเข้าได้ที่ปุ่ม ★ พิเศษ)');
-    var S = 16, nx = Math.ceil(g.fw / S) + 1, ny = Math.ceil(g.fh / S) + 1;
-    var MX = new Float64Array(nx * ny), MY = new Float64Array(nx * ny);
-    for (var j = 0; j < ny; j++) {
-      for (var i = 0; i < nx; i++) {
-        var m = mercXY(G.fromUTM(g.zone, g.north, g.E0 + (i * S - g.fw / 2) * g.mpp, g.N0 - (j * S - g.fh / 2) * g.mpp));
-        MX[j * nx + i] = m[0]; MY[j * nx + i] = m[1];
-      }
-    }
-    var out = c.createImageData(g.fw, g.fh), od = out.data;
-    for (var q = 0; q < od.length; q += 4) { od[q] = 255; od[q + 1] = 255; od[q + 2] = 255; od[q + 3] = 255; }
-    var fade = o.fade / 100;
-    var hits = 0;
-    for (var r = 0; r < recs.length; r++) {
-      var rec = recs[r];
-      if (!rec.coords || rec.coords.length !== 4) continue;
-      onStatus('วาดแผนที่กระดาษ ' + (r + 1) + '/' + recs.length + ': ' + rec.name);
-      await new Promise(function (res) { setTimeout(res, 20); });
-      var bm = await createImageBitmap(rec.blob);
-      var tmp = document.createElement('canvas');
-      tmp.width = bm.width; tmp.height = bm.height;
-      var tc = tmp.getContext('2d');
-      tc.drawImage(bm, 0, 0);
-      if (bm.close) bm.close();
-      var img = tc.getImageData(0, 0, tmp.width, tmp.height), id = img.data, W = tmp.width, H = tmp.height;
-      // พิกัดเมอร์เคเตอร์สี่มุมของรูป (ย้ายไปที่มุมแรกและขยายให้เป็นเลขขนาดพอดี เพื่อความแม่นยำ)
-      var cm = rec.coords.map(function (p) { return mercXY({ lng: p[0], lat: p[1] }); });
-      var ox = cm[0][0], oy = cm[0][1], ext = 0;
-      cm.forEach(function (p) { ext = Math.max(ext, Math.abs(p[0] - ox), Math.abs(p[1] - oy)); });
-      if (!ext) continue;
-      var inv = quadInverse(cm.map(function (p) { return [(p[0] - ox) / ext, (p[1] - oy) / ext]; }));
-      if (!inv) continue;
-      for (var py = 0; py < g.fh; py++) {
-        var jj = Math.floor(py / S), fyy = (py - jj * S) / S;
-        for (var px = 0; px < g.fw; px++) {
-          var ii = Math.floor(px / S), fxx = (px - ii * S) / S;
-          var a0 = jj * nx + ii, b0 = a0 + 1, d0 = a0 + nx, e0 = d0 + 1;
-          var wx = ((MX[a0] * (1 - fxx) + MX[b0] * fxx) * (1 - fyy) + (MX[d0] * (1 - fxx) + MX[e0] * fxx) * fyy - ox) / ext;
-          var wy = ((MY[a0] * (1 - fxx) + MY[b0] * fxx) * (1 - fyy) + (MY[d0] * (1 - fxx) + MY[e0] * fxx) * fyy - oy) / ext;
-          var w = inv[6] * wx + inv[7] * wy + inv[8];
-          if (!w) continue;
-          var u = (inv[0] * wx + inv[1] * wy + inv[2]) / w, v = (inv[3] * wx + inv[4] * wy + inv[5]) / w;
-          if (u < 0 || v < 0 || u >= 1 || v >= 1) continue;
-          var s4 = (Math.floor(v * H) * W + Math.floor(u * W)) * 4;
-          if (id[s4 + 3] === 0) continue;
-          var o4 = (py * g.fw + px) * 4;
-          od[o4] = 255 + (id[s4] - 255) * fade;
-          od[o4 + 1] = 255 + (id[s4 + 1] - 255) * fade;
-          od[o4 + 2] = 255 + (id[s4 + 2] - 255) * fade;
-          hits++;
-        }
-      }
-    }
-    if (!hits) throw new Error('แผนที่กระดาษที่นำเข้าไม่ครอบคลุมพื้นที่นี้ ให้เลื่อน "ศูนย์กลางแผ่น" ไปที่พื้นที่ของแผนที่กระดาษ (ปุ่ม ★ พิเศษ → ไปที่แผนที่ แล้วกด "กลางจอ")');
-    c.putImageData(out, g.fx, g.fy);
-  }
-
   /* ---------- วาดหน้ากระดาษ ---------- */
   function gridLabel(v, I, first) {
     var km = v / 1000, dec = I < 100 ? 2 : I < 1000 ? 1 : 0;
@@ -233,8 +152,7 @@
       c.fillText(str, x, y);
     }
 
-    if (o.base === 'paper') await drawPaper(c, o, g, onStatus);
-    else if (o.base !== 'none') await drawBase(c, o, g, onStatus);
+    if (o.base !== 'none') await drawBase(c, o, g, onStatus);
 
     // กริด
     var I = o.grid === 'auto' ? autoGrid(o.scale) : parseInt(o.grid, 10);
@@ -382,7 +300,7 @@
       'ช่องกริด 1 ช่อง = ' + (I * mmPerM).toFixed(1) + ' มม. บนกระดาษ · พิมพ์ที่ 100% (ห้ามเลือก "พอดีหน้า/Fit to page") แล้ววัดแถบสเกลตรวจ',
       'มุมล่างซ้าย ' + G.formatPoint(sw.lat, sw.lng, 'mgrs') + ' · มุมบนขวา ' + G.formatPoint(ne.lat, ne.lng, 'mgrs'),
       o.scale === 50000 ? 'ใช้กับแผ่นวัดมุมสี่เหลี่ยม 1:50,000 ได้ (1 กม. = 20 มม.)' : 'แผ่นวัดมุมใช้ได้เมื่อสเกลตรงกัน: พิมพ์แผ่นสเกล 1:' + o.scale.toLocaleString('en-US') + ' ได้จากเมนูเดียวกัน',
-      o.base === 'topo' ? 'พื้นหลัง: © OpenTopoMap (CC-BY-SA) · ข้อมูล © ผู้ร่วมจัดทำ OpenStreetMap' : o.base === 'sat' ? 'พื้นหลัง: Esri World Imagery' : o.base === 'paper' ? 'พื้นหลัง: แผนที่กระดาษที่นำเข้า (ดัดเข้ากริด UTM ตามพิกัดที่ปรับไว้ ความแม่นยำขึ้นกับการปรับ)' : 'กริดเปล่า สำหรับฝึกอ่าน/ลงพิกัด'
+      o.base === 'topo' ? 'พื้นหลัง: © OpenTopoMap (CC-BY-SA) · ข้อมูล © ผู้ร่วมจัดทำ OpenStreetMap' : o.base === 'sat' ? 'พื้นหลัง: Esri World Imagery' : 'กริดเปล่า สำหรับฝึกอ่าน/ลงพิกัด'
     ];
     notes.forEach(function (n, i) { text(n, fx, yb + mm(11 + i * 3.6), 2.2, false, 'left', '#333'); });
 
@@ -466,14 +384,14 @@
       fld('รูปแบบพิกัด', '<select id="pFmt" style="flex:1;min-width:0;font-size:16px;padding:8px;border:1px solid #ccc;border-radius:8px;background:#fff">' +
         G.FORMATS.map(function (f) { return '<option value="' + f + '"' + (f === cfg.cfmt ? ' selected' : '') + '>' + G.FORMAT_NAMES[f] + '</option>'; }).join('') + '</select>') +
       fld('ศูนย์กลางแผ่น', '<input type="text" id="pCenter" style="flex:1;min-width:0;font-size:16px;padding:8px;border:1px solid #ccc;border-radius:8px"><button type="button" class="btn alt" id="pCur" style="flex:none;padding:8px 10px">กลางจอ</button>') +
-      fld('พื้นหลัง', opts('pBase', [['none', 'กริดเปล่า (สำหรับฝึกลงพิกัด)'], ['topo', 'ภูมิประเทศ (เส้นชั้นความสูง)'], ['sat', 'ภาพถ่ายดาวเทียม'], ['paper', 'แผนที่กระดาษ (ที่นำเข้า)']], cfg.base)) +
+      fld('พื้นหลัง', opts('pBase', [['none', 'กริดเปล่า (สำหรับฝึกลงพิกัด)'], ['topo', 'ภูมิประเทศ (เส้นชั้นความสูง)'], ['sat', 'ภาพถ่ายดาวเทียม']], cfg.base)) +
       fld('ความเข้มภาพ', '<input type="range" id="pFade" min="20" max="100" step="5" style="flex:1"><span id="pFadeV" style="flex:0 0 40px;text-align:right"></span>') +
       '<label class="opt"><input type="checkbox" id="pSym"><span>วางสัญลักษณ์ทหารและหมุดที่ปักไว้<small>เฉพาะงานที่ติ๊กแสดงอยู่</small></span></label>' +
       '<label class="opt"><input type="checkbox" id="pRoutes"><span>วาดเส้นทางที่แสดงอยู่</span></label>' +
       fld('ความละเอียด', opts('pDpi', [[100, '100 dpi (เร็ว ไฟล์เล็ก)'], [150, '150 dpi (แนะนำ)'], [200, '200 dpi (คมที่สุด)']], cfg.dpi)) +
       '<div class="btnrow"><button class="btn" id="pBuild">สร้างแผนที่ฝึก</button><button class="btn alt" id="pPlate">แผ่นวัดมุมขนาดจริง</button></div>' +
       '<div id="pStat" class="note"></div><div id="pOut"></div>' +
-      '<p class="note">พื้นหลังภูมิประเทศ/ดาวเทียมต้องออนไลน์ หรือดาวน์โหลดพื้นที่นั้นไว้แล้ว ส่วนแผนที่กระดาษใช้ออฟไลน์ได้ (ต้องนำเข้าและปรับพิกัดไว้ที่ ★ พิเศษ ก่อน และศูนย์กลางแผ่นต้องอยู่ในพื้นที่ของแผนที่กระดาษ) ภาพถูกดัดให้ตรงกับกริด UTM จึงถูกต้องตามสเกล ' +
+      '<p class="note">พื้นหลังภูมิประเทศ/ดาวเทียมต้องออนไลน์ หรือดาวน์โหลดพื้นที่นั้นไว้แล้ว ภาพถูกดัดให้ตรงกับกริด UTM จึงถูกต้องตามสเกล ' +
       'ถ้าพื้นที่ในแผนที่ลับ/หวงห้าม อย่าส่งไฟล์ออกนอกหน่วยงาน · พิมพ์ที่ขนาด 100% เสมอ</p>';
     box.innerHTML = h;
     $('pTitle').value = cfg.title;

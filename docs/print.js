@@ -245,12 +245,118 @@
     function xOf(e) { return g.cx + (e - g.E0) / mpp; }
     function yOf(n) { return g.cy - (n - g.N0) / mpp; }
 
+    // เมื่อเลือกรูปแบบพิกัดเป็นองศา ใช้เส้นละติจูด/ลองจิจูดแทนกริด UTM (ช่วงเส้นเลือกอัตโนมัติตามสเกล ให้เส้นห่างกันอย่างน้อย ~20 มม.)
+    var geo = cf === 'dms' || cf === 'dm' || cf === 'dd';
+    var gs = null;
+    function angLabel(v, isLat, step) {
+      var hemi = isLat ? (v >= 0 ? 'N' : 'S') : (v >= 0 ? 'E' : 'W'), a = Math.abs(v);
+      function p2(n) { return (n < 10 ? '0' : '') + n; }
+      if (cf === 'dd') return a.toFixed(Math.max(0, Math.ceil(-Math.log10(step / 3600) - 1e-9))) + '°' + hemi;
+      if (cf === 'dm') {
+        var dec = step % 60 === 0 ? 0 : Math.max(1, Math.ceil(-Math.log10(step / 60) - 1e-9));
+        var tm = Math.round(a * 60 * Math.pow(10, dec)) / Math.pow(10, dec), dd0 = Math.floor(tm / 60 + 1e-9), mm0 = tm - dd0 * 60;
+        return dd0 + '°' + (mm0 < 10 ? '0' : '') + mm0.toFixed(dec) + '′' + hemi;
+      }
+      var tot = Math.round(a * 3600), d1 = Math.floor(tot / 3600), m1 = Math.floor((tot % 3600) / 60), s1 = tot % 60;
+      if (step % 3600 === 0) return d1 + '°' + hemi;
+      if (step % 60 === 0) return d1 + '°' + p2(m1) + '′' + hemi;
+      return d1 + '°' + p2(m1) + '′' + p2(s1) + '″' + hemi;
+    }
+    function stepName(st) {
+      if (cf === 'dd') return +(st / 3600).toFixed(4) + '°';
+      if (cf === 'dm') return +(st / 60).toFixed(3) + '′';
+      return st >= 3600 ? st / 3600 + '°' : st >= 60 ? st / 60 + '′' : st + '″';
+    }
+    function crossAt(pts, axis, val) { // จุดที่เส้นตัดแกน (axis 0 = x, 1 = y) ที่ค่า val คืนค่าอีกแกนหนึ่ง
+      for (var i = 1; i < pts.length; i++) {
+        var a0 = pts[i - 1][axis] - val, a1 = pts[i][axis] - val;
+        if (a0 * a1 < 0) return pts[i - 1][1 - axis] + (a0 / (a0 - a1)) * (pts[i][1 - axis] - pts[i - 1][1 - axis]);
+      }
+      return null;
+    }
+    if (geo) {
+      var cLL = [G.fromUTM(g.zone, g.north, Emin, Nmin), G.fromUTM(g.zone, g.north, Emax, Nmin), G.fromUTM(g.zone, g.north, Emin, Nmax), G.fromUTM(g.zone, g.north, Emax, Nmax)];
+      var latMin = Math.min.apply(null, cLL.map(function (q) { return q.lat; })), latMax = Math.max.apply(null, cLL.map(function (q) { return q.lat; }));
+      var lngMin = Math.min.apply(null, cLL.map(function (q) { return q.lng; })), lngMax = Math.max.apply(null, cLL.map(function (q) { return q.lng; }));
+      var ladder = cf === 'dms' ? [1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600]
+        : cf === 'dm' ? [6, 12, 30, 60, 120, 300, 600, 900, 1800, 3600] : [3.6, 7.2, 18, 36, 72, 180, 360, 720, 1800, 3600];
+      var stepSec = ladder[ladder.length - 1];
+      for (var li = 0; li < ladder.length; li++) {
+        if (ladder[li] * 30.87 * (1000 / o.scale) * Math.cos(cl.lat * Math.PI / 180) >= 20) { stepSec = ladder[li]; break; }
+      }
+      var sd = stepSec / 3600, spLat = latMax - latMin, spLng = lngMax - lngMin;
+      gs = { step: stepSec, lats: [], lngs: [], labels: [] };
+      var ia, t0;
+      for (ia = Math.ceil(latMin / sd - 1e-9); ia <= Math.floor(latMax / sd + 1e-9); ia++) {
+        var lp = [];
+        for (t0 = 0; t0 <= 16; t0++) lp.push(P2(ia * sd, lngMin - spLng * 0.05 + spLng * 1.1 * t0 / 16));
+        gs.lats.push({ v: ia * sd, pts: lp });
+      }
+      for (ia = Math.ceil(lngMin / sd - 1e-9); ia <= Math.floor(lngMax / sd + 1e-9); ia++) {
+        var gp = [];
+        for (t0 = 0; t0 <= 16; t0++) gp.push(P2(latMin - spLat * 0.05 + spLat * 1.1 * t0 / 16, ia * sd));
+        gs.lngs.push({ v: ia * sd, pts: gp });
+      }
+      gs.lats.forEach(function (la) {
+        var yl = crossAt(la.pts, 0, fx), yr = crossAt(la.pts, 0, fx + fw), lab = angLabel(la.v, true, stepSec);
+        if (yl !== null && yl > fy + mm(3) && yl < fy + fh - mm(3)) gs.labels.push({ side: 'L', pos: yl, str: lab });
+        if (yr !== null && yr > fy + mm(3) && yr < fy + fh - mm(3)) gs.labels.push({ side: 'R', pos: yr, str: lab });
+      });
+      gs.lngs.forEach(function (lo) {
+        var xt = crossAt(lo.pts, 1, fy), xb = crossAt(lo.pts, 1, fy + fh), lab = angLabel(lo.v, false, stepSec);
+        if (xt !== null && xt > fx + mm(7) && xt < fx + fw - mm(7)) gs.labels.push({ side: 'T', pos: xt, str: lab });
+        if (xb !== null && xb > fx + mm(7) && xb < fx + fw - mm(7)) gs.labels.push({ side: 'B', pos: xb, str: lab });
+      });
+    }
+    function drawGeoGrid() {
+      c.beginPath();
+      if (o.style === 'lines') {
+        gs.lats.concat(gs.lngs).forEach(function (ln) {
+          ln.pts.forEach(function (q, i) { if (i) c.lineTo(q[0], q[1]); else c.moveTo(q[0], q[1]); });
+        });
+      } else {
+        var cr2 = mm(2.5);
+        gs.lats.forEach(function (la) {
+          gs.lngs.forEach(function (lo) {
+            var q = P2(la.v, lo.v);
+            c.moveTo(q[0] - cr2, q[1]); c.lineTo(q[0] + cr2, q[1]); c.moveTo(q[0], q[1] - cr2); c.lineTo(q[0], q[1] + cr2);
+          });
+        });
+      }
+      c.stroke();
+      c.lineWidth = Math.max(1, mm(0.25));
+      c.beginPath();
+      var tk2 = mm(2.2);
+      gs.labels.forEach(function (lb) {
+        if (lb.side === 'L') { c.moveTo(fx, lb.pos); c.lineTo(fx + tk2, lb.pos); }
+        else if (lb.side === 'R') { c.moveTo(fx + fw, lb.pos); c.lineTo(fx + fw - tk2, lb.pos); }
+        else if (lb.side === 'T') { c.moveTo(lb.pos, fy); c.lineTo(lb.pos, fy + tk2); }
+        else { c.moveTo(lb.pos, fy + fh); c.lineTo(lb.pos, fy + fh - tk2); }
+      });
+      c.stroke();
+    }
+    function drawGeoLabels() {
+      gs.labels.forEach(function (lb) {
+        if (lb.side === 'T') text(lb.str, lb.pos, fy - mm(1.6), 2.6, false, 'center');
+        else if (lb.side === 'B') text(lb.str, lb.pos, fy + fh + mm(4.2), 2.6, false, 'center');
+        else {
+          c.save();
+          c.translate(lb.side === 'L' ? fx - mm(1.2) : fx + fw + mm(1.2), lb.pos);
+          c.rotate(lb.side === 'L' ? -Math.PI / 2 : Math.PI / 2);
+          text(lb.str, 0, 0, 2.6, false, 'center');
+          c.restore();
+        }
+      });
+    }
+
     c.save();
     c.beginPath(); c.rect(fx, fy, fw, fh); c.clip();
     c.strokeStyle = 'rgba(20,20,20,0.9)';
     c.lineWidth = Math.max(1, mm(o.style === 'lines' ? 0.25 : 0.2));
     var k, kk;
-    if (o.style === 'lines') {
+    if (geo) {
+      drawGeoGrid();
+    } else if (o.style === 'lines') {
       c.beginPath();
       for (k = kE0; k <= kE1; k++) { var x = xOf(k * I); c.moveTo(x, fy); c.lineTo(x, fy + fh); }
       for (kk = kN0; kk <= kN1; kk++) { var y = yOf(kk * I); c.moveTo(fx, y); c.lineTo(fx + fw, y); }
@@ -266,13 +372,15 @@
       }
       c.stroke();
     }
-    // ขีดสั้นที่ขอบกรอบ
+    // ขีดสั้นที่ขอบกรอบ (กริด UTM)
+    if (!geo) {
     c.lineWidth = Math.max(1, mm(0.25));
     c.beginPath();
     var tk = mm(2.2);
     for (k = kE0; k <= kE1; k++) { var xt = xOf(k * I); c.moveTo(xt, fy); c.lineTo(xt, fy + tk); c.moveTo(xt, fy + fh); c.lineTo(xt, fy + fh - tk); }
     for (kk = kN0; kk <= kN1; kk++) { var yt = yOf(kk * I); c.moveTo(fx, yt); c.lineTo(fx + tk, yt); c.moveTo(fx + fw, yt); c.lineTo(fx + fw - tk, yt); }
     c.stroke();
+    }
 
     // เส้นทาง
     if (o.routes && ctx.visibleRoutes) {
@@ -310,13 +418,14 @@
     // กรอบและตัวเลขกริด
     c.strokeStyle = '#000'; c.lineWidth = mm(0.5);
     c.strokeRect(fx, fy, fw, fh);
-    for (k = kE0; k <= kE1; k++) {
+    if (geo) drawGeoLabels();
+    else for (k = kE0; k <= kE1; k++) {
       var first = k === kE0;
       var lt = gridLabel(k * I, I, first), xx = xOf(k * I);
       text(lt, xx, fy - mm(1.6), first ? 3 : 2.6, first, 'center');
       text(lt, xx, fy + fh + mm(4.2), first ? 3 : 2.6, first, 'center');
     }
-    for (kk = kN0; kk <= kN1; kk++) {
+    if (!geo) for (kk = kN0; kk <= kN1; kk++) {
       var firstN = kk === kN0;
       var ln = gridLabel(kk * I, I, firstN), yy = yOf(kk * I);
       text(ln, fx - mm(1), yy + mm(0.9), firstN ? 3 : 2.6, firstN, 'right');
@@ -328,7 +437,7 @@
     var conv = G.convergence(cl.lat, cl.lng), decl = (ctx.prefs && ctx.prefs.decl) || 0;
     text(o.title || 'แผนที่ฝึก', mm(M), mm(M + 5), 6, true, 'left');
     text('1 : ' + o.scale.toLocaleString('en-US'), W - mm(M), mm(M + 5), 6, true, 'right');
-    text('UTM ' + g.zone + G.bandOf(cl.lat) + ' · WGS84 · ศูนย์กลาง ' + G.formatPoint(cl.lat, cl.lng, cf) + ' · กริดทุก ' + fmtLen(I),
+    text('UTM ' + g.zone + G.bandOf(cl.lat) + ' · WGS84 · ศูนย์กลาง ' + G.formatPoint(cl.lat, cl.lng, cf) + ' · ' + (geo ? 'เส้นพิกัดทุก ' + stepName(gs.step) : 'กริดทุก ' + fmtLen(I)),
       mm(M), mm(M + 9), 2.7, false, 'left', '#333');
 
     // ส่วนท้าย: แถบสเกล
@@ -380,7 +489,7 @@
 
     // หมายเหตุ (ย่อให้เหลือเท่าที่จำเป็น)
     var notes = [
-      'ช่องกริด 1 ช่อง = ' + (I * mmPerM).toFixed(1) + ' มม. · พิมพ์ที่ 100% (ห้ามเลือก "พอดีหน้า/Fit to page") แล้ววัดแถบสเกลตรวจ',
+      (geo ? 'เส้นละติจูด/ลองจิจูดเอียงเล็กน้อยเทียบกับกรอบ (กรอบหันตามทิศเหนือกริด) · ' : 'ช่องกริด 1 ช่อง = ' + (I * mmPerM).toFixed(1) + ' มม. · ') + 'พิมพ์ที่ 100% (ห้ามเลือก "พอดีหน้า/Fit to page") แล้ววัดแถบสเกลตรวจ',
       'มุมล่างซ้าย ' + G.formatPoint(sw.lat, sw.lng, cf) + ' · มุมบนขวา ' + G.formatPoint(ne.lat, ne.lng, cf)
     ];
     if (o.base === 'topo') notes.push('พื้นหลัง: © OpenTopoMap (CC-BY-SA) · ข้อมูล © ผู้ร่วมจัดทำ OpenStreetMap');
@@ -476,7 +585,7 @@
       '<div class="btnrow"><button class="btn" id="pBuild">สร้างแผนที่ฝึก</button><button class="btn alt" id="pPlate">แผ่นวัดมุมขนาดจริง</button></div>' +
       '<div id="pStat" class="note"></div><div id="pOut"></div>' +
       '<p class="note">พื้นหลังภูมิประเทศ/ดาวเทียมต้องออนไลน์ หรือดาวน์โหลดพื้นที่นั้นไว้แล้ว ส่วนแผนที่กระดาษใช้ออฟไลน์ได้ (ต้องนำเข้าและปรับพิกัดไว้ที่ ★ พิเศษ ก่อน และศูนย์กลางแผ่นต้องอยู่ในพื้นที่ของแผนที่กระดาษ) ภาพถูกดัดให้ตรงกับกริด UTM จึงถูกต้องตามสเกล ' +
-      'รูปแบบพิกัดใช้กับตำแหน่งศูนย์กลางและมุมแผ่นที่พิมพ์ ส่วนตัวเลขบนเส้นกริดเป็น UTM (กม.) เสมอ ' +
+      'รูปแบบพิกัด: MGRS/UTM ใช้เส้นกริด UTM (ตัวเลขเป็น กม. ปรับช่วงกริดได้) ส่วนองศา ลิปดา ฟิลิปดา / องศา ลิปดาทศนิยม / องศาทศนิยม จะพิมพ์เป็นเส้นละติจูด-ลองจิจูด ช่วงเส้นเลือกให้อัตโนมัติตามสเกล ' +
       'ถ้าพื้นที่ในแผนที่ลับ/หวงห้าม อย่าส่งไฟล์ออกนอกหน่วยงาน · พิมพ์ที่ขนาด 100% เสมอ</p>';
     box.innerHTML = h;
     $('pTitle').value = cfg.title;

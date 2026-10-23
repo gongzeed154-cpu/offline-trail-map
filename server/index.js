@@ -2,6 +2,8 @@
 // เก็บข้อมูลในหน่วยความจำเท่านั้น รีสตาร์ทเซิร์ฟเวอร์แล้วทีมจะหายไป
 import { randomBytes, randomInt } from 'node:crypto';
 import { createServer } from 'node:http';
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 
 export const MAX_MEMBERS = 10;
@@ -236,6 +238,7 @@ export function createTeamServer({ port = 8080, host = '0.0.0.0', log = console.
   });
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+// เทียบเป็นพาธของระบบ (บน Windows import.meta.url เป็น file:///C:/... ไม่ตรงกับ argv[1])
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   createTeamServer({ port: Number(process.env.PORT) || 8080 });
 }

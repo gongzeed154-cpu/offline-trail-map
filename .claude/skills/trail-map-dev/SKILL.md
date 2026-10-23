@@ -25,6 +25,11 @@ Project language: README, manual and UI text are in **Thai**. Keep new user-faci
 2. The app uses native modules, so it can't run in Expo Go; test via `npx expo run:android|ios` or EAS Build (`eas build --platform android --profile preview`).
 3. Keep the download-size guard (~20,000 tiles) and zoom range 10–15 unless deliberately changing them; update README if so.
 
+## Track recording and team (native app)
+- `tracker.ts`: one background location task (`TRACK_TASK`) serves both trip recording (JSONL files in `Paths.document/tracks/`) and team position sharing (`setLocationListener`). Stop it only when neither is active (`stopLocationTaskIfIdle`).
+- `team.ts` + `TeamPanel.tsx`: WebSocket client for `server/` (Node + `ws`, in-memory teams). Limits: 10 members, name ≤16 chars, 10 unique colors. `TEAM_COLORS` in `team.ts` must match `COLORS` in `server/index.js`.
+- Server changes: run `cd server && npm test`. Protocol is documented in `server/README.md`.
+
 ## Workflow
 1. Read the relevant file(s) fully before editing; files are 80–1100 lines.
 2. Make the smallest change that fits the existing style.

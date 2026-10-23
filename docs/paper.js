@@ -115,6 +115,16 @@
     if (urls[rec.id]) { URL.revokeObjectURL(urls[rec.id]); delete urls[rec.id]; }
   }
 
+  // โหมดแผนที่พื้นหลัง: แสดงแผนที่กระดาษที่นำเข้าทุกแผ่น (ไม่ดูสวิตช์เปิด/ปิดรายแผ่น) ปิดโหมดแล้วกลับไปตามสวิตช์เดิม
+  var solo = false;
+  function setSolo(on) {
+    solo = !!on;
+    return getAll().then(function (list) {
+      list.forEach(function (r) { if (solo || r.on) show(r); else hide(r); });
+      if (solo && !list.length) ctx.toast('ยังไม่มีแผนที่กระดาษ นำเข้าได้ที่ปุ่ม ★ พิเศษ');
+    }).catch(function () {});
+  }
+
   function loadAll() {
     return getAll().then(function (list) { list.forEach(function (r) { if (r.on) show(r); }); }).catch(function () {});
   }
@@ -359,6 +369,7 @@
   root.TrailPaper = {
     init: function (c) { ctx = c; },
     loadAll: loadAll,
+    setSolo: setSolo,
     renderSheet: renderSheet,
     parseAngle: parseAngle,
     imageCoords: imageCoords

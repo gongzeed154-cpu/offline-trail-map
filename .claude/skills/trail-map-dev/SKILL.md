@@ -30,6 +30,7 @@ Project language: README, manual and UI text are in **Thai**. Keep new user-faci
 - `team.ts` + `TeamPanel.tsx`: WebSocket client for `server/` (Node + `ws`, in-memory teams). Limits: 10 members, name ≤16 chars, 10 unique colors. `TEAM_COLORS` in `team.ts` must match `COLORS` in `server/index.js`.
 - Server changes: run `cd server && npm test`. Protocol is documented in `server/README.md`.
 
+- PWA contour lines: `docs/contour.js` (TrailContour) uses the vendored `docs/lib/maplibre-contour.min.js` (BSD-3, license file alongside) on the same Terrarium DEM as the hillshade; thresholds per zoom in `THRESHOLDS`. Base `paper` shows all imported paper maps via `TrailPaper.setSolo`.
 - PWA counterparts: `docs/rec.js` (TrailRec: trips in localStorage, GPX via TrailExport.share) and `docs/team.js` (TrailTeam, same server protocol; shares the screen wake lock through `TrailRec.holdWake`). Browser E2E was done with Playwright against a local `server/` and stubbed map tiles.
 
 ## Workflow

@@ -168,9 +168,14 @@
         },
         {
           id: 'waterway', type: 'line', source: 'openmaptiles', 'source-layer': 'waterway',
+          layout: { 'line-cap': 'round', 'line-join': 'round' },
           paint: {
-            'line-color': '#7fa8e8',
-            'line-width': ['interpolate', ['exponential', 1.2], ['zoom'], 10, 0.6, 16, 3]
+            'line-color': ['match', ['get', 'class'], 'river', '#5b8fe0', '#7fa8e8'],
+            // แม่น้ำกว้างและเข้มกว่า ลำธาร/คลอง/ร่องน้ำบางกว่า
+            'line-width': ['interpolate', ['exponential', 1.2], ['zoom'],
+              8, ['match', ['get', 'class'], 'river', 0.8, 0.3],
+              10, ['match', ['get', 'class'], 'river', 1.4, 0.6],
+              16, ['match', ['get', 'class'], 'river', 6, ['stream', 'canal'], 3, 2]]
           }
         },
         {
@@ -193,9 +198,12 @@
           filter: ['in', ['get', 'class'], ['literal', ['path', 'track']]],
           layout: { 'line-cap': 'round' },
           paint: {
-            'line-color': '#c4501b',
-            'line-width': ['interpolate', ['linear'], ['zoom'], 12, 0.8, 18, 3],
-            'line-dasharray': [2, 1.5]
+            // ทางเดินเท้า (path) สีส้มเส้นประสั้น · ทางเกวียน/ทางลูกรัง (track) สีน้ำตาลเส้นประยาว หนากว่า
+            'line-color': ['match', ['get', 'class'], 'track', '#8a5a2b', '#c4501b'],
+            'line-width': ['interpolate', ['linear'], ['zoom'],
+              12, ['match', ['get', 'class'], 'track', 1.2, 0.9],
+              18, ['match', ['get', 'class'], 'track', 4, 3]],
+            'line-dasharray': ['match', ['get', 'class'], 'track', ['literal', [5, 2]], ['literal', [2, 1.5]]]
           }
         },
         {
@@ -265,11 +273,40 @@
           paint: { 'text-color': '#3a62b3', 'text-halo-color': '#ffffff', 'text-halo-width': 1 }
         },
         {
+          id: 'waterway_name', type: 'symbol', source: 'openmaptiles', 'source-layer': 'waterway',
+          minzoom: 11,
+          filter: ['has', 'name'],
+          layout: {
+            'symbol-placement': 'line',
+            'text-field': ['coalesce', ['get', 'name:th'], ['get', 'name']],
+            'text-font': FONT,
+            'text-size': ['interpolate', ['linear'], ['zoom'], 11, 10, 16, 13],
+            'symbol-spacing': 250
+          },
+          paint: { 'text-color': '#2f5fb8', 'text-halo-color': '#ffffff', 'text-halo-width': 1.3 }
+        },
+        {
+          // จุดหมู่บ้าน/บ้านเดี่ยว: ใต้ชื่อ เพื่อให้เห็นตำแหน่งชัด
+          id: 'place_dot', type: 'circle', source: 'openmaptiles', 'source-layer': 'place',
+          minzoom: 11,
+          filter: ['in', ['get', 'class'], ['literal', ['village', 'hamlet', 'isolated_dwelling']]],
+          paint: {
+            'circle-radius': ['interpolate', ['linear'], ['zoom'], 11, 2.5, 16, 5],
+            'circle-color': '#8a3b12',
+            'circle-stroke-color': '#ffffff',
+            'circle-stroke-width': 1.5
+          }
+        },
+        {
           id: 'place', type: 'symbol', source: 'openmaptiles', 'source-layer': 'place',
           layout: {
             'text-field': ['coalesce', ['get', 'name:th'], ['get', 'name']],
             'text-font': FONT,
-            'text-size': ['interpolate', ['linear'], ['zoom'], 4, 11, 14, 16]
+            'text-size': ['interpolate', ['linear'], ['zoom'], 4, 11, 14, 16],
+            // เมืองใหญ่วางก่อน หมู่บ้านเล็กทีหลัง และชื่อหมู่บ้านอยู่ใต้จุด
+            'symbol-sort-key': ['match', ['get', 'class'], 'city', 0, 'town', 1, 'village', 2, 'suburb', 3, 4],
+            'text-offset': ['match', ['get', 'class'], ['village', 'hamlet', 'isolated_dwelling'], ['literal', [0, 0.9]], ['literal', [0, 0]]],
+            'text-anchor': 'center'
           },
           paint: { 'text-color': '#000000', 'text-halo-color': '#ffffff', 'text-halo-width': 1.2 }
         }

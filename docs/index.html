@@ -58,9 +58,9 @@
   #cross::before { left: 12px; top: 0; width: 2px; height: 26px; }
   #cross::after { top: 12px; left: 0; height: 2px; width: 26px; }
 
-  #tools { max-height: calc(100vh - 227px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); max-height: calc(100dvh - 227px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); overflow-y: auto; scrollbar-width: none; position: fixed; top: calc(env(safe-area-inset-top) + 10px); right: 10px; display: flex; flex-direction: column; gap: 8px; z-index: 5; }
-  .tool { width: 46px; height: 46px; border-radius: 23px; border: 0; background: #fff; box-shadow: 0 2px 6px rgba(0,0,0,.25); font-size: 11px; line-height: 1.1; color: var(--fg); padding: 0; }
-  .tool b { display: block; font-size: 18px; font-weight: 600; }
+  #tools { max-height: calc(100vh - 273px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); max-height: calc(100dvh - 273px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); overflow-y: auto; scrollbar-width: none; position: fixed; top: calc(env(safe-area-inset-top) + 10px); right: 10px; display: flex; flex-direction: column; gap: 4px; z-index: 5; }
+  .tool { flex: none; width: 40px; height: 40px; border-radius: 20px; border: 0; background: #fff; box-shadow: 0 2px 6px rgba(0,0,0,.25); font-size: 9.5px; line-height: 1.05; white-space: nowrap; overflow: hidden; color: var(--fg); padding: 0; }
+  .tool b { display: block; font-size: 16px; font-weight: 600; }
   .tool.on { background: var(--green); color: #fff; }
 
   #sheet { position: fixed; left: 0; right: 0; bottom: 0; max-height: 62vh; overflow: auto; background: #fff; z-index: 12; border-radius: 16px 16px 0 0; box-shadow: 0 -2px 12px rgba(0,0,0,.3); padding: 0 16px calc(env(safe-area-inset-bottom) + 16px); -webkit-overflow-scrolling: touch; }

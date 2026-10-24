@@ -209,6 +209,62 @@
     return n && n.textContent ? n.textContent.trim() : '';
   }
 
+  /* ---------- อ่านไฟล์ (รองรับ KMZ ของ Google Earth) ---------- */
+  // KMZ คือไฟล์ ZIP ที่มี doc.kml อยู่ข้างใน อ่านตารางไฟล์ท้าย ZIP แล้วแตกเฉพาะไฟล์ .kml (ไม่ต้องใช้ไลบรารีเสริม)
+  function unzipKml(buf) {
+    var u8 = new Uint8Array(buf), dv = new DataView(buf), i, eocd = -1;
+    for (i = u8.length - 22; i >= Math.max(0, u8.length - 65557); i--) {
+      if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+    }
+    if (eocd < 0) throw new Error('ไฟล์ KMZ ไม่ถูกต้อง');
+    var n = dv.getUint16(eocd + 10, true), off = dv.getUint32(eocd + 16, true), list = [];
+    for (i = 0; i < n; i++) {
+      if (dv.getUint32(off, true) !== 0x02014b50) break;
+      var nl = dv.getUint16(off + 28, true), el = dv.getUint16(off + 30, true), cl = dv.getUint16(off + 32, true);
+      list.push({
+        method: dv.getUint16(off + 10, true), csize: dv.getUint32(off + 20, true), lho: dv.getUint32(off + 42, true),
+        name: new TextDecoder('utf-8').decode(u8.subarray(off + 46, off + 46 + nl))
+      });
+      off += 46 + nl + el + cl;
+    }
+    var pick = list.filter(function (e) { return /(^|\/)doc\.kml$/i.test(e.name); })[0] || list.filter(function (e) { return /\.kml$/i.test(e.name); })[0];
+    if (!pick) throw new Error('ไม่พบไฟล์ .kml ใน KMZ นี้');
+    var start = pick.lho + 30 + dv.getUint16(pick.lho + 26, true) + dv.getUint16(pick.lho + 28, true);
+    var data = u8.subarray(start, start + pick.csize);
+    if (pick.method === 0) return Promise.resolve(new TextDecoder('utf-8').decode(data));
+    if (pick.method !== 8 || typeof DecompressionStream !== 'function') {
+      return Promise.reject(new Error('เครื่องนี้แตกไฟล์ KMZ ไม่ได้ ให้บันทึกเป็น .kml จาก Google Earth แล้วนำเข้าแทน'));
+    }
+    return new Response(new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer().then(function (ab) {
+      return new TextDecoder('utf-8').decode(ab);
+    });
+  }
+
+  // อ่านไฟล์ที่ผู้ใช้เลือก คืนข้อความ XML/JSON (แตก KMZ ให้อัตโนมัติ)
+  function readFile(file) {
+    return file.arrayBuffer().then(function (buf) {
+      var b = new Uint8Array(buf, 0, 2);
+      if (/\.kmz$/i.test(file.name) || (b[0] === 0x50 && b[1] === 0x4b)) return unzipKml(buf);
+      return new TextDecoder('utf-8').decode(buf);
+    });
+  }
+
+  // คืนรายการหมุดจาก KML (Placemark ที่เป็นจุด) [{ name, lat, lng }]
+  function parsePoints(text) {
+    var out = [];
+    if (text.trim().charAt(0) === '{' || !/<kml|<Placemark/i.test(text)) return out;
+    var doc = new DOMParser().parseFromString(text, 'application/xml');
+    if (doc.getElementsByTagName('parsererror').length) return out;
+    Array.prototype.forEach.call(doc.getElementsByTagName('Placemark'), function (pm) {
+      if (pm.getElementsByTagName('LineString').length || pm.getElementsByTagName('Polygon').length || pm.getElementsByTagName('gx:Track').length) return;
+      Array.prototype.forEach.call(pm.getElementsByTagName('Point'), function (pt) {
+        var c = parseCoordsKML(textOf(pt, 'coordinates'))[0];
+        if (c) out.push({ name: textOf(pm, 'name') || 'หมุด', lat: c[1], lng: c[0] });
+      });
+    });
+    return out;
+  }
+
   // คืนรายการ [{ name, pts:[[lng,lat],...] }]
   function parseFile(text, filename) {
     var out = [];
@@ -240,13 +296,28 @@
       });
     } else {
       Array.prototype.forEach.call(doc.getElementsByTagName('Placemark'), function (pm, i) {
+        var nm = textOf(pm, 'name') || base + ' ' + (i + 1);
         Array.prototype.forEach.call(pm.getElementsByTagName('LineString'), function (ls) {
-          out.push({ name: textOf(pm, 'name') || base + ' ' + (i + 1), pts: parseCoordsKML(textOf(ls, 'coordinates')) });
+          out.push({ name: nm, pts: parseCoordsKML(textOf(ls, 'coordinates')) });
+        });
+        // รูปหลายเหลี่ยม (ขอบเขต) นำเข้าเป็นเส้นปิด
+        Array.prototype.forEach.call(pm.getElementsByTagName('Polygon'), function (pg) {
+          var ob = pg.getElementsByTagName('outerBoundaryIs')[0] || pg;
+          out.push({ name: nm, pts: parseCoordsKML(textOf(ob, 'coordinates')) });
+        });
+        // แทร็กจาก GPS (gx:Track): <gx:coord>ลองจิจูด ละติจูด ความสูง</gx:coord>
+        Array.prototype.forEach.call(pm.getElementsByTagName('gx:Track'), function (tr) {
+          var pts = [];
+          Array.prototype.forEach.call(tr.getElementsByTagName('gx:coord'), function (c) {
+            var q = c.textContent.trim().split(/\s+/);
+            pts.push([parseFloat(q[0]), parseFloat(q[1])]);
+          });
+          out.push({ name: nm, pts: pts });
         });
       });
     }
     return out.filter(function (x) { return x.pts.length >= 2 && x.pts.every(function (p) { return isFinite(p[0]) && isFinite(p[1]); }); });
   }
 
-  root.TrailExport = { FORMATS: FORMATS, build: build, download: download, share: share, parseFile: parseFile, fmtDist: fmtDist, fmtDur: fmtDur };
+  root.TrailExport = { FORMATS: FORMATS, build: build, download: download, share: share, parseFile: parseFile, parsePoints: parsePoints, readFile: readFile, fmtDist: fmtDist, fmtDur: fmtDur };
 })(typeof self !== 'undefined' ? self : this);

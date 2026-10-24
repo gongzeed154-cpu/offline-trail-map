@@ -10,6 +10,10 @@
   var MAX_TILES = 9000; // จำกัดขนาดพื้นที่ต่อครั้ง
   var CONCURRENCY = 8;
   var MAX_ZOOM = 20;
+  var START_ZOOM = 13; // ซูมตอนเปิดแอพที่ตำแหน่ง GPS ล่าสุด
+  var LASTFIX_KEY = 'trail_lastfix_v1';
+  var lastFixSaved = null;
+  var firstFixDone = false;
 
   var BASE_NAMES = { trail: 'เดินป่า', sat: 'ดาวเทียม', topo: 'ภูมิประเทศ', paper: 'แผนที่กระดาษ' };
   var NON_TRAIL = { background: 1, sat: 1, topo: 1, traffic: 1 };
@@ -37,6 +41,27 @@
   };
 
   function $(id) { return document.getElementById(id); }
+
+  // ตำแหน่ง GPS ล่าสุด (เก็บเมื่อขยับเกิน 30 ม. หรือผ่านไป 1 นาที)
+  function loadLastFix() {
+    try {
+      var f = JSON.parse(localStorage.getItem(LASTFIX_KEY) || 'null');
+      if (f && isFinite(f.lat) && isFinite(f.lng) && Math.abs(f.lat) <= 90 && Math.abs(f.lng) <= 180) return f;
+    } catch (e) { /* ไม่มี */ }
+    return null;
+  }
+  function saveLastFix(lat, lng) {
+    if (!isFinite(lat) || !isFinite(lng)) return;
+    var now = Date.now();
+    if (lastFixSaved && now - lastFixSaved.t < 60000 && G.haversine(lastFixSaved, { lat: lat, lng: lng }) < 30) return;
+    lastFixSaved = { lat: lat, lng: lng, t: now };
+    try { localStorage.setItem(LASTFIX_KEY, JSON.stringify(lastFixSaved)); } catch (e) { /* ไม่เป็นไร */ }
+  }
+
+  function thaiDate(iso) {
+    var m = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'], p = iso.split('-');
+    return parseInt(p[2], 10) + ' ' + m[parseInt(p[1], 10) - 1] + ' ' + (parseInt(p[0], 10) + 543);
+  }
 
   function loadPrefs() {
     try {
@@ -88,11 +113,13 @@
     var style = C.buildStyle(tpl);
     trailLayerIds = style.layers.map(function (l) { return l.id; }).filter(function (id) { return !NON_TRAIL[id]; });
 
+    // เปิดแอพ: ไปที่พิกัด GPS ล่าสุดที่เคยได้ ซูม 13 (ถ้ายังไม่เคยมี เริ่มที่ประเทศไทย)
+    var lastFix = loadLastFix();
     map = new maplibregl.Map({
       container: 'map',
       style: style,
-      center: [100.9925, 15.87],
-      zoom: 5,
+      center: lastFix ? [lastFix.lng, lastFix.lat] : [100.9925, 15.87],
+      zoom: lastFix ? START_ZOOM : 5,
       minZoom: 3,
       maxZoom: MAX_ZOOM,
       attributionControl: { compact: true }
@@ -102,7 +129,8 @@
       positionOptions: { enableHighAccuracy: true, timeout: 20000 },
       trackUserLocation: true,
       showUserLocation: true,
-      showAccuracyCircle: true
+      showAccuracyCircle: true,
+      fitBoundsOptions: { maxZoom: START_ZOOM } // ครั้งแรกที่ได้ตำแหน่งจริงให้ซูมไม่เกิน 13 แล้วคืนค่าปกติ
     });
     map.addControl(geolocate, 'bottom-right');
     map.addControl(new maplibregl.NavigationControl({ showZoom: false, showCompass: true, visualizePitch: false }), 'bottom-right');
@@ -111,6 +139,13 @@
 
     geolocate.on('geolocate', function (e) {
       var c = e.coords || {};
+      geolocate.options.fitBoundsOptions = { maxZoom: 15 };
+      saveLastFix(c.latitude, c.longitude);
+      // ได้ตำแหน่งจริงครั้งแรกหลังเปิดแอพ: ไปที่ตำแหน่งนั้นที่ซูม 13 พอดี (ไม่ปล่อยให้ซูมตามความแม่นยำของ GPS)
+      if (!firstFixDone && isFinite(c.latitude) && isFinite(c.longitude)) {
+        firstFixDone = true;
+        map.easeTo({ center: [c.longitude, c.latitude], zoom: START_ZOOM, duration: 500 });
+      }
       TrailSensors.setFix({
         lat: c.latitude, lng: c.longitude, alt: c.altitude, altAcc: c.altitudeAccuracy, acc: c.accuracy,
         speed: c.speed, heading: c.heading, t: e.timestamp || Date.now()
@@ -1073,6 +1108,7 @@
 
   async function main() {
     loadPrefs();
+    if ($('sbVer')) $('sbVer').textContent = 'เวอร์ชัน ' + C.APP_VERSION + ' · อัปเดต ' + thaiDate(C.APP_DATE);
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('./sw.js').catch(function () {});
       var reloaded = false;

@@ -16,7 +16,7 @@ Project language: README, manual and UI text are in **Thai**. Keep new user-faci
 ## Rules for PWA changes (docs/)
 1. Plain ES5-style JS (`var`, `function`) matching surrounding code; no bundler or npm dependencies.
 2. Adding a new JS/CSS/asset file: add it to `SHELL_FILES` in `docs/sw.js` **and** reference it in `index.html`.
-3. Any change to a cached file: bump `SHELL_CACHE` (currently `shell-vNN`) in `docs/sw.js`, otherwise users keep the stale offline copy.
+3. Any change to a cached file: bump `APP_VERSION` (and `APP_DATE`) in `docs/common.js`. The service worker cache name is `'shell-' + APP_VERSION` and the version/date line at the bottom of the app comes from the same constants, so users otherwise keep the stale offline copy.
 4. Everything must work offline: no runtime CDN requests; vendor libs go in `docs/lib/`.
 5. Never bulk-download tiles from tile.openstreetmap.org (policy violation); tile sources are OpenFreeMap and AWS Terrain Tiles.
 

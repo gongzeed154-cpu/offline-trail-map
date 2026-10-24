@@ -4,7 +4,7 @@
   var C = TrailCommon;
   var KEY = 'trail_print_v1';
   var PAPERS = { A5: [148, 210], A4: [210, 297], A3: [297, 420], Letter: [216, 279] };
-  var SCALES = [10000, 25000, 50000, 100000, 250000];
+  var SCALES = [10000, 12500, 25000, 50000, 100000, 250000];
   var FONT = '"Sarabun","Noto Sans Thai",-apple-system,sans-serif';
   var BARS = [[100, 25], [200, 50], [500, 100], [1000, 250], [2000, 500], [2500, 500], [4000, 1000], [5000, 1000], [8000, 2000], [10000, 2000], [20000, 5000], [25000, 5000], [40000, 10000], [50000, 10000]];
 
@@ -19,7 +19,7 @@
     try { var s = JSON.parse(localStorage.getItem(KEY) || '{}'); for (var k in cfg) if (s[k] !== undefined) cfg[k] = s[k]; } catch (e) { /* ค่าเริ่มต้น */ }
   }
   function saveCfg() { try { localStorage.setItem(KEY, JSON.stringify(cfg)); } catch (e) { /* ไม่เป็นไร */ } }
-  function autoGrid(scale) { return scale <= 10000 ? 100 : scale <= 100000 ? 1000 : 10000; }
+  function autoGrid(scale) { return scale <= 10000 ? 100 : scale <= 12500 ? 250 : scale <= 100000 ? 1000 : 10000; }
   function safeName(s) { return String(s).replace(/[\\/:*?"<>|]/g, '_').trim() || 'map'; }
   function fmtLen(m) { return m >= 1000 ? (m / 1000) + ' กม.' : m + ' ม.'; }
 
@@ -194,7 +194,7 @@
 
   /* ---------- วาดหน้ากระดาษ ---------- */
   function gridLabel(v, I, first) {
-    var km = v / 1000, dec = I < 100 ? 2 : I < 1000 ? 1 : 0;
+    var km = v / 1000, dec = I < 100 ? 2 : I < 1000 ? (I % 100 === 0 ? 1 : 2) : 0;
     var s = Math.abs(km).toFixed(dec);
     if (first) return s;
     var parts = s.split('.'), ip = parseInt(parts[0], 10) % 100;
@@ -572,7 +572,7 @@
       fld('กระดาษ', opts('pPaper', Object.keys(PAPERS).map(function (k) { return [k, k + ' (' + PAPERS[k][0] + '×' + PAPERS[k][1] + ' มม.)']; }), cfg.paper)) +
       fld('แนววาง', opts('pLand', [['0', 'แนวตั้ง'], ['1', 'แนวนอน']], cfg.land ? '1' : '0')) +
       fld('มาตราส่วน', opts('pScale', SCALES.map(function (s) { return [s, '1 : ' + s.toLocaleString('en-US')]; }), cfg.scale)) +
-      fld('ช่วงกริด', opts('pGrid', [['auto', 'อัตโนมัติตามสเกล'], [100, '100 ม.'], [500, '500 ม.'], [1000, '1 กม.'], [2000, '2 กม.'], [5000, '5 กม.'], [10000, '10 กม.']], cfg.grid)) +
+      fld('ช่วงกริด', opts('pGrid', [['auto', 'อัตโนมัติตามสเกล'], [100, '100 ม.'], [250, '250 ม.'], [500, '500 ม.'], [1000, '1 กม.'], [2000, '2 กม.'], [5000, '5 กม.'], [10000, '10 กม.']], cfg.grid)) +
       fld('แบบเส้นกริด', opts('pStyle', [['lines', 'เส้นเต็ม'], ['cross', 'กากบาทที่จุดตัด']], cfg.style)) +
       fld('รูปแบบพิกัด', '<select id="pFmt" style="flex:1;min-width:0;font-size:16px;padding:8px;border:1px solid #ccc;border-radius:8px;background:#fff">' +
         G.FORMATS.map(function (f) { return '<option value="' + f + '"' + (f === cfg.cfmt ? ' selected' : '') + '>' + G.FORMAT_NAMES[f] + '</option>'; }).join('') + '</select>') +

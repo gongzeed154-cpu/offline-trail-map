@@ -589,8 +589,8 @@
       });
       h += '<div class="btnrow"><button class="btn" id="xbuild">สร้างไฟล์</button></div><div id="xres" class="note"></div>';
     }
-    h += '<h4>นำเข้าเส้นทาง</h4><div class="btnrow"><button class="btn alt" id="ximp">นำเข้าไฟล์ GPX / KML / GeoJSON</button></div>' +
-      '<input type="file" id="ximpf" accept=".gpx,.kml,.geojson,.json,application/gpx+xml,application/vnd.google-earth.kml+xml,application/json" multiple hidden>' +
+    h += '<h4>นำเข้าเส้นทาง</h4><div class="btnrow"><button class="btn alt" id="ximp">นำเข้าไฟล์ GPX / KML / KMZ / GeoJSON</button></div>' +
+      '<input type="file" id="ximpf" accept=".gpx,.kml,.kmz,.geojson,.json,application/gpx+xml,application/vnd.google-earth.kml+xml,application/vnd.google-earth.kmz,application/zip,application/json" multiple hidden>' +
       '<div id="ximsg" class="note"></div>';
     h += '<h4>ตั้งค่า</h4>' +
       '<div class="field"><label>ความเร็วเดินตามแผน (กม./ชม.)</label><input type="number" id="npace" step="0.5" value="' + np.pace + '"></div>' +
@@ -662,13 +662,17 @@
       var files = Array.prototype.slice.call(this.files || []);
       var inp = this;
       var msg = $('ximsg');
-      var added = 0, errs = [];
+      var added = 0, pinsAdded = 0, errs = [];
       Promise.all(files.map(function (f) {
-        return f.text().then(function (t) { added += addRoutes(TrailExport.parseFile(t, f.name)); }).catch(function (e) { errs.push(f.name + ': ' + (e && e.message ? e.message : 'อ่านไม่ได้')); });
+        return TrailExport.readFile(f).then(function (t) {
+          added += addRoutes(TrailExport.parseFile(t, f.name));
+          // จุดสถานที่ (Placemark) จาก KML/KMZ นำเข้าเป็นหมุด (สูงสุด 300 จุดต่อไฟล์)
+          TrailExport.parsePoints(t).slice(0, 300).forEach(function (pt) { TrailProj.addPin(pt.name, pt.lat, pt.lng); pinsAdded++; });
+        }).catch(function (e) { errs.push(f.name + ': ' + (e && e.message ? e.message : 'อ่านไม่ได้')); });
       })).then(function () {
         inp.value = '';
         renderSheet(body);
-        $('ximsg').textContent = 'นำเข้า ' + added + ' เส้นทาง' + (errs.length ? ' · ผิดพลาด ' + errs.join('; ') : '');
+        $('ximsg').textContent = 'นำเข้า ' + added + ' เส้นทาง' + (pinsAdded ? ' · ' + pinsAdded + ' หมุด' : '') + (!added && !pinsAdded && !errs.length ? ' (ไม่พบเส้นทางหรือจุดในไฟล์นี้)' : '') + (errs.length ? ' · ผิดพลาด ' + errs.join('; ') : '');
       });
     };
     $('npace').onchange = function () { var v = parseFloat(this.value); np.pace = v > 0 ? v : 4; savePrefs(); };

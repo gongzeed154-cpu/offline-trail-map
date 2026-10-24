@@ -140,14 +140,24 @@
       st.list.push(p); st.active = p.id; openProj[p.id] = true;
       notify(); draw();
     }, true));
-    var imp = btn('นำเข้าไฟล์งาน', function () { fi.click(); });
+    var imp = btn('นำเข้าไฟล์ (งาน / KML / KMZ / GPX)', function () { fi.click(); });
     top.appendChild(imp);
     var fi = document.createElement('input');
-    fi.type = 'file'; fi.accept = '.json,.trailproj,application/json'; fi.hidden = true;
+    fi.type = 'file'; fi.accept = '.json,.trailproj,.kml,.kmz,.gpx,.geojson,application/json,application/gpx+xml,application/vnd.google-earth.kml+xml,application/vnd.google-earth.kmz,application/zip'; fi.hidden = true;
     fi.onchange = function () {
       var f = fi.files && fi.files[0];
       if (!f) return;
-      f.text().then(function (t) { var nm = importData(JSON.parse(t)); ctx.toast('นำเข้าแล้ว: ' + nm); draw(); }).catch(function (e) { ctx.toast('นำเข้าไม่ได้: ' + (e && e.message ? e.message : 'ไฟล์ไม่ถูกต้อง')); });
+      TrailExport.readFile(f).then(function (t) {
+        var j = null;
+        if (t.trim().charAt(0) === '{') { try { j = JSON.parse(t); } catch (e) { j = null; } }
+        if (j && j.format === 'trail-project') { var nm = importData(j); ctx.toast('นำเข้าแล้ว: ' + nm); draw(); return; }
+        // ไฟล์เส้นทาง/จุดจากแอพอื่น (KML, KMZ, GPX, GeoJSON เช่นจาก Google Earth Pro) นำเข้าเข้างานปัจจุบัน
+        var nr = TrailNav.importRoutes(TrailExport.parseFile(t, f.name)), np2 = 0;
+        TrailExport.parsePoints(t).slice(0, 300).forEach(function (pt) { addPin(pt.name, pt.lat, pt.lng); np2++; });
+        if (!nr && !np2) throw new Error('ไม่พบเส้นทางหรือจุดในไฟล์นี้');
+        ctx.toast('นำเข้า ' + nr + ' เส้นทาง' + (np2 ? ' · ' + np2 + ' หมุด' : '') + ' เข้างาน "' + nameOf(active()) + '"');
+        draw();
+      }).catch(function (e) { ctx.toast('นำเข้าไม่ได้: ' + (e && e.message ? e.message : 'ไฟล์ไม่ถูกต้อง')); });
       fi.value = '';
     };
     top.appendChild(fi);

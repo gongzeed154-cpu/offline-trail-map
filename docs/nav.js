@@ -690,6 +690,7 @@
     commit: function () { saveRoutes(); drawRoutes(); },
     removeRoute: function (id) { routes = routes.filter(function (x) { return x.id !== id; }); saveRoutes(); drawRoutes(); },
     zoomRoute: function (r) { ctx.closeSheet(); ctx.map().fitBounds(boundsOf(routePts(r)), { padding: 60, duration: 700 }); },
+    importRoutes: addRoutes,
     addRaw: function (list) { list.forEach(function (r) { routes.push(r); }); saveRoutes(); drawRoutes(); },
     visibleRoutes: function () { return routes.filter(function (r) { return TrailProj.isVisible(r); }).map(function (r) { return { name: r.name, pts: routePts(r) }; }); }
   };

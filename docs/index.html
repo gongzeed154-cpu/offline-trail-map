@@ -24,7 +24,7 @@
   }
   #top { position: fixed; top: calc(env(safe-area-inset-top) + 10px); left: 10px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; z-index: 5; }
   #offline { background: #b3261e; color: #fff; }
-  #bottom { display: flex; gap: 8px; align-items: center; position: fixed; left: 10px; bottom: calc(env(safe-area-inset-bottom) + 64px); z-index: 5; }
+  #bottom { display: flex; gap: 8px; align-items: center; position: fixed; left: 10px; bottom: calc(env(safe-area-inset-bottom) + 76px); z-index: 5; }
   #download {
     height: 36px; padding: 0 14px; border: 0; border-radius: 18px; background: var(--green); color: #fff;
     font-size: 13px; font-weight: 600; box-shadow: 0 2px 6px rgba(0,0,0,.3);
@@ -44,12 +44,12 @@
   .del { border: 0; background: none; color: #b3261e; font-size: 15px; padding: 16px; }
   .empty { padding: 24px; text-align: center; color: #666; line-height: 1.6; }
   #usage { padding: 12px 16px calc(env(safe-area-inset-bottom) + 12px); font-size: 13px; color: #666; border-top: 1px solid #eee; }
-  #toast { position: fixed; left: 16px; right: 16px; bottom: calc(env(safe-area-inset-bottom) + 72px); background: #222; color: #fff; padding: 12px 14px; border-radius: 12px; z-index: 30; font-size: 14px; }
+  #toast { position: fixed; left: 16px; right: 16px; bottom: calc(env(safe-area-inset-bottom) + 84px); background: #222; color: #fff; padding: 12px 14px; border-radius: 12px; z-index: 30; font-size: 14px; }
   #hint { position: fixed; left: 12px; right: 12px; top: calc(env(safe-area-inset-top) + 56px); background: #fff8d6; border: 1px solid #e6d98a; border-radius: 12px; padding: 12px 14px; z-index: 15; font-size: 14px; line-height: 1.5; }
   #hint button { float: right; border: 0; background: none; font-size: 18px; margin-left: 8px; }
   #fatal { position: fixed; inset: 0; background: #fff; z-index: 40; padding: 32px 24px; line-height: 1.7; }
-  .maplibregl-ctrl-bottom-right { bottom: calc(env(safe-area-inset-bottom) + 62px); }
-  .maplibregl-ctrl-bottom-left { bottom: calc(env(safe-area-inset-bottom) + 62px); left: 118px; }
+  .maplibregl-ctrl-bottom-right { bottom: calc(env(safe-area-inset-bottom) + 74px); }
+  .maplibregl-ctrl-bottom-left { bottom: calc(env(safe-area-inset-bottom) + 74px); left: 118px; }
 
   #coord { font-size: 13px; padding: 7px 12px; max-width: calc(100vw - 80px); font-variant-numeric: tabular-nums; border: 0; text-align: left; }
   #coord small { display: block; color: #666; font-size: 11px; }
@@ -58,7 +58,7 @@
   #cross::before { left: 12px; top: 0; width: 2px; height: 26px; }
   #cross::after { top: 12px; left: 0; height: 2px; width: 26px; }
 
-  #tools { max-height: calc(100vh - 215px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); max-height: calc(100dvh - 215px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); overflow-y: auto; scrollbar-width: none; position: fixed; top: calc(env(safe-area-inset-top) + 10px); right: 10px; display: flex; flex-direction: column; gap: 8px; z-index: 5; }
+  #tools { max-height: calc(100vh - 227px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); max-height: calc(100dvh - 227px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); overflow-y: auto; scrollbar-width: none; position: fixed; top: calc(env(safe-area-inset-top) + 10px); right: 10px; display: flex; flex-direction: column; gap: 8px; z-index: 5; }
   .tool { width: 46px; height: 46px; border-radius: 23px; border: 0; background: #fff; box-shadow: 0 2px 6px rgba(0,0,0,.25); font-size: 11px; line-height: 1.1; color: var(--fg); padding: 0; }
   .tool b { display: block; font-size: 18px; font-weight: 600; }
   .tool.on { background: var(--green); color: #fff; }
@@ -80,7 +80,7 @@
   .btn { flex: 1; border: 0; border-radius: 10px; padding: 12px; font-size: 15px; background: var(--green); color: #fff; }
   .btn.alt { background: #e8efe9; color: var(--green); }
 
-  #azcard { position: fixed; left: 10px; right: 10px; bottom: calc(env(safe-area-inset-bottom) + 68px); background: rgba(255,255,255,.96); border-radius: 14px; box-shadow: 0 2px 8px rgba(0,0,0,.3); padding: 10px 14px; z-index: 6; font-size: 14px; line-height: 1.55; }
+  #azcard { position: fixed; left: 10px; right: 10px; bottom: calc(env(safe-area-inset-bottom) + 80px); background: rgba(255,255,255,.96); border-radius: 14px; box-shadow: 0 2px 8px rgba(0,0,0,.3); padding: 10px 14px; z-index: 6; font-size: 14px; line-height: 1.55; }
   #azcard .big { font-size: 20px; font-weight: 700; color: #c4501b; }
   #azcard .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
   #azcard .lbl { color: #666; font-size: 12px; }
@@ -88,7 +88,7 @@
   .pmark.a { background: #1a6ad6; }
   .pmark.b { background: #c4501b; }
   .prot { position: absolute; left: 50%; top: 50%; pointer-events: none; overflow: visible; }
-  #routecard, #navcard { position: fixed; left: 10px; right: 10px; bottom: calc(env(safe-area-inset-bottom) + 68px); background: rgba(255,255,255,.97); border-radius: 14px; box-shadow: 0 2px 8px rgba(0,0,0,.3); padding: 10px 14px; z-index: 7; font-size: 14px; line-height: 1.5; max-height: 55vh; overflow: auto; }
+  #routecard, #navcard { position: fixed; left: 10px; right: 10px; bottom: calc(env(safe-area-inset-bottom) + 80px); background: rgba(255,255,255,.97); border-radius: 14px; box-shadow: 0 2px 8px rgba(0,0,0,.3); padding: 10px 14px; z-index: 7; font-size: 14px; line-height: 1.5; max-height: 55vh; overflow: auto; }
   #navcard .big { font-size: 17px; font-weight: 700; color: #1f7a3a; }
   #navcard.bad { border: 3px solid #d6261c; }
   #navcard.bad .big { color: #d6261c; }
@@ -103,6 +103,9 @@
   #statusbar { position: fixed; left: 0; right: 0; bottom: 0; background: rgba(255,255,255,.96); padding: 6px 12px calc(env(safe-area-inset-bottom) + 6px); font-size: 12px; line-height: 1.4; z-index: 6; box-shadow: 0 -1px 6px rgba(0,0,0,.2); font-variant-numeric: tabular-nums; }
   #statusbar .sb1 { color: #333; }
   #statusbar .sb2 { font-weight: 600; }
+  #statusbar .sb3 { color: #8a8a8a; font-size: 10px; line-height: 1.2; text-align: center; margin-top: 2px; }
+  /* ลูกศรทิศเหนือ: ปลายเหนือสีแดง ปลายใต้สีเทาอ่อน */
+  .maplibregl-ctrl button.maplibregl-ctrl-compass .maplibregl-ctrl-icon { background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='29' height='29' viewBox='0 0 29 29'%3E%3Cpath fill='%23d6261c' d='m10.5 14 4-8 4 8z'/%3E%3Cpath fill='%23bbb' d='m10.5 16 4 8 4-8z'/%3E%3C/svg%3E") !important; }
   .bars { letter-spacing: -1px; font-size: 13px; }
   #cam, #skycam { position: fixed; inset: 0; z-index: 60; background: #000; color: #fff; }
   #cam video, #cam canvas, #skycam video, #skycam canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
@@ -188,7 +191,7 @@
   <div id="usage"></div>
 </div>
 
-<div id="statusbar"><div class="sb1" id="sb1">GPS: แตะปุ่มตำแหน่ง (◎) เพื่อเริ่ม</div><div class="sb2" id="sb2"></div></div>
+<div id="statusbar"><div class="sb1" id="sb1">GPS: แตะปุ่มตำแหน่ง (◎) เพื่อเริ่ม</div><div class="sb2" id="sb2"></div><div class="sb3" id="sbVer"></div></div>
 
 <div id="toast" hidden></div>
 

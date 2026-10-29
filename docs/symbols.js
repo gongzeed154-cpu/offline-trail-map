@@ -129,7 +129,8 @@
   function mount(sym) {
     unmount(sym.id);
     var el = elFor(sym);
-    var m = new maplibregl.Marker({ element: el, draggable: true, offset: [0, 9] }).setLngLat([sym.lng, sym.lat]).addTo(ctx.map());
+    var m = new maplibregl.Marker({ element: el, draggable: !TrailLock.locked(), offset: [0, 9] }).setLngLat([sym.lng, sym.lat]).addTo(ctx.map());
+    TrailLock.register(m);
     m.on('dragend', function () {
       var ll = m.getLngLat();
       sym.lat = ll.lat; sym.lng = ll.lng;

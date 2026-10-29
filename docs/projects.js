@@ -51,7 +51,8 @@
   function mountPin(p) {
     unmountPin(p.id);
     var el = elForPin(p);
-    var m = new maplibregl.Marker({ element: el, anchor: 'bottom', draggable: true }).setLngLat([p.lng, p.lat]).addTo(ctx.map());
+    var m = new maplibregl.Marker({ element: el, anchor: 'bottom', draggable: !TrailLock.locked() }).setLngLat([p.lng, p.lat]).addTo(ctx.map());
+    TrailLock.register(m);
     m.on('dragend', function () { var ll = m.getLngLat(); p.lat = ll.lat; p.lng = ll.lng; save(); draw(); });
     el.addEventListener('click', function (e) {
       e.stopPropagation();
@@ -162,7 +163,7 @@
     };
     top.appendChild(fi);
     box.appendChild(top);
-    box.appendChild(el('p', 'font-size:12px;color:#777;line-height:1.5;margin:8px 0 0', 'งานคือชุดเดียวที่รวมเส้นทาง สัญลักษณ์ทหาร และหมุด ข้อมูลถูกเก็บไว้ในเครื่อง ปิดแอพแล้วเปิดใหม่ยังอยู่ ติ๊กแสดง/ซ่อนทีละงาน หรือทีละรายการ แล้วนำเข้างานจากเครื่องอื่นมาแสดงรวมกันได้'));
+    box.appendChild(el('p', 'font-size:12px;color:#777;line-height:1.5;margin:8px 0 0', 'หมุดและสัญลักษณ์ล็อคไว้ไม่ให้ขยับโดยไม่ตั้งใจ ปลดล็อคได้ที่ปุ่ม 🔒 มุมล่างซ้ายของจอ · งานคือชุดเดียวที่รวมเส้นทาง สัญลักษณ์ทหาร และหมุด ข้อมูลถูกเก็บไว้ในเครื่อง ปิดแอพแล้วเปิดใหม่ยังอยู่ ติ๊กแสดง/ซ่อนทีละงาน หรือทีละรายการ แล้วนำเข้างานจากเครื่องอื่นมาแสดงรวมกันได้'));
 
     // ฟอร์มปักหมุด
     box.appendChild(el('h4', 'margin:14px 0 6px;font-size:13px;color:#666', 'ปักหมุดใหม่ใน "' + nameOf(active()) + '"'));

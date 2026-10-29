@@ -1139,6 +1139,19 @@
     $('toolJump').onclick = function () { openSheet('jump'); };
     $('toolRec').onclick = function () { openSheet('rec'); };
     $('toolTeam').onclick = function () { openSheet('team'); };
+    function applyLockBtn() {
+      var l = TrailLock.locked(), b = $('lockBtn');
+      b.textContent = l ? '🔒' : '🔓';
+      b.classList.toggle('on', l);
+      b.setAttribute('aria-pressed', l ? 'true' : 'false');
+      b.title = l ? 'ล็อคอยู่: หมุดและสัญลักษณ์ลากไม่ได้' : 'ปลดล็อค: ลากหมุดและสัญลักษณ์ได้';
+    }
+    $('lockBtn').onclick = function () {
+      TrailLock.set(!TrailLock.locked());
+      applyLockBtn();
+      toast(TrailLock.locked() ? 'ล็อคแล้ว: หมุดและสัญลักษณ์ขยับไม่ได้' : 'ปลดล็อคแล้ว: ลากหมุดและสัญลักษณ์ได้ (อย่าลืมล็อคกลับ)');
+    };
+    applyLockBtn();
     $('dispBtn').onclick = cycleDisplay;
     $('muteBtn').onclick = function () {
       if (prefs.display === 'stealth') { toast('โหมดพรางตัวปิดเสียงอยู่ เปลี่ยนโหมดก่อนจึงเปิดเสียงได้'); return; }

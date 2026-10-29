@@ -22,6 +22,7 @@ var SHELL_FILES = [
   './jump.js',
   './projects.js',
   './symbols.js',
+  './lock.js',
   './rec.js',
   './team.js',
   './print.js',

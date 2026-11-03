@@ -33,6 +33,8 @@ Project language: README, manual and UI text are in **Thai**. Keep new user-faci
 - PWA contour lines: `docs/contour.js` (TrailContour) uses the vendored `docs/lib/maplibre-contour.min.js` (BSD-3, license file alongside) on the same Terrarium DEM as the hillshade; thresholds per zoom in `THRESHOLDS`. Base `paper` shows all imported paper maps via `TrailPaper.setSolo`.
 - PWA counterparts: `docs/rec.js` (TrailRec: trips in localStorage, GPX via TrailExport.share) and `docs/team.js` (TrailTeam, same server protocol; shares the screen wake lock through `TrailRec.holdWake`). Browser E2E was done with Playwright against a local `server/` and stubbed map tiles.
 
+- Access gate: `docs/access.js` + `docs/access.json` (only SHA-256 hashes of per-person codes; `tools/make-code.mjs` creates a code + entry). Never commit real codes. Owner entry has `owner: true` and passes even when everything is disabled. Soft lock only (public code).
+
 ## Workflow
 1. Read the relevant file(s) fully before editing; files are 80–1100 lines.
 2. Make the smallest change that fits the existing style.

@@ -1,0 +1,24 @@
+{
+  "required": true,
+  "enabled": true,
+  "graceDays": 30,
+  "message": "สิทธิ์ใช้งานถูกปิดชั่วคราว กรุณาติดต่อเจ้าของแอพ",
+  "users": [
+    {
+      "name": "เจ้าของ (คุณ)",
+      "hash": "303b9ccc8a85f5299917c66481dc9f0770e9881805e806cb32b1b88ad34dd24c",
+      "enabled": true,
+      "owner": true
+    },
+    {
+      "name": "เพื่อน 1",
+      "hash": "26a71fa5a0d8b118ccd7d4c7fe04c15192c95cd58e957781c4b0aa6896e3fe03",
+      "enabled": true
+    },
+    {
+      "name": "เพื่อน 2",
+      "hash": "4732fed3440a650fe4891fcda807d682699af4cf120d2d38e42acba776151c16",
+      "enabled": true
+    }
+  ]
+}

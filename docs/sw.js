@@ -23,6 +23,8 @@ var SHELL_FILES = [
   './projects.js',
   './symbols.js',
   './lock.js',
+  './access.js',
+  './access.json',
   './rec.js',
   './team.js',
   './print.js',

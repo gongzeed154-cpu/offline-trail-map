@@ -64,6 +64,7 @@ self.addEventListener('fetch', function (event) {
   var req = event.request;
   if (req.method !== 'GET') return;
   var url = req.url;
+  if (url.indexOf('__v=') > 0) return; // ตรวจเวอร์ชัน: ไปเน็ตตรงๆ ไม่ใช้ที่เก็บ
 
   // ไทล์แผนที่ / ตัวอักษร: ใช้ที่เก็บไว้ก่อน ถ้าไม่มีค่อยโหลดจากเน็ตแล้วเก็บเพิ่ม
   if (TrailCommon.isCacheable(url)) {

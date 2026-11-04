@@ -114,12 +114,22 @@
   // ทำให้เกิดร่องห้วย สันเขาย่อย และเส้นชั้นความสูงหยักเป็นธรรมชาติแบบแผนที่จริง
   function erode(h, nx, ny, relief, strength, noiseSeed) {
     if (!strength) return;
-    var N = nx * ny, it, c, p;
+    var N = nx * ny, it, c, p, nzE = makeNoise((noiseSeed | 0) * 31 + 5), nbig = N * 0.01;
     // 1) ร่องน้ำ: ขุดลงตามปริมาณน้ำที่ไหลผ่าน ได้โครงข่ายห้วยแตกกิ่ง (เส้นชั้นจะหยักเข้าหาต้นน้ำ)
     for (it = 0; it < 3; it++) {
-      var fl = flood(h, nx, ny, relief * 1e-5), acc = fl.acc;
+      var fl = flood(h, nx, ny, relief * 0.00025), acc = fl.acc; // ถมแอ่งแบบมีความลาดเล็กน้อย (พื้นหุบไม่แบนราบเป็นแผ่น)
       var depth = relief * (it === 0 ? 0.05 : 0.03) * strength, a0 = it === 0 ? 90 : 40;
-      for (c = 0; c < N; c++) h[c] = fl.filled[c] - depth * (1 - Math.exp(-(acc[c] - 1) / a0));
+      var F = fl.filled, g0 = relief * 0.0006, g1 = relief * 0.005, nh = new Float32Array(N);
+      for (c = 0; c < N; c++) {
+        var x = c % nx, y = (c - x) / nx, gx = (F[c + (x < nx - 1 ? 1 : 0)] - F[c - (x > 0 ? 1 : 0)]) / 2, gy = (F[c + (y < ny - 1 ? nx : 0)] - F[c - (y > 0 ? nx : 0)]) / 2;
+        // ขุดร่องเฉพาะบนลาดเขา ที่ราบไม่ขุด (เส้นชั้นในที่ราบจึงเรียบ ไม่ยึกยือ)
+        // ลำน้ำใหญ่ยังกัดร่องในที่ราบได้ (รวมน้ำเป็นสายหลัก ไม่ไหลขนานกันหลายสาย)
+        var sf = Math.max(smooth(g0, g1, Math.sqrt(gx * gx + gy * gy)), 0.6 * smooth(nbig * 0.3, nbig * 3, acc[c]));
+        // ที่ถูกถมใส่ลอนเตี้ยๆ ความถี่ต่ำ ให้ทางน้ำในที่ราบคดเคี้ยวและรวมกัน
+        var fillD = F[c] - h[c], wob = fillD > 0 ? Math.min(1, fillD / (relief * 0.01)) * relief * 0.006 * fbm(nzE, x * 0.035 + it * 7, y * 0.035, 2, 0.5) : 0;
+        nh[c] = F[c] + wob - depth * (1 - Math.exp(-(acc[c] - 1) / a0)) * sf;
+      }
+      for (c = 0; c < N; c++) h[c] = nh[c];
       blur(h, nx, ny, 1);
     }
     var mn = 1e9, mx = -1e9;
@@ -170,7 +180,7 @@
     blur(h, nx, ny, 1);
     for (p = 0; p < h.length; p++) { if (h[p] < mn) mn = h[p]; if (h[p] > mx) mx = h[p]; }
     for (p = 0; p < h.length; p++) h[p] = (h[p] - mn) / (mx - mn) * relief;
-    erode(h, nx, ny, relief, P.erode === undefined ? 1 : P.erode);
+    erode(h, nx, ny, relief, P.erode === undefined ? 1 : P.erode, seed);
 
     var carve = relief * 0.16, wid = nx * 0.028, band = Math.ceil(wid * 3.4);
     var dmin2 = new Float32Array(nx * ny).fill(1e9);
@@ -255,7 +265,7 @@
     for (var e = 0; e < nEsc; e++) {
       var sx = nx * (0.2 + rnd() * 0.6), sy = ny * (0.2 + rnd() * 0.6), ang = rnd() * Math.PI * 2, len = nx * (0.22 + rnd() * 0.25), path = [], curv = (rnd() - 0.5) * 0.9;
       for (var st = 0; st <= 24; st++) { path.push([sx, sy]); sx += Math.cos(ang) * len / 24; sy += Math.sin(ang) * len / 24; ang += curv / 24 + (rnd() - 0.5) * 0.12; }
-      var stepH = Math.max(interval * 5, relief * (0.09 + rnd() * 0.06)), wEdge = 0.75;
+      var stepH = Math.max(interval * 5, relief * (0.09 + rnd() * 0.06)), wEdge = 0.4;
       if (o.cliffs === false) { world.cliffs.length = 0; continue; } // ไม่ใส่หน้าผา (ยังใช้เลขสุ่มเท่าเดิม แผนที่ส่วนอื่นจึงไม่เปลี่ยน)
       for (j = 0; j < ny; j++) {
         for (i = 0; i < nx; i++) {
@@ -281,7 +291,7 @@
     for (j = 0; j < ny; j++) for (i = 0; i < nx; i++) {
       p = j * nx + i;
       var fd = fl0.filled[p] - h[p];
-      h[p] = fl0.filled[p] + (fd > 0 ? Math.min(1, fd / (interval * 0.3)) * interval * 0.12 * (fbm(nflat, i * 0.16, j * 0.16, 2, 0.5)) : 0);
+      h[p] = fl0.filled[p] + (fd > 0 ? Math.min(1, fd / (interval * 0.3)) * interval * 0.12 * (fbm(nflat, i * 0.045, j * 0.045, 2, 0.5)) : 0);
     }
 
     // ที่ต่ำปิด (หลุมยุบ)
@@ -302,7 +312,7 @@
     }
     // ความไม่เรียบเล็กน้อยทั่วแผนที่ ให้ลำน้ำไม่เป็นเส้นตรง 45 องศาตามข้อจำกัดของการคำนวณทิศน้ำไหล
     var nmic = makeNoise((o.seed | 0) * 29 + 4);
-    for (j = 0; j < ny; j++) for (i = 0; i < nx; i++) h[j * nx + i] += interval * 0.09 * fbm(nmic, i * 0.2, j * 0.2, 2, 0.5);
+    for (j = 0; j < ny; j++) for (i = 0; i < nx; i++) h[j * nx + i] += interval * 0.06 * fbm(nmic, i * 0.06, j * 0.06, 2, 0.5);
     // ยกทั้งแผนที่ให้ฐานตรงตามระดับที่ตั้ง
     var minH = 1e9; for (p = 0; p < N; p++) if (h[p] < minH) minH = h[p];
     for (p = 0; p < N; p++) h[p] = h[p] - minH + world.base;

@@ -158,10 +158,11 @@
       c.font = fontOf(sizeMM, opt.bold, opt.italic);
       var w = c.measureText(text).width, hgt = mm(sizeMM) * 1.05, gap = opt.gap === undefined ? mm(2.3) : opt.gap;
       var cand = opt.center ? [[x - w / 2, y + hgt * 0.35]] : [[x + gap, y + hgt * 0.35], [x - gap - w, y + hgt * 0.35], [x - w / 2, y - gap - hgt * 0.2], [x - w / 2, y + gap + hgt * 0.9]];
-      for (var q = 0; q < cand.length; q++) {
-        var bx = cand[q][0], by = cand[q][1], box = [bx - 2, by - hgt, bx + w + 2, by + hgt * 0.3];
-        if (box[0] < fx || box[2] > fx + fw || box[1] < fy || box[3] > fy + fh) continue;
-        if (overlap(box)) continue;
+      for (var q = 0; q < cand.length + (opt.force ? 1 : 0); q++) {
+        var forced = q === cand.length, cq = forced ? (x + gap + w < fx + fw ? cand[0] : cand[Math.min(1, cand.length - 1)]) : cand[q];
+        var bx = cq[0], by = cq[1], box = [bx - 2, by - hgt, bx + w + 2, by + hgt * 0.3];
+        if (!forced && (box[0] < fx || box[2] > fx + fw || box[1] < fy || box[3] > fy + fh)) continue;
+        if (!forced && overlap(box)) continue;
         placed.push(box);
         c.textAlign = 'left'; c.textBaseline = 'alphabetic';
         c.lineJoin = 'round'; c.lineWidth = mm(0.9); c.strokeStyle = 'rgba(226,237,232,.85)'; c.strokeText(text, bx, by);
@@ -252,6 +253,8 @@
     }
     var DASH_APPROX = [2.6, 1.0], DASH_SUPP = [0.9, 0.7];
     // แบ่งเส้นเป็นช่วงตามสถานะ (ซ่อน/เส้นทึบ/เส้นประ) แล้ววาดทีละช่วง
+    var cLines = {};
+    function linesAt(level) { return cLines[level] || (cLines[level] = contourLines(world, level)); }
     function strokeContour(ln, level, style) {
       var pts = ln.pts;
       function state(q) {
@@ -271,7 +274,7 @@
       for (k = k0; k <= k1; k++) {
         var level = (k + offset) * iv, isIdx = ((k % 5) + 5) % 5 === 0;
         if (!filter(isIdx)) continue;
-        var lines = contourLines(world, level);
+        var lines = linesAt(level);
         c.strokeStyle = isIdx && style.idx ? style.idx.color : style.color; c.lineWidth = mm(isIdx && style.idx ? style.idx.w : style.w);
         lines.forEach(function (ln) {
           var ptsPx = ln.pts;
@@ -319,6 +322,36 @@
         c.stroke();
       });
     }
+    // ยอดเขาทุกลูก: หาวงปิดในสุดที่ด้านในสูงกว่า (ยอดเนิน) แล้วใส่ X + ความสูงที่จุดสูงสุดในวง
+    function inPoly(px, py, pts) { var ins = false; for (var a = 0, b = pts.length - 1; a < pts.length; b = a++) { if ((pts[a][1] > py) !== (pts[b][1] > py) && px < (pts[b][0] - pts[a][0]) * (py - pts[a][1]) / (pts[b][1] - pts[a][1]) + pts[a][0]) ins = !ins; } return ins; }
+    function ringUp(pp, level) { // ด้านในวงสูงกว่าระดับเส้น
+      var area = 0, qk; for (qk = 0; qk < pp.length; qk++) { var na = pp[(qk + 1) % pp.length]; area += pp[qk][0] * na[1] - na[0] * pp[qk][1]; }
+      var sgn = area > 0 ? 1 : -1, up = 0, tot = 0, stp = Math.max(1, Math.floor(pp.length / 24));
+      for (qk = 0; qk < pp.length; qk += stp) { var a1 = pp[(qk - 1 + pp.length) % pp.length], b1 = pp[(qk + 1) % pp.length], tx = b1[0] - a1[0], ty = b1[1] - a1[1], tl = Math.hypot(tx, ty) || 1; tot++; if (sampleH(world, pp[qk][0] - sgn * ty / tl * 0.8, pp[qk][1] + sgn * tx / tl * 0.8) > level) up++; }
+      return tot >= 4 && up / tot > 0.8;
+    }
+    var summits = [];
+    if (L.peak) {
+      var rings = [], lv;
+      for (var kq = Math.ceil(hmin / iv); kq * iv <= hmax; kq++) { lv = kq * iv; linesAt(lv).forEach(function (ln) { if (ln.closed && ringUp(ln.pts, lv)) rings.push({ pts: ln.pts, level: lv }); }); }
+      rings.forEach(function (rg) {
+        // ในสุด = ไม่มีวงยอดเนินระดับสูงกว่าอยู่ข้างใน
+        if (rings.some(function (o2) { return o2.level > rg.level && inPoly(o2.pts[0][0], o2.pts[0][1], rg.pts); })) return;
+        var x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9; rg.pts.forEach(function (q) { if (q[0] < x0) x0 = q[0]; if (q[0] > x1) x1 = q[0]; if (q[1] < y0) y0 = q[1]; if (q[1] > y1) y1 = q[1]; });
+        var best = null, bz = -1e9;
+        for (var yy = Math.max(0, Math.floor(y0)); yy <= Math.min(ny - 1, Math.ceil(y1)); yy++) for (var xx = Math.max(0, Math.floor(x0)); xx <= Math.min(nx - 1, Math.ceil(x1)); xx++) {
+          var z = world.h[yy * nx + xx]; if (z > bz && inPoly(xx + 0.5, yy + 0.5, rg.pts)) { bz = z; best = [xx + 0.5, yy + 0.5]; }
+        }
+        if (!best) return;
+        var named = world.peaks.filter(function (pk) { return inPoly(pk.gx, pk.gy, rg.pts) || Math.hypot(pk.gx - best[0], pk.gy - best[1]) < 3; })[0];
+        if (named) { named.gx = best[0]; named.gy = best[1]; named.elev = bz; named.inRing = true; return; }
+        summits.push({ gx: best[0], gy: best[1], elev: bz });
+      });
+    }
+    // จองพื้นที่ป้ายความสูงยอดเขาไว้ก่อน ไม่ให้เลขเส้นชั้นมาทับ (ปล่อยคืนก่อนวาดป้ายยอดเขาจริง)
+    var softBoxes = [];
+    function softReserve(gx, gy, txt) { var x = X(gx), y = Y(gy); c.font = fontOf(2.3); var w = c.measureText(txt).width; var b = [x - mm(1.6), y - mm(3.2), x + mm(2.6) + w, y + mm(1.6)]; b.soft = true; placed.push(b); }
+    if (L.peak) { world.peaks.forEach(function (pk) { softReserve(pk.gx, pk.gy, Math.round(pk.elev) + (L.names ? ' ' + pk.name : '')); }); summits.forEach(function (sm) { softReserve(sm.gx, sm.gy, String(Math.round(sm.elev))); }); }
     // เลขกำกับเส้นแทรก (เช่น 205) ช่วงละหนึ่งตัว เพื่อให้รู้ว่าเป็นครึ่งช่วงห่าง
     if (L.cLabel) suppLabels.forEach(function (sl) {
       var m = sl.pts[Math.floor(sl.pts.length / 2)], m2 = sl.pts[Math.min(sl.pts.length - 1, Math.floor(sl.pts.length / 2) + 2)], px = X(m[0]), py = Y(m[1]);
@@ -465,12 +498,18 @@
         v.houses.forEach(function (hh) { var s = mm(v.size === 'large' ? 0.85 : 0.75); c.fillStyle = '#111'; c.fillRect(X(hh[0]) - s / 2, Y(hh[1]) - s / 2, s, s); });
       });
     }
+    placed = placed.filter(function (b) { return !b.soft; });
     // ยอดเขา
     if (L.peak) world.peaks.forEach(function (pk) {
       var x = X(pk.gx), y = Y(pk.gy); SYM.peak(c, x, y, mm(2.7));
       var t = String(Math.round(pk.elev)); reserve(x, y, mm(1.4));
-      label(t + (L.names ? ' ' + pk.name : ''), x, y - mm(0.5), 2.3, { bold: false, color: '#3a2410' });
+      if (!label(t + (L.names ? ' ' + pk.name : ''), x, y - mm(0.5), 2.3, { color: '#3a2410' })) label(t, x, y - mm(0.5), 2.3, { color: '#3a2410', force: true }); // ความสูงต้องมีเสมอ
       note('ยอดเขา', pk.name, pk.gx, pk.gy, x, y, true);
+    });
+    // ยอดเนินที่ไม่มีชื่อ: X + ความสูง (ไม่ใส่เลขกำกับ)
+    summits.forEach(function (sm) {
+      var x = X(sm.gx), y = Y(sm.gy); SYM.peak(c, x, y, mm(2.3)); reserve(x, y, mm(1.2));
+      label(String(Math.round(sm.elev)), x, y - mm(0.4), 2.1, { color: '#3a2410', gap: mm(1.6), force: true });
     });
     if (L.saddle) world.saddles.forEach(function (sd, idx) {
       var x = X(sd.gx), y = Y(sd.gy); SYM.saddle(c, x, y, mm(2.6)); reserve(x, y, mm(1.4));

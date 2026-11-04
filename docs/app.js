@@ -238,7 +238,12 @@
       map: function () { return map; }, toast: toast,
       showSheet: function (k) { if (sheetKind !== k) openSheet(k); else TrailWind.renderSheet($('sheetBody')); }
     });
-    TrailContour.init({ map: function () { return map; }, toast: toast });
+    TrailContour.init({
+      map: function () { return map; }, toast: toast,
+      enable: function () { if (!prefs.contour) { prefs.contour = true; savePrefs(); } }
+    });
+    TrailTerrain.init({ map: function () { return map; }, toast: toast });
+    TrailSearch.init({ map: function () { return map; }, toast: toast, closeSheet: closeSheet });
     TrailRec.init({
       map: function () { return map; }, toast: toast, closeSheet: closeSheet, geolocate: geolocate,
       showSheet: function (k) { if (sheetKind !== k) openSheet(k); else TrailRec.renderSheet($('sheetBody')); }
@@ -699,7 +704,7 @@
     sheetKind = kind;
     var sh = $('sheet');
     sh.hidden = false;
-    var title = kind === 'layers' ? 'ชั้นแผนที่และหน้าจอ' : kind === 'grid' ? 'พิกัดและตารางกริด' : kind === 'special' ? 'หมวดพิเศษ' : kind === 'route' ? 'เส้นทางและนำทาง' : kind === 'sky' ? 'ดวงดาวนำทาง' : kind === 'mil' ? 'สัญลักษณ์ทหารและพิมพ์แผนที่ฝึก' : kind === 'proj' ? 'งาน (เส้นทาง · สัญลักษณ์ · หมุด)' : kind === 'snd' ? 'ฟังเสียง (วิเคราะห์ชนิดและระยะ)' : kind === 'wind' ? 'ทิศทางและความเร็วลม' : kind === 'jump' ? 'โหมดโดดร่ม (วางแผน/ฝึก)' : kind === 'rec' ? 'บันทึกการเดินทาง' : kind === 'team' ? 'ทีมเดินป่า' : 'วัดมุมด้วยแผ่นวัดมุม';
+    var title = kind === 'layers' ? 'ชั้นแผนที่และหน้าจอ' : kind === 'grid' ? 'พิกัดและตารางกริด' : kind === 'special' ? 'หมวดพิเศษ' : kind === 'route' ? 'เส้นทางและนำทาง' : kind === 'sky' ? 'ดวงดาวนำทาง' : kind === 'mil' ? 'สัญลักษณ์ทหารและพิมพ์แผนที่ฝึก' : kind === 'proj' ? 'งาน (เส้นทาง · สัญลักษณ์ · หมุด)' : kind === 'snd' ? 'ฟังเสียง (วิเคราะห์ชนิดและระยะ)' : kind === 'wind' ? 'ทิศทางและความเร็วลม' : kind === 'jump' ? 'โหมดโดดร่ม (วางแผน/ฝึก)' : kind === 'search' ? 'ค้นหา' : kind === 'rec' ? 'บันทึกการเดินทาง' : kind === 'team' ? 'ทีมเดินป่า' : 'วัดมุมด้วยแผ่นวัดมุม';
     sh.innerHTML = '<div class="shead"><h3></h3><button id="sheetClose">ปิด</button></div><div id="sheetBody"></div>';
     sh.querySelector('h3').textContent = title;
     $('sheetClose').onclick = closeSheet;
@@ -714,6 +719,7 @@
     else if (kind === 'snd') TrailSound.renderSheet($('sheetBody'));
     else if (kind === 'wind') TrailWind.renderSheet($('sheetBody'));
     else if (kind === 'jump') TrailJump.renderSheet($('sheetBody'));
+    else if (kind === 'search') TrailSearch.renderSheet($('sheetBody'));
     else if (kind === 'rec') TrailRec.renderSheet($('sheetBody'));
     else if (kind === 'team') TrailTeam.renderSheet($('sheetBody'));
     else renderProtSheet();
@@ -1131,6 +1137,7 @@
     $('toolProt').onclick = function () { openSheet('prot'); };
     $('toolSpecial').onclick = function () { openSheet('special'); };
     $('toolRoute').onclick = function () { openSheet('route'); };
+    $('searchBtn').onclick = function () { openSheet('search'); };
     $('toolCam').onclick = function () { TrailCam.open(); };
     $('toolSky').onclick = function () { openSheet('sky'); };
     $('toolMil').onclick = function () { openSheet('mil'); };

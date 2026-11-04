@@ -30,6 +30,7 @@
   /* ---------- ไปที่จุดหนึ่ง ---------- */
   function go(lat, lng, zoom, label) {
     var map = ctx.map();
+    if (root.TrailView3D && TrailView3D.active()) TrailView3D.exit(); // ออกจากมุมมอง 3D ก่อนบินไปจุดใหม่
     if (marker) marker.remove();
     marker = new maplibregl.Marker({ color: '#d6261c' }).setLngLat([lng, lat]).addTo(map);
     if (label) { var pop = new maplibregl.Popup({ offset: 28, closeButton: false }).setText(label); marker.setPopup(pop); }

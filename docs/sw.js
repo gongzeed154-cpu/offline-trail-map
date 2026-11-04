@@ -32,6 +32,7 @@ var SHELL_FILES = [
   './contour.js',
   './terrain.js',
   './search.js',
+  './view3d.js',
   './lib/maplibre-gl.css',
   './icon-192.png',
   './icon-512.png'

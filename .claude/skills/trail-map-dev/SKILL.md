@@ -35,6 +35,8 @@ Project language: README, manual and UI text are in **Thai**. Keep new user-faci
 
 - Search: `docs/search.js` (coordinates via `TrailGeo.parsePoint`, names via loaded vector tiles + Nominatim, keyword shortcuts) and `docs/terrain.js` (priority-flood DEM analysis on a 3x3 z12 tile window: peaks, ridges, saddles, valleys, streams, cliffs, depressions). Real-data check used downloaded Terrarium tiles (Doi Inthanon peak found at 2574 m vs 2565 m official).
 
+- 3D: `docs/view3d.js` (TrailView3D). MapLibre 5.24 has no FreeCameraOptions and pitch is capped at 90, so the ground camera is placed by computing a centre point ON the real terrain along the sight line (iterating `queryTerrainElevation`), then pitch from the camera-centre geometry and zoom from `transform.cameraToCenterDistance`. Do NOT use `calculateCameraOptionsFromCameraLngLatAltRotation` near 90 deg pitch with terrain (it assumes the old centre elevation and drops the camera underground). Test with real Terrarium tiles for zoom 6-12 around Doi Inthanon (download with curl into the scratchpad; synthetic tiles make walls at tile edges).
+
 ## Workflow
 1. Read the relevant file(s) fully before editing; files are 80–1100 lines.
 2. Make the smallest change that fits the existing style.

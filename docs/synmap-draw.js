@@ -244,15 +244,27 @@
     var nzA = I.makeNoise((world.seed | 0) * 41 + 7);
     function inApprox(gx, gy) { return L.cApprox && I.fbm(nzA, gx * 0.018, gy * 0.018, 2, 0.5) > 0.2; }
     var depressionTicks = [], labelSpots = [];
+    // ระยะห่างเส้นชั้นบนกระดาษ (มม.) ณ จุดนั้น: ใช้ตัดสินว่าเป็นที่ราบ (เส้นห่างมาก) ไหม
+    var mmPerCell = world.cellM / o.scale * 1000;
+    function spacingMM(gx, gy) {
+      var gxv = (sampleH(world, gx + 1.5, gy) - sampleH(world, gx - 1.5, gy)) / 3, gyv = (sampleH(world, gx, gy + 1.5) - sampleH(world, gx, gy - 1.5)) / 3, g = Math.hypot(gxv, gyv);
+      return g > 1e-6 ? iv / g * mmPerCell : 1e9;
+    }
+    var DASH_APPROX = [2.6, 1.0], DASH_SUPP = [0.9, 0.7];
+    // แบ่งเส้นเป็นช่วงตามสถานะ (ซ่อน/เส้นทึบ/เส้นประ) แล้ววาดทีละช่วง
     function strokeContour(ln, level, style) {
       var pts = ln.pts;
-      if (L.cApprox && style.solidOK !== false) {
-        // แบ่งเส้นเป็นช่วงในและนอกบริเวณโดยประมาณ ช่วงในวาดเป็นเส้นประ
-        var run = [pts[0]], inZ = inApprox(pts[0][0], pts[0][1]);
-        function flush() { if (run.length > 1) { path(run); dash(inZ ? [1.5, 0.9] : null); c.stroke(); } }
-        for (var k = 1; k < pts.length; k++) { var z = inApprox(pts[k][0], pts[k][1]); if (z !== inZ) { run.push(pts[k]); flush(); run = [pts[k]]; inZ = z; } else run.push(pts[k]); }
-        flush(); dash(null);
-      } else { path(pts, ln.closed); dash(style.dash); c.stroke(); dash(null); }
+      function state(q) {
+        if (style.flatOnly && spacingMM(q[0], q[1]) < 3.2) return 0; // เส้นแทรก: ใส่เฉพาะที่ราบซึ่งเส้นหลัก/รองห่างกันมาก
+        if (style.dash) return 2;
+        return inApprox(q[0], q[1]) ? 3 : 1;
+      }
+      var run = [pts[0]], st = state(pts[0]);
+      function flush() {
+        if (run.length > 1 && st) { path(run, ln.closed && run.length === pts.length); dash(st === 2 ? style.dash : st === 3 ? DASH_APPROX : null); c.stroke(); if (style.onRun) style.onRun(run, level); }
+      }
+      for (var k = 1; k < pts.length; k++) { var z = state(pts[k]); if (z !== st) { run.push(pts[k]); flush(); run = [pts[k]]; st = z; } else run.push(pts[k]); }
+      flush(); dash(null);
     }
     function drawLevels(offset, style, filter) {
       var k0 = Math.ceil((hmin - offset * iv) / iv), k1 = Math.floor((hmax - offset * iv) / iv), k;
@@ -281,7 +293,8 @@
       }
     }
     var showIdx = L.cIndex, showInter = L.cInter;
-    if (L.cSupp) drawLevels(0.5, { color: '#a9794a', w: 0.07, dash: [1.4, 0.8] }, function () { return true; });
+    var suppLabels = [];
+    if (L.cSupp) drawLevels(0.5, { color: '#a06a38', w: 0.08, dash: DASH_SUPP, flatOnly: true, onRun: function (run, level) { if (run.length > 70) suppLabels.push({ pts: run, level: level }); } }, function () { return true; });
     if (showIdx || showInter) {
       drawLevels(0, { color: '#a06a38', w: 0.09, idx: { color: '#7d4a1c', w: 0.19 }, label: L.cLabel }, function (isIdx) { return isIdx ? showIdx : showInter; });
     }
@@ -306,6 +319,16 @@
         c.stroke();
       });
     }
+    // เลขกำกับเส้นแทรก (เช่น 205) ช่วงละหนึ่งตัว เพื่อให้รู้ว่าเป็นครึ่งช่วงห่าง
+    if (L.cLabel) suppLabels.forEach(function (sl) {
+      var m = sl.pts[Math.floor(sl.pts.length / 2)], m2 = sl.pts[Math.min(sl.pts.length - 1, Math.floor(sl.pts.length / 2) + 2)], px = X(m[0]), py = Y(m[1]);
+      var ang = Math.atan2(Y(m2[1]) - py, X(m2[0]) - px); if (ang > Math.PI / 2) ang -= Math.PI; else if (ang < -Math.PI / 2) ang += Math.PI;
+      var txt = String(Math.round(sl.level * 10) / 10), tw = mm(2.4) * txt.length * 0.62, box = [px - tw, py - mm(1.8), px + tw, py + mm(1.8)];
+      if (px < fx + tw || px > fx + fw - tw || overlap(box)) return;
+      c.save(); c.translate(px, py); c.rotate(ang); c.font = fontOf(2.1, false, true); c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.lineWidth = mm(0.9); c.strokeStyle = 'rgba(226,237,232,.95)'; c.lineJoin = 'round'; c.strokeText(txt, 0, 0); c.fillStyle = '#7d4a1c'; c.fillText(txt, 0, 0); c.restore();
+      placed.push(box);
+    });
     // ตัวเลขความสูงบนเส้นหลัก
     labelSpots.forEach(function (ls) {
       var pts = ls.ln.pts, total = 0, k, segLen = [];
@@ -493,8 +516,8 @@
     var iv = world ? world.interval : 20;
     if (L.cIndex) line('เส้นชั้นความสูงหลัก' + (world ? ' (ทุก ' + world.index + ' ม.)' : ''), { color: '#7d4a1c', w: 0.11 });
     if (L.cInter) line('เส้นชั้นความสูงรอง' + (world ? ' (ทุก ' + iv + ' ม.)' : ''), { color: '#a06a38', w: 0.05 });
-    if (L.cSupp) line('เส้นแทรก' + (world ? ' (ทุก ' + (iv / 2) + ' ม.)' : ''), { color: '#a9794a', w: 0.04, dash: [3, 2] });
-    if (L.cApprox) line('เส้นชั้นความสูงโดยประมาณ', { color: '#b0793d', w: 0.07, dash: [3, 2] });
+    if (L.cSupp) line('เส้นชั้นความสูงแทรก (ครึ่งช่วง ' + (iv / 2) + ' ม. เฉพาะที่ราบ)', { color: '#a06a38', w: 0.045, dash: [2, 1.6] });
+    if (L.cApprox) line('เส้นชั้นความสูงโดยประมาณ (ประยาว)', { color: '#a06a38', w: 0.05, dash: [5.5, 2] });
     if (L.cDepr) out.push({ label: 'เส้นคุ้งกระทะ (แอ่ง ขีดชี้ลงที่ต่ำ)', draw: function (c, x, y, s) { c.save(); c.strokeStyle = '#7d4a1c'; c.lineWidth = s * 0.09; c.beginPath(); c.arc(x, y, s * 0.4, 0, 7); c.stroke(); for (var k = 0; k < 8; k++) { var a = k * Math.PI / 4; c.beginPath(); c.moveTo(x + Math.cos(a) * s * 0.4, y + Math.sin(a) * s * 0.4); c.lineTo(x + Math.cos(a) * s * 0.18, y + Math.sin(a) * s * 0.18); c.stroke(); } c.restore(); } });
     if (L.peak) sym('ยอดเขา (เลขคือความสูงเหนือระดับน้ำทะเล เมตร)', 'peak');
     if (L.ridge) line('สันเขา', { color: 'rgba(150,70,30,.75)', w: 0.1, dash: [4, 2] });

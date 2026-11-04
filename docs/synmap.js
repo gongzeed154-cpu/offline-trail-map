@@ -249,7 +249,10 @@
     var cellM = extW / nx, N = nx * ny;
     var diag = Math.sqrt(extW * extW + extH * extH);
     var relief = clamp(diag * P.relief * (o.reliefMul || 1), 15, 3000);
-    var interval = o.interval && o.interval !== 'auto' ? +o.interval : niceInterval(relief / 42);
+    // ช่วงห่างมาตรฐานตามมาตราส่วน (แผนที่ทหาร 1:50,000 = 20 ม. เส้นหลักทุก 100 ม.) ถ้าภูมิประเทศเตี้ยมากจึงลดลง
+    var stdIv = dims.scale >= 50000 ? 20 : dims.scale >= 25000 ? 10 : dims.scale >= 10000 ? 5 : 2;
+    while (stdIv > 1 && relief / stdIv < 10) stdIv = stdIv === 20 ? 10 : stdIv === 10 ? 5 : stdIv === 5 ? 2 : 1;
+    var interval = o.interval && o.interval !== 'auto' ? +o.interval : stdIv;
     var world = { nx: nx, ny: ny, N: N, cellM: cellM, extW: extW, extH: extH, relief: relief, interval: interval, index: interval * 5, base: o.baseElev || 200, seed: o.seed | 0, preset: o.preset, rnd: rnd };
     var namer = makeNamer(rnd);
     world.namer = namer;
@@ -303,7 +306,7 @@
         var gxs = (h[cj * nx + Math.min(nx - 1, ci + 3)] - h[cj * nx + Math.max(0, ci - 3)]) / 6, gys = (h[Math.min(ny - 1, cj + 3) * nx + ci] - h[Math.max(0, cj - 3) * nx + ci]) / 6;
         if (Math.sqrt(gxs * gxs + gys * gys) / cellM > 0.12) continue; // ไม่ชันเกินไป
         if (hv < relief * 0.25) continue; // อยู่บนที่สูงพอควร
-        var sg = nx * (0.011 + rnd() * 0.006), dep = Math.max(interval * 2.8, relief * 0.035);
+        var sg = nx * (0.018 + rnd() * 0.01), dep = Math.max(interval * 2.8, relief * 0.035);
         var rr = Math.ceil(sg * 3.5);
         for (j = Math.max(0, cj - rr); j < Math.min(ny, cj + rr); j++) for (i = Math.max(0, ci - rr); i < Math.min(nx, ci + rr); i++) { var dd = (i - cx0) * (i - cx0) + (j - cy0) * (j - cy0); h[j * nx + i] -= dep * Math.exp(-dd / (2 * sg * sg)); }
         world.sinks.push({ gx: cx0, gy: cy0, r: sg, depth: dep });

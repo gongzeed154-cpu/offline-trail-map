@@ -3,7 +3,7 @@
 // ข้อมูลความสูงละเอียดราว 30-40 ม. ต่อจุด เส้นบนที่ราบจะไม่เนียนเท่าแผนที่ทหาร 1:50,000
 (function (root) {
   var C = TrailCommon;
-  var ctx = null; // { map: () => map, toast }
+  var ctx = null; // { map: () => map, toast, enable: () => เปิดสวิตช์เส้นชั้นความสูง }
   var dem = null;
   var added = false;
   var failedWarn = false;
@@ -51,6 +51,19 @@
       },
       paint: { 'text-color': '#6b3b12', 'text-halo-color': 'rgba(255,255,255,.9)', 'text-halo-width': 1.5 }
     }, map.getLayer('traffic') ? 'traffic' : undefined);
+    // เส้นแทรก (ระหว่างเส้นรอง ทุก 10 ม.) แสดงเมื่อเลือกจากช่องค้นหา เส้นประบาง ซูม 14 ขึ้นไป
+    map.addSource('contours-sup', {
+      type: 'vector', minzoom: 14, maxzoom: 15,
+      tiles: [dem.contourProtocolUrl({
+        thresholds: { 14: 10 }, contourLayer: 'contours', elevationKey: 'ele', levelKey: 'level', extent: 4096, buffer: 1
+      })]
+    });
+    map.addLayer({
+      id: 'contour-sup-lines', type: 'line', source: 'contours-sup', 'source-layer': 'contours', minzoom: 14,
+      filter: ['!=', ['%', ['get', 'ele'], 20], 0],
+      layout: { 'visibility': 'none' },
+      paint: { 'line-color': LINE_COLOR, 'line-opacity': 0.7, 'line-width': 0.5, 'line-dasharray': [3, 2] }
+    }, map.getLayer('contour-lines') ? 'contour-lines' : undefined);
     map.on('error', function (e) {
       if (failedWarn || !e || e.sourceId !== 'contours') return;
       failedWarn = true;
@@ -69,5 +82,21 @@
     });
   }
 
-  root.TrailContour = { init: init, apply: apply };
+  // ชนิดของเส้นชั้นความสูงที่แสดง: all | index (เส้นหลัก ทุก 100 ม.) | intermediate (เส้นรอง 20 ม.) | supplementary (เส้นแทรก 10 ม.) | approx (เส้นประ โดยประมาณ)
+  var cls = 'all';
+  function showClass(kind) {
+    var map = ctx && ctx.map();
+    if (!map) return false;
+    if (ctx.enable) ctx.enable();
+    if (!setup()) return false;
+    cls = kind;
+    var filters = { index: ['==', ['get', 'level'], 1], intermediate: ['==', ['get', 'level'], 0] };
+    map.setFilter('contour-lines', filters[kind] || null);
+    map.setPaintProperty('contour-lines', 'line-dasharray', kind === 'approx' ? [4, 2.5] : null);
+    map.setLayoutProperty('contour-sup-lines', 'visibility', kind === 'supplementary' ? 'visible' : 'none');
+    ['contour-lines', 'contour-labels'].forEach(function (id) { map.setLayoutProperty(id, 'visibility', 'visible'); });
+    return true;
+  }
+
+  root.TrailContour = { init: init, apply: apply, showClass: showClass, getClass: function () { return cls; } };
 })(typeof self !== 'undefined' ? self : this);

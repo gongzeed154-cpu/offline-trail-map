@@ -33,6 +33,10 @@ Project language: README, manual and UI text are in **Thai**. Keep new user-faci
 - PWA contour lines: `docs/contour.js` (TrailContour) uses the vendored `docs/lib/maplibre-contour.min.js` (BSD-3, license file alongside) on the same Terrarium DEM as the hillshade; thresholds per zoom in `THRESHOLDS`. Base `paper` shows all imported paper maps via `TrailPaper.setSolo`.
 - PWA counterparts: `docs/rec.js` (TrailRec: trips in localStorage, GPX via TrailExport.share) and `docs/team.js` (TrailTeam, same server protocol; shares the screen wake lock through `TrailRec.holdWake`). Browser E2E was done with Playwright against a local `server/` and stubbed map tiles.
 
+- Search: `docs/search.js` (coordinates via `TrailGeo.parsePoint`, names via loaded vector tiles + Nominatim, keyword shortcuts) and `docs/terrain.js` (priority-flood DEM analysis on a 3x3 z12 tile window: peaks, ridges, saddles, valleys, streams, cliffs, depressions). Real-data check used downloaded Terrarium tiles (Doi Inthanon peak found at 2574 m vs 2565 m official).
+
+- 3D: `docs/view3d.js` (TrailView3D). MapLibre 5.24 has no FreeCameraOptions and pitch is capped at 90, so the ground camera is placed by computing a centre point ON the real terrain along the sight line (iterating `queryTerrainElevation`), then pitch from the camera-centre geometry and zoom from `transform.cameraToCenterDistance`. Do NOT use `calculateCameraOptionsFromCameraLngLatAltRotation` near 90 deg pitch with terrain (it assumes the old centre elevation and drops the camera underground). Test with real Terrarium tiles for zoom 6-12 around Doi Inthanon (download with curl into the scratchpad; synthetic tiles make walls at tile edges).
+
 ## Workflow
 1. Read the relevant file(s) fully before editing; files are 80–1100 lines.
 2. Make the smallest change that fits the existing style.

@@ -25,6 +25,8 @@ var SHELL_FILES = [
   './lock.js',
   './rec.js',
   './team.js',
+  './synmap.js',
+  './synmap-draw.js',
   './print.js',
   './manifest.webmanifest',
   './lib/maplibre-gl.js',

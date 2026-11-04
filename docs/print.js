@@ -278,7 +278,7 @@
 
     if (syn) {
       var sy = o.syn || {};
-      world = TrailSynMap.generate({ seed: sy.seed, preset: sy.preset, reliefMul: sy.reliefMul, baseElev: sy.baseElev, interval: sy.interval }, { wmm: fw / pxmm, hmm: fh / pxmm, scale: o.scale }, onStatus);
+      world = TrailSynMap.generate({ seed: sy.seed, preset: sy.preset, reliefMul: sy.reliefMul, baseElev: sy.baseElev, interval: sy.interval, cliffs: !(sy.layers && sy.layers.cliff === false) }, { wmm: fw / pxmm, hmm: fh / pxmm, scale: o.scale }, onStatus);
       await new Promise(function (r) { setTimeout(r, 15); });
       TrailSynMap.populate(world, { seed: sy.seed, preset: sy.preset }, onStatus);
       await new Promise(function (r) { setTimeout(r, 15); });

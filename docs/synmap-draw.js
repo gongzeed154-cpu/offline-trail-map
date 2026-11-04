@@ -251,8 +251,15 @@
           strokeContour(ln, level, style);
           // วงปิดที่ด้านในต่ำกว่า = แอ่ง (คุ้งกระทะ)
           if (ln.closed && offset === 0) {
-            var cx = 0, cy = 0; ln.pts.forEach(function (q) { cx += q[0]; cy += q[1]; }); cx /= ln.pts.length; cy /= ln.pts.length;
-            if (sampleH(world, cx, cy) < level - 0.2 * iv) depressionTicks.push({ ln: ln, level: level, idx: isIdx });
+            // ตรวจด้านในวงจริง (ไม่ใช้จุดศูนย์กลาง ซึ่งอาจตกนอกวงรูปเกือกม้า): ดูความสูงที่ขยับเข้าด้านในวงเล็กน้อยหลายจุด
+            var pp = ln.pts, area = 0, qk; for (qk = 0; qk < pp.length; qk++) { var na = pp[(qk + 1) % pp.length]; area += pp[qk][0] * na[1] - na[0] * pp[qk][1]; }
+            var sgn = area > 0 ? 1 : -1, below = 0, tot = 0, stp = Math.max(1, Math.floor(pp.length / 24));
+            for (qk = 0; qk < pp.length; qk += stp) {
+              var a1 = pp[(qk - 1 + pp.length) % pp.length], b1 = pp[(qk + 1) % pp.length], tx = b1[0] - a1[0], ty = b1[1] - a1[1], tl = Math.hypot(tx, ty) || 1;
+              var ix = pp[qk][0] - sgn * ty / tl * 0.8, iy = pp[qk][1] + sgn * tx / tl * 0.8;
+              tot++; if (sampleH(world, ix, iy) < level) below++;
+            }
+            if (tot >= 4 && below / tot > 0.8) depressionTicks.push({ ln: ln, level: level, idx: isIdx });
           }
           if (isIdx && offset === 0 && style.label) labelSpots.push({ ln: ln, level: level });
         });
@@ -312,8 +319,6 @@
     if (L.cliff) {
       world.cliffs.forEach(function (cl, ci) {
         var pts = I.chaikin(cl.path, 2), k;
-        c.strokeStyle = '#111'; c.lineWidth = mm(0.35); dash(null);
-        c.beginPath();
         var seg = [], segs = [];
         for (k = 0; k < pts.length; k++) {
           var nxp = pts[Math.min(pts.length - 1, k + 1)], pvp = pts[Math.max(0, k - 1)], tx = nxp[0] - pvp[0], ty = nxp[1] - pvp[1], tl = Math.hypot(tx, ty) || 1, nxv = -ty / tl, nyv = tx / tl;
@@ -323,18 +328,10 @@
         if (seg.length) segs.push(seg);
         segs.forEach(function (sg) {
           if (sg.length < 3) return;
-          c.beginPath(); sg.forEach(function (q, k2) { if (k2) c.lineTo(X(q.p[0]), Y(q.p[1])); else c.moveTo(X(q.p[0]), Y(q.p[1])); }); c.stroke();
-          c.lineWidth = mm(0.2); c.beginPath();
-          var acc = 0, step = mm(1.5), nextAt = step;
-          for (var k3 = 1; k3 < sg.length; k3++) {
-            var ax = X(sg[k3 - 1].p[0]), ay = Y(sg[k3 - 1].p[1]), bx3 = X(sg[k3].p[0]), by3 = Y(sg[k3].p[1]), sl = Math.hypot(bx3 - ax, by3 - ay);
-            while (acc + sl >= nextAt && sl > 0) { var tt = (nextAt - acc) / sl, px2 = ax + (bx3 - ax) * tt, py2 = ay + (by3 - ay) * tt; c.moveTo(px2, py2); c.lineTo(px2 + sg[k3].dir * sg[k3].nx * mm(1.3), py2 + sg[k3].dir * sg[k3].ny * mm(1.3)); nextAt += step; }
-            acc += sl;
-          }
-          c.stroke(); c.lineWidth = mm(0.35);
+          // แผนที่จริงแสดงหน้าผาด้วยเส้นชั้นความสูงหลายเส้นที่บีบชิดกันจนเกือบรวมเป็นเส้นเดียว (ภูมิประเทศสร้างให้แล้ว) จึงไม่วาดสัญลักษณ์เพิ่ม
           var mid = sg[Math.floor(sg.length / 2)];
           keyItems.push({ type: 'cliff', name: 'หน้าผา', gx: mid.p[0], gy: mid.p[1], elev: sampleH(world, mid.p[0], mid.p[1]) });
-          if (L.names) label('หน้าผา', X(mid.p[0]) - mm(6), Y(mid.p[1]) - mm(3), 2.3, { italic: true, center: true, color: '#333' });
+          if (L.names) label('หน้าผา', X(mid.p[0]), Y(mid.p[1]), 2.3, { italic: true, color: '#5b3510' });
         });
       });
     }
@@ -488,7 +485,7 @@
     if (L.ridge) line('สันเขา', { color: 'rgba(150,70,30,.75)', w: 0.1, dash: [4, 2] });
     if (L.saddle) sym('คอเขา', 'saddle');
     if (L.valley) line('หุบเขา (แกนหุบเขา)', { color: 'rgba(40,100,170,.8)', w: 0.08, dash: [0.5, 2] });
-    if (L.cliff) out.push({ label: 'หน้าผา', draw: function (c, x, y, s) { c.save(); c.strokeStyle = '#111'; c.lineWidth = s * 0.1; c.beginPath(); c.moveTo(x - s * 0.9, y - s * 0.2); c.lineTo(x + s * 0.9, y - s * 0.2); c.stroke(); c.lineWidth = s * 0.06; for (var k = -3; k <= 3; k++) { c.beginPath(); c.moveTo(x + k * s * 0.27, y - s * 0.2); c.lineTo(x + k * s * 0.27, y + s * 0.3); c.stroke(); } c.restore(); } });
+    if (L.cliff) out.push({ label: 'หน้าผา (เส้นชั้นความสูงบีบชิดกันมาก)', draw: function (c, x, y, s) { c.save(); for (var k = 0; k < 5; k++) { c.strokeStyle = k === 2 ? '#7d4a1c' : '#a06a38'; c.lineWidth = s * (k === 2 ? 0.09 : 0.05); c.beginPath(); var yo = (k - 2) * s * 0.22; c.moveTo(x - s * 0.9, y + yo * 1.6); c.quadraticCurveTo(x, y + yo * 0.12, x + s * 0.9, y + yo * 1.6); c.stroke(); } c.restore(); } });
     if (L.depr) out.push({ label: 'ที่ต่ำบนภูเขา (เลขคือความสูงก้นแอ่ง)', draw: function (c, x, y, s) { c.fillStyle = '#7d4a1c'; c.beginPath(); c.arc(x, y, s * 0.14, 0, 7); c.fill(); } });
     if (L.river) line('แม่น้ำ/ลำห้วย', { color: '#2a6fc9', w: 0.12 });
     if (L.stream) line('ร่องน้ำ/ห้วยมีน้ำบางฤดู', { color: '#3b7fd0', w: 0.06, dash: [4, 1.6] });

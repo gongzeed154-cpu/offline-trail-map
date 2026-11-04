@@ -251,21 +251,24 @@
 
     // หน้าผา (ชั้นหินชัน): ยกพื้นต่างระดับตามเส้นโค้ง
     world.cliffs = [];
-    var nEsc = o.preset in PRESETS ? PRESETS[o.preset].esc : 1;
+    var nEsc = o.preset in PRESETS ? PRESETS[o.preset].esc : 1, nCl = makeNoise((o.seed | 0) * 53 + 8);
     for (var e = 0; e < nEsc; e++) {
       var sx = nx * (0.2 + rnd() * 0.6), sy = ny * (0.2 + rnd() * 0.6), ang = rnd() * Math.PI * 2, len = nx * (0.22 + rnd() * 0.25), path = [], curv = (rnd() - 0.5) * 0.9;
       for (var st = 0; st <= 24; st++) { path.push([sx, sy]); sx += Math.cos(ang) * len / 24; sy += Math.sin(ang) * len / 24; ang += curv / 24 + (rnd() - 0.5) * 0.12; }
-      var stepH = Math.max(interval * 3.2, relief * (0.07 + rnd() * 0.06)), wEdge = 1.4;
+      var stepH = Math.max(interval * 5, relief * (0.09 + rnd() * 0.06)), wEdge = 0.75;
+      if (o.cliffs === false) { world.cliffs.length = 0; continue; } // ไม่ใส่หน้าผา (ยังใช้เลขสุ่มเท่าเดิม แผนที่ส่วนอื่นจึงไม่เปลี่ยน)
       for (j = 0; j < ny; j++) {
         for (i = 0; i < nx; i++) {
-          var best = 1e18, sign = 1;
+          var best = 1e18, sign = 1, bT = 0;
           for (var q = 0; q < path.length - 1; q++) {
             var ax = path[q][0], ay = path[q][1], bx = path[q + 1][0], by = path[q + 1][1], dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy;
             var t = l2 ? clamp(((i - ax) * dx + (j - ay) * dy) / l2, 0, 1) : 0, cx = ax + t * dx - i, cy = ay + t * dy - j, d2 = cx * cx + cy * cy;
-            if (d2 < best) { best = d2; sign = (dx * (j - ay) - dy * (i - ax)) >= 0 ? 1 : -1; }
+            if (d2 < best) { best = d2; sign = (dx * (j - ay) - dy * (i - ax)) >= 0 ? 1 : -1; bT = (q + t) / (path.length - 1); }
           }
-          var sd = Math.sqrt(best) * sign;
-          if (best < 900) h[j * nx + i] += stepH * smooth(-wEdge, wEdge, sd) - stepH * 0.5;
+          var dist = Math.sqrt(best), sd = dist * sign + 3.2 * fbm(nCl, i * 0.045, j * 0.045, 3, 0.55); // ขอบผาไม่เรียบ
+          // ความสูงผาค่อยๆ ลดที่ปลายทั้งสอง (เส้นชั้นแผ่ออก) และค่อยๆ หายไปเมื่อห่างจากผา (ไม่เกิดรอยต่อ)
+          var amp = smooth(0, 0.22, bT) * smooth(0, 0.22, 1 - bT) * (0.75 + 0.25 * fbm(nCl, bT * 6 + 40, 3.3, 2, 0.5)) * (1 - smooth(12, 30, dist));
+          if (dist < 30) h[j * nx + i] += amp * (stepH * smooth(-wEdge, wEdge, sd) - stepH * 0.5);
         }
       }
       world.cliffs.push({ path: path, side: 1, step: stepH });

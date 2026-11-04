@@ -400,8 +400,8 @@
 
     c.save();
     c.beginPath(); c.rect(fx, fy, fw, fh); c.clip();
-    c.strokeStyle = 'rgba(20,20,20,0.9)';
-    c.lineWidth = Math.max(1, mm(o.style === 'lines' ? 0.25 : 0.2));
+    c.strokeStyle = syn ? 'rgba(25,40,80,0.85)' : 'rgba(20,20,20,0.9)';
+    c.lineWidth = Math.max(1, mm(syn ? 0.13 : (o.style === 'lines' ? 0.25 : 0.2)));
     var k, kk;
     if (geo) {
       drawGeoGrid();
@@ -420,6 +420,21 @@
         }
       }
       c.stroke();
+    }
+    // เลขกริดตัวใหญ่ในแผนที่ (แบบแผนที่ทหาร) เฉพาะแผนที่สมมุติที่กริดห่าง 1 กม. ขึ้นไป
+    if (syn && !geo && I >= 1000 && o.style === 'lines') {
+      c.save(); c.font = '700 ' + mm(4.2).toFixed(1) + 'px ' + (TrailSynDraw.FONT || 'sans-serif'); c.fillStyle = 'rgba(15,15,25,.82)'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.lineWidth = mm(0.8); c.strokeStyle = 'rgba(226,237,232,.8)'; c.lineJoin = 'round';
+      function two(v) { var n = Math.round(v / 1000) % 100; return (n < 10 ? '0' : '') + n; }
+      // วางเลขไว้กลางช่องระหว่างเส้นกริดอีกแนว (ไม่ให้เลขแนวตั้งกับแนวนอนชนกันที่จุดตัด)
+      var rowsY = [], colsX = [], nRow = Math.max(1, Math.round(fh / mm(160))), nCol = Math.max(1, Math.round(fw / mm(160)));
+      function midNear(target, vals) { var b = null, bd = 1e9; for (var t = 0; t + 1 < vals.length; t++) { var m = (vals[t] + vals[t + 1]) / 2, d = Math.abs(m - target); if (d < bd) { bd = d; b = m; } } return b; }
+      var ys = [], xs = []; for (kk = kN0; kk <= kN1; kk++) ys.push(yOf(kk * I)); for (k = kE0; k <= kE1; k++) xs.push(xOf(k * I));
+      ys.sort(function (a, b) { return a - b; }); xs.sort(function (a, b) { return a - b; });
+      for (var r1 = 0; r1 < nRow; r1++) { var my = midNear(fy + fh * (r1 + 0.5) / nRow, ys); if (my !== null) rowsY.push(my); }
+      for (var r2 = 0; r2 < nCol; r2++) { var mx = midNear(fx + fw * (r2 + 0.5) / nCol, xs); if (mx !== null) colsX.push(mx); }
+      for (k = kE0; k <= kE1; k++) { var xl = xOf(k * I); if (xl > fx + mm(8) && xl < fx + fw - mm(8)) rowsY.forEach(function (yy) { c.fillText(two(k * I), xl, yy); }); }
+      for (kk = kN0; kk <= kN1; kk++) { var yl = yOf(kk * I); if (yl > fy + mm(8) && yl < fy + fh - mm(8)) colsX.forEach(function (xx) { c.fillText(two(kk * I), xx, yl); }); }
+      c.restore();
     }
     // ขีดสั้นที่ขอบกรอบ (กริด UTM)
     if (!geo) {
@@ -872,7 +887,7 @@
         $('pBuild').disabled = false; $('pPlate').disabled = false;
         var dpiNote = res.dpi && res.dpi < cfg.dpi ? ' (ลดจาก ' + cfg.dpi + ' dpi เพราะกระดาษใหญ่)' : '';
         $('pStat').textContent = (res.plate ? 'แผ่นวัดมุม ' : 'แผนที่ ') + (cfg.paper === 'custom' ? cfg.cw + '×' + cfg.ch + ' มม.' : cfg.paper) + ' · ' + res.w + '×' + res.h + ' px · ' + (res.dpi || cfg.dpi) + ' dpi' + dpiNote + (res.nsym ? ' · สัญลักษณ์ ' + res.nsym + ' รายการ' : '');
-        var pv = document.createElement('canvas');
+        var pv = document.createElement('canvas'); window.__lastPrintCanvas = res.cv;
         pv.width = 720; pv.height = Math.round(720 * res.h / res.w);
         pv.getContext('2d').drawImage(res.cv, 0, 0, pv.width, pv.height);
         var img = document.createElement('img');

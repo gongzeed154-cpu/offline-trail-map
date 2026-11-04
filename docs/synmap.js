@@ -98,7 +98,7 @@
     }
     var acc = new Float32Array(N).fill(1), i, p;
     for (i = oi - 1; i >= 0; i--) { c = order[i]; p = parent[c]; if (p >= 0) acc[p] += acc[c]; }
-    return { filled: filled, parent: parent, acc: acc };
+    return { filled: filled, parent: parent, acc: acc, order: order, n: oi };
   }
 
   function blur(a, w, h, passes) {
@@ -110,9 +110,26 @@
   }
 
   /* ---------- สร้างความสูง ---------- */
+  // การกัดเซาะแบบกำลังลำน้ำ (stream power, แก้แบบ implicit ตามลำดับจากปากน้ำขึ้นไป)
+  // ทำให้เกิดร่องห้วย สันเขาย่อย และเส้นชั้นความสูงหยักเป็นธรรมชาติแบบแผนที่จริง
+  function erode(h, nx, ny, relief, strength, noiseSeed) {
+    if (!strength) return;
+    var N = nx * ny, it, c, p;
+    // 1) ร่องน้ำ: ขุดลงตามปริมาณน้ำที่ไหลผ่าน ได้โครงข่ายห้วยแตกกิ่ง (เส้นชั้นจะหยักเข้าหาต้นน้ำ)
+    for (it = 0; it < 3; it++) {
+      var fl = flood(h, nx, ny, relief * 1e-5), acc = fl.acc;
+      var depth = relief * (it === 0 ? 0.05 : 0.03) * strength, a0 = it === 0 ? 90 : 40;
+      for (c = 0; c < N; c++) h[c] = fl.filled[c] - depth * (1 - Math.exp(-(acc[c] - 1) / a0));
+      blur(h, nx, ny, 1);
+    }
+    var mn = 1e9, mx = -1e9;
+    for (p = 0; p < N; p++) { if (h[p] < mn) mn = h[p]; if (h[p] > mx) mx = h[p]; }
+    for (p = 0; p < N; p++) h[p] = (h[p] - mn) / (mx - mn || 1) * relief;
+  }
+
   function buildHeights(o, nx, ny, relief, rnd) {
     var seed = o.seed | 0, P = PRESETS[o.preset] || PRESETS.hills;
-    var n1 = makeNoise(seed * 7 + 1), n2 = makeNoise(seed * 13 + 5), nw = makeNoise(seed * 5 + 3), nm = makeNoise(seed * 3 + 9);
+    var n1 = makeNoise(seed * 7 + 1), n2 = makeNoise(seed * 13 + 5), nw = makeNoise(seed * 5 + 3), nm = makeNoise(seed * 3 + 9), nd = makeNoise(seed * 11 + 21);
     var h = new Float32Array(nx * ny), i, j, x, y;
     var f = P.freq;
     // ลำน้ำหลักคดเคี้ยวผ่านแผนที่ (ขุดร่องให้น้ำไหลตามนี้) และทิศลาดเอียงโดยรวม
@@ -144,14 +161,16 @@
         if (o.preset === 'plateau') shape = smooth(0.3, 0.42, shape) * 0.85 + shape * 0.15;
         var u = (i + 0.5) / nx, v = (j + 0.5) / ny;
         var tilt = (vertical ? v : u) * tiltDir * P.tilt;
-        h[j * nx + i] = shape * 0.62 + tilt + 0.55 * (1 - Math.exp(-rdist[j * nx + i] / rampScale));
+        var det = fbm(nd, x * 3.2, y * 3.2, 3, 0.5) * 0.09 * (0.4 + massif);
+        h[j * nx + i] = shape * 0.66 + det + tilt + 0.4 * (1 - Math.exp(-rdist[j * nx + i] / rampScale));
       }
     }
     // ปรับช่วงเป็น 0..1 แล้วคูณระดับสูงต่ำ
     var mn = 1e9, mx = -1e9, p;
-    blur(h, nx, ny, 2);
+    blur(h, nx, ny, 1);
     for (p = 0; p < h.length; p++) { if (h[p] < mn) mn = h[p]; if (h[p] > mx) mx = h[p]; }
     for (p = 0; p < h.length; p++) h[p] = (h[p] - mn) / (mx - mn) * relief;
+    erode(h, nx, ny, relief, P.erode === undefined ? 1 : P.erode);
 
     var carve = relief * 0.16, wid = nx * 0.028, band = Math.ceil(wid * 3.4);
     var dmin2 = new Float32Array(nx * ny).fill(1e9);
@@ -298,7 +317,7 @@
     onStatus('วิเคราะห์ทางน้ำ…');
     var fl = flood(h, nx, ny, Math.max(0.03, interval * 0.012));
     world.acc = fl.acc; world.parent = fl.parent; world.filled = fl.filled;
-    var T_STREAM = Math.max(28, N * 0.0032), T_RIVER = N * 0.018;
+    var cellA = cellM * cellM, T_STREAM = clamp(220000 / cellA, 20, N * 0.004), T_RIVER = clamp(9e6 / cellA, T_STREAM * 8, N * 0.03);
     world.T_STREAM = T_STREAM; world.T_RIVER = T_RIVER;
 
     // แบ่งช่วงลำน้ำ
@@ -539,11 +558,14 @@
     onStatus('สร้างถนนและทางเดิน…');
     // ต้นทุนบนกริดหยาบ
     var cstep = Math.max(1, Math.round(nx / 260)), cw = Math.ceil(nx / cstep), ch = Math.ceil(ny / cstep), cost = new Float32Array(cw * ch), cj, ci;
+    var wetM = new Uint8Array(nx * ny); for (var wq = 0; wq < nx * ny; wq++) wetM[wq] = world.riverMask[wq] || (world.streamMask[wq] && world.acc[wq] >= world.T_STREAM * 3) ? 1 : 0;
+    var wetD = distanceTo(wetM, nx, ny);
     function fillCost(footMode) {
       for (cj = 0; cj < ch; cj++) for (ci = 0; ci < cw; ci++) {
         var q = Math.min(ny - 1, cj * cstep + (cstep >> 1)) * nx + Math.min(nx - 1, ci * cstep + (cstep >> 1)), sl = slope[q], c0 = 1 + (footMode ? sl * sl / 45 : sl * sl / 8);
         if (world.riverMask[q]) c0 += footMode ? 25 : 60;
         else if (world.streamMask[q]) c0 += footMode ? 3 : 7;
+        else if (!footMode && wetD[q] < 4) c0 += 10 * (4 - wetD[q]); // ไม่ให้ถนนวิ่งเลียบชิดลำน้ำ (สะพานถี่)
         if (pondMask[q]) c0 = 1e6;
         if (sl > (footMode ? 40 : 24)) c0 = 1e6;
         cost[cj * cw + ci] = c0;
@@ -555,7 +577,11 @@
       if (!path) return null;
       var pts = path.map(function (q) { return [q[0] * cstep + cstep / 2, q[1] * cstep + cstep / 2]; });
       pts[0] = [ax, ay]; pts[pts.length - 1] = [bx, by];
-      return chaikin(pts, 3);
+      // ตัดจุดถี่ของกริดหยาบออก (ลบมุมฉากแบบขั้นบันได) แล้วทำโค้งเรียบ
+      var dec = [pts[0]], lst = pts[0], gap = cstep * 2.6;
+      for (var k = 1; k < pts.length - 1; k++) if (Math.hypot(pts[k][0] - lst[0], pts[k][1] - lst[1]) >= gap) { dec.push(pts[k]); lst = pts[k]; }
+      dec.push(pts[pts.length - 1]);
+      return chaikin(dec, 3);
     }
     var roads = [];
     function addRoad(cls, pts, from, to) { if (pts && pts.length > 2) roads.push({ cls: cls, pts: pts, from: from, to: to }); }
@@ -587,7 +613,7 @@
     world.roads = roads;
     // สะพาน: จุดที่ถนนข้ามลำน้ำ (ตรวจตามเส้นทุกครึ่งเซลล์ เมื่อออกจากน้ำจึงวางสะพานกลางช่วงเปียก)
     var bridges = [];
-    function wetAt(gx, gy) { var xi = Math.floor(gx), yi = Math.floor(gy); return xi >= 0 && yi >= 0 && xi < nx && yi < ny && (world.streamMask[yi * nx + xi] || world.riverMask[yi * nx + xi]); }
+    function wetAt(gx, gy) { var xi = Math.floor(gx), yi = Math.floor(gy); return xi >= 0 && yi >= 0 && xi < nx && yi < ny && wetM[yi * nx + xi] === 1; }
     roads.forEach(function (rd) {
       if (rd.cls !== 'main' && rd.cls !== 'sec') return;
       var inWet = false, startPt = null, lastPt = null, lastAng = 0;
@@ -600,7 +626,7 @@
           if (!wet && inWet) {
             inWet = false;
             var mx = (startPt[0] + lastPt[0]) / 2, my = (startPt[1] + lastPt[1]) / 2;
-            if (!bridges.some(function (b) { return Math.hypot(b.gx - mx, b.gy - my) < 6; })) bridges.push({ gx: mx, gy: my, ang: lastAng });
+            if (!bridges.some(function (b) { return Math.hypot(b.gx - mx, b.gy - my) < 14; })) bridges.push({ gx: mx, gy: my, ang: lastAng });
           }
         }
       }

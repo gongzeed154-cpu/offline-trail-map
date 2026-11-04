@@ -248,11 +248,10 @@
     var nx = clamp(Math.round(dims.wmm * 2.2), 260, 900), ny = Math.round(nx * extH / extW);
     var cellM = extW / nx, N = nx * ny;
     var diag = Math.sqrt(extW * extW + extH * extH);
-    var relief = clamp(diag * P.relief * (o.reliefMul || 1), 15, 3000);
-    // ช่วงห่างมาตรฐานตามมาตราส่วน (แผนที่ทหาร 1:50,000 = 20 ม. เส้นหลักทุก 100 ม.) ถ้าภูมิประเทศเตี้ยมากจึงลดลง
-    var stdIv = dims.scale >= 50000 ? 20 : dims.scale >= 25000 ? 10 : dims.scale >= 10000 ? 5 : 2;
-    while (stdIv > 1 && relief / stdIv < 10) stdIv = stdIv === 20 ? 10 : stdIv === 10 ? 5 : stdIv === 5 ? 2 : 1;
-    var interval = o.interval && o.interval !== 'auto' ? +o.interval : stdIv;
+    // ความสูงต่ำสุดของภูมิประเทศ ให้มีเส้นชั้นมาตรฐาน (ทุก 20 ม.) พอให้อ่านได้แม้ใช้มาตราส่วนใหญ่ (พื้นที่เล็ก)
+    var relief = clamp(Math.max(diag * P.relief, o.preset === 'plain' ? 80 : 220) * (o.reliefMul || 1), 15, 3000);
+    // มาตรฐานแผนที่ทหาร: เส้นรองทุก 20 ม. เส้นหลักทุก 100 ม. (เปลี่ยนได้ในตัวเลือก)
+    var interval = o.interval && o.interval !== 'auto' ? +o.interval : 20;
     var world = { nx: nx, ny: ny, N: N, cellM: cellM, extW: extW, extH: extH, relief: relief, interval: interval, index: interval * 5, base: o.baseElev || 200, seed: o.seed | 0, preset: o.preset, rnd: rnd };
     var namer = makeNamer(rnd);
     world.namer = namer;

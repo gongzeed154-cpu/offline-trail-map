@@ -740,7 +740,7 @@
   function chk(id, label, sub, on, extra) { return '<label class="opt"><input type="checkbox" id="' + id + '"' + (on ? ' checked' : '') + (extra || '') + '><span>' + label + (sub ? '<small>' + sub + '</small>' : '') + '</span></label>'; }
 
   function normSyn() {
-    var d = { seed: 1234, preset: 'hills', reliefMul: 1, baseElev: 200, interval: 'auto', layers: TrailSynDraw.defaultLayers() };
+    var d = { seed: 1234, preset: 'hills', reliefMul: 1, baseElev: 200, interval: 20, layers: TrailSynDraw.defaultLayers() };
     var sy = cfg.syn && typeof cfg.syn === 'object' ? cfg.syn : {};
     cfg.syn = Object.assign(d, sy);
     cfg.syn.layers = Object.assign(TrailSynDraw.defaultLayers(), sy.layers || {});
@@ -765,7 +765,7 @@
         fld('รหัสแผนที่', '<input type="number" id="sSeed" min="0" max="999999" style="' + INP + '"><button type="button" class="btn alt" id="sRand" style="flex:none;padding:8px 10px">สุ่มใหม่</button>') +
         fld('ต่างระดับ', '<input type="range" id="sRelief" min="40" max="200" step="10" style="flex:1"><span id="sReliefV" style="flex:0 0 46px;text-align:right"></span>') +
         fld('ความสูงฐาน (ม.)', '<input type="number" id="sBase" min="0" max="4000" step="10" style="' + INP + '">') +
-        fld('ระยะเส้นชั้น', opts('sIv', [['auto', 'อัตโนมัติตามสเกล'], [1, '1 ม.'], [2, '2 ม.'], [5, '5 ม.'], [10, '10 ม.'], [20, '20 ม.'], [25, '25 ม.'], [40, '40 ม.'], [50, '50 ม.'], [100, '100 ม.']], sy.interval)) +
+        fld('ระยะเส้นชั้น', opts('sIv', [[20, '20 ม. · หลักทุก 100 ม. (มาตรฐาน)'], [10, '10 ม. · หลักทุก 50 ม.'], [5, '5 ม. · หลักทุก 25 ม.'], [2, '2 ม. · หลักทุก 10 ม.'], [40, '40 ม. · หลักทุก 200 ม.'], [100, '100 ม. · หลักทุก 500 ม.']], sy.interval === 'auto' ? 20 : sy.interval)) +
         '<h4 style="margin:10px 0 4px">ชุดสำเร็จรูป</h4><div id="sSets" style="display:flex;flex-wrap:wrap;gap:6px">' +
         Object.keys(TrailSynDraw.PRESET_SETS).map(function (k) { return '<button type="button" class="btn alt" data-set="' + k + '" style="flex:none;padding:6px 10px;font-size:13px">' + TrailSynDraw.PRESET_SETS[k].name + '</button>'; }).join('') + '</div>' +
         '<h4 style="margin:10px 0 2px">เลือกรายละเอียดที่จะใส่ในแผนที่</h4>' +

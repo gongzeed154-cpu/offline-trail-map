@@ -4,7 +4,7 @@
   var C = TrailCommon;
   var KEY = 'trail_print_v1';
   var PAPERS = { A6: [105, 148], A5: [148, 210], A4: [210, 297], A3: [297, 420], A2: [420, 594], A1: [594, 841], A0: [841, 1189], B5: [176, 250], B4: [250, 353], Letter: [216, 279] };
-  var SCALES = [1000, 2500, 5000, 10000, 12500, 25000, 50000, 100000, 250000];
+  var SCALES = [1000, 2500, 5000, 10000, 11250, 12500, 25000, 50000, 100000, 250000];
   var FONT = '"Sarabun","Noto Sans Thai",-apple-system,sans-serif';
   var BARS = [[100, 25], [200, 50], [500, 100], [1000, 250], [2000, 500], [2500, 500], [4000, 1000], [5000, 1000], [8000, 2000], [10000, 2000], [20000, 5000], [25000, 5000], [40000, 10000], [50000, 10000]];
 
@@ -278,7 +278,7 @@
 
     if (syn) {
       var sy = o.syn || {};
-      world = TrailSynMap.generate({ seed: sy.seed, preset: sy.preset, reliefMul: sy.reliefMul, baseElev: sy.baseElev, interval: sy.interval }, { wmm: fw / pxmm, hmm: fh / pxmm, scale: o.scale }, onStatus);
+      world = TrailSynMap.generate({ seed: sy.seed, preset: sy.preset, reliefMul: sy.reliefMul, baseElev: sy.baseElev, interval: sy.interval, cliffs: !(sy.layers && sy.layers.cliff === false) }, { wmm: fw / pxmm, hmm: fh / pxmm, scale: o.scale }, onStatus);
       await new Promise(function (r) { setTimeout(r, 15); });
       TrailSynMap.populate(world, { seed: sy.seed, preset: sy.preset }, onStatus);
       await new Promise(function (r) { setTimeout(r, 15); });
@@ -400,8 +400,8 @@
 
     c.save();
     c.beginPath(); c.rect(fx, fy, fw, fh); c.clip();
-    c.strokeStyle = 'rgba(20,20,20,0.9)';
-    c.lineWidth = Math.max(1, mm(o.style === 'lines' ? 0.25 : 0.2));
+    c.strokeStyle = syn ? 'rgba(25,40,80,0.85)' : 'rgba(20,20,20,0.9)';
+    c.lineWidth = Math.max(1, mm(syn ? 0.13 : (o.style === 'lines' ? 0.25 : 0.2)));
     var k, kk;
     if (geo) {
       drawGeoGrid();
@@ -420,6 +420,21 @@
         }
       }
       c.stroke();
+    }
+    // เลขกริดตัวใหญ่ในแผนที่ (แบบแผนที่ทหาร) เฉพาะแผนที่สมมุติที่กริดห่าง 1 กม. ขึ้นไป
+    if (syn && !geo && I >= 1000 && o.style === 'lines') {
+      c.save(); c.font = '700 ' + mm(4.2).toFixed(1) + 'px ' + (TrailSynDraw.FONT || 'sans-serif'); c.fillStyle = 'rgba(15,15,25,.82)'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.lineWidth = mm(0.8); c.strokeStyle = 'rgba(226,237,232,.8)'; c.lineJoin = 'round';
+      function two(v) { var n = Math.round(v / 1000) % 100; return (n < 10 ? '0' : '') + n; }
+      // วางเลขไว้กลางช่องระหว่างเส้นกริดอีกแนว (ไม่ให้เลขแนวตั้งกับแนวนอนชนกันที่จุดตัด)
+      var rowsY = [], colsX = [], nRow = Math.max(1, Math.round(fh / mm(160))), nCol = Math.max(1, Math.round(fw / mm(160)));
+      function midNear(target, vals) { var b = null, bd = 1e9; for (var t = 0; t + 1 < vals.length; t++) { var m = (vals[t] + vals[t + 1]) / 2, d = Math.abs(m - target); if (d < bd) { bd = d; b = m; } } return b; }
+      var ys = [], xs = []; for (kk = kN0; kk <= kN1; kk++) ys.push(yOf(kk * I)); for (k = kE0; k <= kE1; k++) xs.push(xOf(k * I));
+      ys.sort(function (a, b) { return a - b; }); xs.sort(function (a, b) { return a - b; });
+      for (var r1 = 0; r1 < nRow; r1++) { var my = midNear(fy + fh * (r1 + 0.5) / nRow, ys); if (my !== null) rowsY.push(my); }
+      for (var r2 = 0; r2 < nCol; r2++) { var mx = midNear(fx + fw * (r2 + 0.5) / nCol, xs); if (mx !== null) colsX.push(mx); }
+      for (k = kE0; k <= kE1; k++) { var xl = xOf(k * I); if (xl > fx + mm(8) && xl < fx + fw - mm(8)) rowsY.forEach(function (yy) { c.fillText(two(k * I), xl, yy); }); }
+      for (kk = kN0; kk <= kN1; kk++) { var yl = yOf(kk * I); if (yl > fy + mm(8) && yl < fy + fh - mm(8)) colsX.forEach(function (xx) { c.fillText(two(kk * I), xx, yl); }); }
+      c.restore();
     }
     // ขีดสั้นที่ขอบกรอบ (กริด UTM)
     if (!geo) {
@@ -725,7 +740,7 @@
   function chk(id, label, sub, on, extra) { return '<label class="opt"><input type="checkbox" id="' + id + '"' + (on ? ' checked' : '') + (extra || '') + '><span>' + label + (sub ? '<small>' + sub + '</small>' : '') + '</span></label>'; }
 
   function normSyn() {
-    var d = { seed: 1234, preset: 'hills', reliefMul: 1, baseElev: 200, interval: 'auto', layers: TrailSynDraw.defaultLayers() };
+    var d = { seed: 1234, preset: 'hills', reliefMul: 1, baseElev: 200, interval: 20, layers: TrailSynDraw.defaultLayers() };
     var sy = cfg.syn && typeof cfg.syn === 'object' ? cfg.syn : {};
     cfg.syn = Object.assign(d, sy);
     cfg.syn.layers = Object.assign(TrailSynDraw.defaultLayers(), sy.layers || {});
@@ -750,7 +765,7 @@
         fld('รหัสแผนที่', '<input type="number" id="sSeed" min="0" max="999999" style="' + INP + '"><button type="button" class="btn alt" id="sRand" style="flex:none;padding:8px 10px">สุ่มใหม่</button>') +
         fld('ต่างระดับ', '<input type="range" id="sRelief" min="40" max="200" step="10" style="flex:1"><span id="sReliefV" style="flex:0 0 46px;text-align:right"></span>') +
         fld('ความสูงฐาน (ม.)', '<input type="number" id="sBase" min="0" max="4000" step="10" style="' + INP + '">') +
-        fld('ระยะเส้นชั้น', opts('sIv', [['auto', 'อัตโนมัติตามสเกล'], [1, '1 ม.'], [2, '2 ม.'], [5, '5 ม.'], [10, '10 ม.'], [20, '20 ม.'], [25, '25 ม.'], [40, '40 ม.'], [50, '50 ม.'], [100, '100 ม.']], sy.interval)) +
+        fld('ระยะเส้นชั้น', opts('sIv', [[20, '20 ม. · หลักทุก 100 ม. (มาตรฐาน)'], [10, '10 ม. · หลักทุก 50 ม.'], [5, '5 ม. · หลักทุก 25 ม.'], [2, '2 ม. · หลักทุก 10 ม.'], [40, '40 ม. · หลักทุก 200 ม.'], [100, '100 ม. · หลักทุก 500 ม.']], sy.interval === 'auto' ? 20 : sy.interval)) +
         '<h4 style="margin:10px 0 4px">ชุดสำเร็จรูป</h4><div id="sSets" style="display:flex;flex-wrap:wrap;gap:6px">' +
         Object.keys(TrailSynDraw.PRESET_SETS).map(function (k) { return '<button type="button" class="btn alt" data-set="' + k + '" style="flex:none;padding:6px 10px;font-size:13px">' + TrailSynDraw.PRESET_SETS[k].name + '</button>'; }).join('') + '</div>' +
         '<h4 style="margin:10px 0 2px">เลือกรายละเอียดที่จะใส่ในแผนที่</h4>' +
@@ -775,7 +790,7 @@
       '<div class="field" id="pCustomPaper"><label style="flex:0 0 96px">ขนาดเอง (มม.)</label><input type="number" id="pCW" min="60" max="1500" style="' + INP + '"><span>×</span><input type="number" id="pCH" min="60" max="2000" style="' + INP + '"></div>' +
       fld('แนววาง', opts('pLand', [['0', 'แนวตั้ง'], ['1', 'แนวนอน']], cfg.land ? '1' : '0')) +
       fld('มาตราส่วน', opts('pScale', SCALES.map(function (s) { return [s, '1 : ' + s.toLocaleString('en-US')]; }).concat([['custom', 'กำหนดเอง 1 : …']]), scaleSel)) +
-      '<div class="field" id="pCustomScale"><label style="flex:0 0 96px">1 : (ตัวเลข)</label><input type="number" id="pSC" min="500" max="5000000" step="500" style="' + INP + '"></div>' +
+      '<div class="field" id="pCustomScale"><label style="flex:0 0 96px">1 : (ตัวเลข)</label><input type="number" id="pSC" min="500" max="5000000" step="1" style="' + INP + '"></div>' +
       fld('ช่วงกริด', opts('pGrid', [['auto', 'อัตโนมัติตามสเกล'], [10, '10 ม.'], [20, '20 ม.'], [50, '50 ม.'], [100, '100 ม.'], [250, '250 ม.'], [500, '500 ม.'], [1000, '1 กม.'], [2000, '2 กม.'], [5000, '5 กม.'], [10000, '10 กม.']], cfg.grid)) +
       fld('แบบเส้นกริด', opts('pStyle', [['lines', 'เส้นเต็ม'], ['cross', 'กากบาทที่จุดตัด']], cfg.style)) +
       fld('รูปแบบพิกัด', '<select id="pFmt" style="' + INP + ';background:#fff">' +
@@ -872,7 +887,7 @@
         $('pBuild').disabled = false; $('pPlate').disabled = false;
         var dpiNote = res.dpi && res.dpi < cfg.dpi ? ' (ลดจาก ' + cfg.dpi + ' dpi เพราะกระดาษใหญ่)' : '';
         $('pStat').textContent = (res.plate ? 'แผ่นวัดมุม ' : 'แผนที่ ') + (cfg.paper === 'custom' ? cfg.cw + '×' + cfg.ch + ' มม.' : cfg.paper) + ' · ' + res.w + '×' + res.h + ' px · ' + (res.dpi || cfg.dpi) + ' dpi' + dpiNote + (res.nsym ? ' · สัญลักษณ์ ' + res.nsym + ' รายการ' : '');
-        var pv = document.createElement('canvas');
+        var pv = document.createElement('canvas'); window.__lastPrintCanvas = res.cv;
         pv.width = 720; pv.height = Math.round(720 * res.h / res.w);
         pv.getContext('2d').drawImage(res.cv, 0, 0, pv.width, pv.height);
         var img = document.createElement('img');

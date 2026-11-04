@@ -1122,6 +1122,37 @@
     };
   }
 
+  // ตรวจเวอร์ชันใหม่บนเว็บ (iPhone ที่เพิ่มลงหน้าจอโฮมมักไม่ตรวจเอง): อ่าน common.js ตรงจากเน็ต เทียบเลขเวอร์ชัน
+  var lastCheck = 0;
+  function verNum(v) { return parseInt(String(v).replace(/[^0-9]/g, ''), 10) || 0; }
+  function checkUpdate() {
+    if (!navigator.onLine || Date.now() - lastCheck < 60000) return;
+    lastCheck = Date.now();
+    navigator.serviceWorker && navigator.serviceWorker.getRegistration && navigator.serviceWorker.getRegistration().then(function (r) { if (r) r.update().catch(function () {}); }).catch(function () {});
+    fetch('./common.js?__v=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; }).then(function (t) {
+      var m = /APP_VERSION = '([^']+)'/.exec(t || '');
+      if (m && verNum(m[1]) > verNum(C.APP_VERSION)) showUpdateBar(m[1]);
+    }).catch(function () {});
+  }
+  function showUpdateBar(v) {
+    if (document.getElementById('updBar')) return;
+    var b = document.createElement('div'); b.id = 'updBar';
+    b.style.cssText = 'position:fixed;left:12px;right:12px;bottom:calc(env(safe-area-inset-bottom) + 12px);z-index:9999;background:#1b5e20;color:#fff;border-radius:12px;padding:12px 14px;font-size:15px;display:flex;gap:10px;align-items:center;box-shadow:0 4px 16px rgba(0,0,0,.35)';
+    b.innerHTML = '<span style="flex:1">มีเวอร์ชันใหม่ ' + v + ' (ตอนนี้ ' + C.APP_VERSION + ')</span><button id="updGo" style="background:#fff;color:#1b5e20;border:0;border-radius:8px;padding:8px 12px;font-size:15px;font-weight:700">อัปเดต</button><button id="updNo" style="background:none;color:#fff;border:0;font-size:18px;padding:4px 6px">✕</button>';
+    document.body.appendChild(b);
+    document.getElementById('updNo').onclick = function () { b.remove(); };
+    document.getElementById('updGo').onclick = function () {
+      if (downloading) { toast('รอดาวน์โหลดแผนที่เสร็จก่อนแล้วค่อยอัปเดต'); return; }
+      b.firstChild.textContent = 'กำลังอัปเดต…';
+      // ล้างที่เก็บไฟล์แอพ (ไม่แตะแผนที่ที่ดาวน์โหลดไว้) แล้วโหลดใหม่จากเน็ต
+      var done = function () { location.reload(); };
+      Promise.resolve(window.caches ? caches.keys() : []).then(function (keys) {
+        return Promise.all(keys.filter(function (k) { return k.indexOf('shell-') === 0; }).map(function (k) { return caches.delete(k); }));
+      }).then(function () { return navigator.serviceWorker ? navigator.serviceWorker.getRegistration() : null; })
+        .then(function (r) { return r ? r.update() : null; }).catch(function () {}).then(function () { setTimeout(done, 300); });
+    };
+  }
+
   async function main() {
     loadPrefs();
     if ($('sbVer')) $('sbVer').textContent = 'เวอร์ชัน ' + C.APP_VERSION + ' · อัปเดต ' + thaiDate(C.APP_DATE);
@@ -1134,6 +1165,8 @@
         if (!downloading) location.reload();
       });
     }
+    checkUpdate();
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) checkUpdate(); });
     window.addEventListener('online', updateOnline);
     window.addEventListener('offline', updateOnline);
     updateOnline();

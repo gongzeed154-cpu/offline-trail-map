@@ -34,6 +34,20 @@
   };
 
   /* ---------- เส้นชั้นความสูง (marching squares) ---------- */
+  // ทำเส้นชั้นให้เรียบแบบแผนที่ที่ช่างเขียน (ค่าเฉลี่ยเคลื่อนที่ 3 จุด หลายรอบ ปลายเส้นเปิดไม่ขยับ)
+  function smoothLine(pts, closed) {
+    var n = pts.length, a = pts.map(function (q) { return [q.x !== undefined ? q.x : q[0], q.y !== undefined ? q.y : q[1]]; }), b, r, k;
+    for (r = 0; r < 3; r++) {
+      b = new Array(n);
+      for (k = 0; k < n; k++) {
+        if (!closed && (k === 0 || k === n - 1)) { b[k] = a[k]; continue; }
+        var p = a[(k - 1 + n) % n], q = a[(k + 1) % n];
+        b[k] = [(p[0] + 2 * a[k][0] + q[0]) / 4, (p[1] + 2 * a[k][1] + q[1]) / 4];
+      }
+      a = b;
+    }
+    return a;
+  }
   function contourLines(world, level) {
     var nx = world.nx, ny = world.ny, h = world.h, A = [], B = [], pa = [], pb = [], i, j;
     function edgeH(ii, jj) { return (jj * nx + ii) * 2; }
@@ -95,7 +109,8 @@
         }
         fwd = back.reverse().concat(fwd);
       }
-      if (fwd.length >= 4) lines.push({ pts: fwd, closed: closed });
+      if (closed && fwd.length < 9) continue; // วงเล็กจิ๋วจากความขรุขระ แผนที่จริงตัดทิ้ง (generalization)
+      if (fwd.length >= 4) lines.push({ pts: smoothLine(fwd, closed), closed: closed });
     }
     return lines;
   }

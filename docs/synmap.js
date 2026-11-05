@@ -42,11 +42,26 @@
   }
 
   /* ---------- ชนิดภูมิประเทศ ---------- */
+  // แบบภูมิประเทศ: freq ความถี่ลูกเขา, ridge ความเป็นสันเขา, relief สัดส่วนต่างระดับ, tilt ลาดเอียงทั้งแผ่น, esc จำนวนหน้าผา, sink จำนวนแอ่ง,
+  // towns จำนวนหมู่บ้าน, aniso ยืดเป็นแนวเทือกเขา, karst เขาหินปูนโดด, mesa ยอดราบขอบผา, peakBoost ยอดเดี่ยวสูงเด่น, forest เพิ่มป่า, hillName คำนำหน้าชื่อเขา
   var PRESETS = {
     mountain: { name: 'ภูเขาสูงชัน', freq: 1.9, ridge: 0.65, relief: 0.07, tilt: 0.1, esc: 2, sink: 2, towns: 4 },
     hills: { name: 'เนินเขาสลับที่ราบ', freq: 1.9, ridge: 0.25, relief: 0.03, tilt: 0.18, esc: 1, sink: 1, towns: 5 },
     plain: { name: 'ที่ราบลูกคลื่น', freq: 1.6, ridge: 0.05, relief: 0.011, tilt: 0.3, esc: 0, sink: 1, towns: 6 },
-    plateau: { name: 'ที่ราบสูงมีหน้าผา', freq: 1.7, ridge: 0.25, relief: 0.045, tilt: 0.08, esc: 3, sink: 2, towns: 4 }
+    plateau: { name: 'ที่ราบสูงมีหน้าผา', freq: 1.7, ridge: 0.25, relief: 0.045, tilt: 0.08, esc: 3, sink: 2, towns: 4 },
+    range: { name: 'เทือกเขาซ้อนกันหลายแนว (ยอดเขาซ้อน)', freq: 1.7, ridge: 0.85, relief: 0.08, tilt: 0.22, esc: 1, sink: 1, towns: 3, aniso: 2.6 },
+    dense: { name: 'เนินเขาลูกเล็กถี่ๆ', freq: 4.2, ridge: 0.3, relief: 0.035, tilt: 0.06, esc: 0, sink: 2, towns: 5, erode: 0.6 },
+    karst: { name: 'เขาหินปูนโดดกลางที่ราบ', freq: 2.4, ridge: 0.1, relief: 0.05, tilt: 0.08, esc: 0, sink: 2, towns: 5, karst: 1, erode: 0.35, hillName: 'เขา' },
+    mesa: { name: 'ภูยอดตัด (ยอดราบ ขอบเป็นผา)', freq: 1.4, ridge: 0.2, relief: 0.06, tilt: 0.05, esc: 1, sink: 1, towns: 4, mesa: 1, hillName: 'ภู' },
+    peak: { name: 'ยอดเขาเดี่ยวสูงเด่น', freq: 1.8, ridge: 0.5, relief: 0.07, tilt: 0.05, esc: 1, sink: 1, towns: 4, peakBoost: 0.9 },
+    p_inthanon: { name: 'แบบดอยอินทนนท์ · เทือกเขาสูง ยอดดอยสูงสุด', freq: 1.7, ridge: 0.8, relief: 0.09, tilt: 0.15, esc: 1, sink: 1, towns: 3, aniso: 1.8, peakBoost: 0.6, forest: 0.35, hillName: 'ดอย' },
+    p_chiangdao: { name: 'แบบดอยหลวงเชียงดาว · ยอดเขาหินปูนสูงเดี่ยว', freq: 1.9, ridge: 0.45, relief: 0.08, tilt: 0.05, esc: 2, sink: 2, towns: 4, peakBoost: 1.1, karst: 0.3, forest: 0.2, hillName: 'ดอย' },
+    p_khaoyai: { name: 'แบบเขาใหญ่ · ที่ราบสูงขอบผา ป่าดิบ', freq: 1.7, ridge: 0.3, relief: 0.05, tilt: 0.08, esc: 3, sink: 2, towns: 3, mesa: 0.45, forest: 0.4, hillName: 'เขา' },
+    p_phukradueng: { name: 'แบบภูกระดึง · ภูยอดตัด หลังแป', freq: 1.2, ridge: 0.15, relief: 0.065, tilt: 0.04, esc: 1, sink: 1, towns: 4, mesa: 1, forest: 0.2, hillName: 'ภู' },
+    p_phuhinrongkla: { name: 'แบบภูหินร่องกล้า · ที่ราบสูงลานหิน', freq: 1.6, ridge: 0.35, relief: 0.055, tilt: 0.1, esc: 2, sink: 2, towns: 3, mesa: 0.6, forest: 0.25, hillName: 'ภู' },
+    p_kaengkrachan: { name: 'แบบแก่งกระจาน · เทือกเขาป่าทึบ ลำห้วยมาก', freq: 2.1, ridge: 0.7, relief: 0.07, tilt: 0.12, esc: 1, sink: 1, towns: 2, aniso: 1.7, forest: 0.5, hillName: 'เขา' },
+    p_phangnga: { name: 'แบบพังงา/เขาสก · เขาหินปูนชันถี่ๆ', freq: 3.2, ridge: 0.15, relief: 0.06, tilt: 0.05, esc: 0, sink: 2, towns: 4, karst: 1, erode: 0.3, forest: 0.3, hillName: 'เขา' },
+    p_samroiyot: { name: 'แบบเขาสามร้อยยอด · เขาหินปูนติดที่ราบ', freq: 2.1, ridge: 0.1, relief: 0.045, tilt: 0.12, esc: 0, sink: 1, towns: 6, karst: 0.8, erode: 0.35, hillName: 'เขา' }
   };
 
   var NICE = [1, 2, 2.5, 5, 10, 20, 25, 40, 50, 100, 200, 250, 500];
@@ -159,9 +174,13 @@
       for (var rs = 0; rs <= rn; rs++) { var rx = Math.round(rax + (rbx - rax) * rs / rn), ry = Math.round(ray + (rby - ray) * rs / rn); if (rx >= 0 && ry >= 0 && rx < nx && ry < ny) rmask[ry * nx + rx] = 1; }
     }
     var rdist = distanceTo(rmask, nx, ny), rampScale = nx * 0.3;
+    // ทิศของแนวเทือกเขาและตำแหน่งยอดเด่น (คำนวณจากรหัสแผนที่ ไม่ใช้เลขสุ่มลำดับเดิม แผนที่แบบเดิมจึงไม่เปลี่ยน)
+    var aniso = P.aniso || 1, rAng = ((seed * 0.6180339) % 1) * Math.PI, ca = Math.cos(rAng), sa = Math.sin(rAng);
+    var nk = makeNoise(seed * 17 + 33), pkX = 0.3 + ((seed * 0.7548776) % 1) * 0.4, pkY = 0.3 + ((seed * 0.5698403) % 1) * 0.4;
     for (j = 0; j < ny; j++) {
       for (i = 0; i < nx; i++) {
         x = (i + 0.5) / nx * f; y = (j + 0.5) / nx * f;
+        if (aniso !== 1) { var xr = x * ca + y * sa, yr = -x * sa + y * ca; x = xr / aniso; y = yr * 1.15; } // ยืดตามแนวเทือก
         var wx = x + 0.22 * nw(x * 0.8 + 11.3, y * 0.8 + 4.1), wy = y + 0.22 * nw(x * 0.8 + 71.7, y * 0.8 + 33.9);
         var base = fbm(n1, wx, wy, 4, 0.42);
         var rid = 1 - Math.abs(fbm(n2, wx * 1.0, wy * 1.0, 3, 0.4)) * 1.7;
@@ -170,10 +189,21 @@
         var shape = P.ridge * rid * (0.35 + 0.65 * massif) + (1 - P.ridge) * (0.5 + 0.5 * base) * (0.45 + 0.55 * massif);
         if (o.preset === 'plateau') shape = smooth(0.3, 0.42, shape) * 0.85 + shape * 0.15;
         var u = (i + 0.5) / nx, v = (j + 0.5) / ny;
+        if (P.karst) { // เขาหินปูนโดด: เนินตั้งชันแยกเป็นลูกๆ บนที่ราบ
+          var kt = fbm(nk, (i + 0.5) / nx * f * 2.2, (j + 0.5) / nx * f * 2.2, 3, 0.5), tower = smooth(0.1, 0.15, kt) * (0.3 + 0.7 * Math.pow(clamp((kt - 0.12) / 0.3, 0, 1), 0.7));
+          shape = shape * (1 - P.karst) + (0.15 * shape + tower * 0.85) * P.karst;
+        }
+        if (P.peakBoost) { var dpx = u - pkX, dpy = (v - pkY) * ny / nx; shape += P.peakBoost * Math.exp(-(dpx * dpx + dpy * dpy) / (2 * 0.13 * 0.13)); }
         var tilt = (vertical ? v : u) * tiltDir * P.tilt;
         var det = fbm(nd, x * 3.2, y * 3.2, 3, 0.5) * 0.09 * (0.4 + massif);
         h[j * nx + i] = shape * 0.66 + det + tilt + 0.4 * (1 - Math.exp(-rdist[j * nx + i] / rampScale));
       }
+    }
+    // ยอดราบขอบชัน (ภูยอดตัด): ตัดระดับที่เปอร์เซ็นไทล์ 60 ของความสูง ด้านบนแบนเกือบราบ ขอบเป็นลาดชัน
+    if (P.mesa) {
+      var smp = []; for (p = 0; p < h.length; p += 37) smp.push(h[p]); smp.sort(function (a, b) { return a - b; });
+      var q60 = smp[Math.floor(smp.length * 0.6)], spr = (smp[smp.length - 1] - smp[0]) || 1, dl = spr * 0.05;
+      for (p = 0; p < h.length; p++) { var tm = smooth(q60 - dl, q60 + dl, h[p]); h[p] = h[p] * (1 - P.mesa) + P.mesa * (smp[0] + spr * (0.55 * tm + 0.25 * (h[p] - smp[0]) / spr)); }
     }
     // ปรับช่วงเป็น 0..1 แล้วคูณระดับสูงต่ำ
     var mn = 1e9, mx = -1e9, p;
@@ -332,7 +362,7 @@
     onStatus('วิเคราะห์ทางน้ำ…');
     var fl = flood(h, nx, ny, Math.max(0.03, interval * 0.012));
     world.acc = fl.acc; world.parent = fl.parent; world.filled = fl.filled;
-    var cellA = cellM * cellM, T_STREAM = clamp(220000 / cellA, 20, N * 0.004), T_RIVER = clamp(9e6 / cellA, T_STREAM * 8, N * 0.03);
+    var cellA = cellM * cellM, T_STREAM = clamp(450000 / cellA, 30, N * 0.006), T_RIVER = clamp(9e6 / cellA, T_STREAM * 8, N * 0.03);
     world.T_STREAM = T_STREAM; world.T_RIVER = T_RIVER;
 
     // แบ่งช่วงลำน้ำ
@@ -383,7 +413,7 @@
     peaks.sort(function (a, b) { return b.elev - a.elev; });
     var kept = [], minD = nx * 0.07;
     peaks.forEach(function (pk) { if (kept.length < 9 && !kept.some(function (q) { return Math.hypot(q.gx - pk.gx, q.gy - pk.gy) < minD; })) kept.push(pk); });
-    kept.forEach(function (pk, idx) { pk.name = namer.hill(idx === 0 ? 'ดอย' : null); });
+    kept.forEach(function (pk, idx) { pk.name = namer.hill(P.hillName || (idx === 0 ? 'ดอย' : null)); });
     world.peaks = kept;
 
     // คอเขา: วงแหวนรอบจุด (8 ทิศ) มีสูง-ต่ำสลับกันสองคู่
@@ -503,7 +533,7 @@
       if (slope[p] < 5 && rel(p) < 0.62 && dRiver[p] > 5 && dStream[p] > 3 && dPond[p] > 5) vc.push({ p: p, sc: rnd() + 0.6 * smooth(30, 6, dStream[p]) + 0.4 * smooth(6, 1, slope[p]) });
     }
     vc.sort(function (a, b) { return b.sc - a.sc; });
-    var villages = [], minSep = nx * (P.towns >= 6 ? 0.14 : 0.18), wantV = P.towns;
+    var villages = [], minSep = nx * (P.towns >= 6 ? 0.17 : 0.22), wantV = P.towns;
     vc.forEach(function (c) {
       if (villages.length >= wantV) return;
       var gx = c.p % nx, gy = (c.p - gx) / nx;
@@ -514,11 +544,14 @@
     villages.forEach(function (v, idx) { v.size = idx === 0 ? 'large' : idx < 3 ? 'mid' : 'small'; v.name = namer.village(); v.houses = []; });
     function valid(gx, gy, maxSlope) { var xi = Math.floor(gx), yi = Math.floor(gy); if (xi < 2 || yi < 2 || xi >= nx - 2 || yi >= ny - 2) return false; var q = yi * nx + xi; return slope[q] < (maxSlope || 9) && !pondMask[q] && !world.riverMask[q] && !world.streamMask[q]; }
     villages.forEach(function (v) {
-      var nh = v.size === 'large' ? 30 : v.size === 'mid' ? 18 : 10, rv = nx * (v.size === 'large' ? 0.028 : v.size === 'mid' ? 0.02 : 0.014), tries = 0;
-      while (v.houses.length < nh && tries++ < nh * 12) {
-        var ang = rnd() * Math.PI * 2, rr = rv * Math.sqrt(rnd()), hx = v.gx + Math.cos(ang) * rr, hy = v.gy + Math.sin(ang) * rr * 0.9;
+      // บ้านกระจายเป็นแนวยาว (ตามถนน/ลำน้ำแบบหมู่บ้านไทย) ไม่กระจุกเป็นก้อน
+      var nh = v.size === 'large' ? 24 : v.size === 'mid' ? 15 : 9, rv = nx * (v.size === 'large' ? 0.05 : v.size === 'mid' ? 0.038 : 0.028), tries = 0;
+      var va = rnd() * Math.PI, vc = Math.cos(va), vs = Math.sin(va);
+      while (v.houses.length < nh && tries++ < nh * 14) {
+        var along = (rnd() * 2 - 1) * rv, across = (rnd() * 2 - 1) * rv * 0.35 * (rnd() < 0.15 ? 2.2 : 1);
+        var hx = v.gx + along * vc - across * vs, hy = v.gy + along * vs + across * vc;
         if (!valid(hx, hy, 10)) continue;
-        if (v.houses.some(function (q) { return Math.hypot(q[0] - hx, q[1] - hy) < nx * 0.0042; })) continue;
+        if (v.houses.some(function (q) { return Math.hypot(q[0] - hx, q[1] - hy) < nx * 0.0075; })) continue;
         v.houses.push([hx, hy, rnd() < 0.5 ? 0 : 1]);
       }
     });
@@ -531,18 +564,18 @@
     // สถานที่สำคัญ
     var pois = [];
     function nearFree(cx, cy, rmin, rmax, maxSlope) {
-      for (var t = 0; t < 60; t++) { var ang = rnd() * Math.PI * 2, rr = rmin + rnd() * (rmax - rmin), gx = cx + Math.cos(ang) * rr, gy = cy + Math.sin(ang) * rr * 0.9; if (valid(gx, gy, maxSlope)) { var tooClose = pois.some(function (q) { return Math.hypot(q.gx - gx, q.gy - gy) < nx * 0.011; }); if (!tooClose) return [gx, gy]; } }
+      for (var t = 0; t < 60; t++) { var ang = rnd() * Math.PI * 2, rr = rmin + rnd() * (rmax - rmin), gx = cx + Math.cos(ang) * rr, gy = cy + Math.sin(ang) * rr * 0.9; if (valid(gx, gy, maxSlope)) { var tooClose = pois.some(function (q) { return Math.hypot(q.gx - gx, q.gy - gy) < nx * 0.02; }); if (!tooClose) return [gx, gy]; } }
       return null;
     }
     function short(name) { return name.replace(/^บ้าน/, ''); }
     villages.forEach(function (v, idx) {
       var big = idx === 0;
-      if (v.size !== 'small' || rnd() < 0.4) { var sp = nearFree(v.gx, v.gy, nx * 0.008, nx * 0.026, 6); if (sp) pois.push({ type: 'school', gx: sp[0], gy: sp[1], name: 'โรงเรียน' + v.name }); }
-      if (rnd() < 0.75 || big) { var tp = nearFree(v.gx, v.gy, nx * 0.01, nx * 0.03, 8); if (tp) { pois.push({ type: 'temple', gx: tp[0], gy: tp[1], name: namer.temple() }); if (rnd() < 0.5) { var gp = nearFree(tp[0], tp[1], nx * 0.012, nx * 0.026, 8); if (gp) pois.push({ type: 'graveyard', gx: gp[0], gy: gp[1], name: 'ป่าช้า' + short(v.name) }); } } }
+      if (v.size !== 'small' || rnd() < 0.4) { var sp = nearFree(v.gx, v.gy, nx * 0.015, nx * 0.045, 6); if (sp) pois.push({ type: 'school', gx: sp[0], gy: sp[1], name: 'โรงเรียน' + v.name }); }
+      if (rnd() < 0.75 || big) { var tp = nearFree(v.gx, v.gy, nx * 0.018, nx * 0.05, 8); if (tp) { pois.push({ type: 'temple', gx: tp[0], gy: tp[1], name: namer.temple() }); if (rnd() < 0.5) { var gp = nearFree(tp[0], tp[1], nx * 0.012, nx * 0.026, 8); if (gp) pois.push({ type: 'graveyard', gx: gp[0], gy: gp[1], name: 'ป่าช้า' + short(v.name) }); } } }
       if (big) {
-        var hp = nearFree(v.gx, v.gy, nx * 0.008, nx * 0.024, 5); if (hp) pois.push({ type: 'hospital', gx: hp[0], gy: hp[1], name: 'รพ.สต.' + short(v.name) });
-        var op = nearFree(v.gx, v.gy, nx * 0.006, nx * 0.022, 5); if (op) pois.push({ type: 'office', gx: op[0], gy: op[1], name: 'อบต.' + short(v.name) });
-        var mp = nearFree(v.gx, v.gy, nx * 0.006, nx * 0.022, 5); if (mp) pois.push({ type: 'market', gx: mp[0], gy: mp[1], name: 'ตลาด' + short(v.name) });
+        var hp = nearFree(v.gx, v.gy, nx * 0.015, nx * 0.04, 5); if (hp) pois.push({ type: 'hospital', gx: hp[0], gy: hp[1], name: 'รพ.สต.' + short(v.name) });
+        var op = nearFree(v.gx, v.gy, nx * 0.012, nx * 0.04, 5); if (op) pois.push({ type: 'office', gx: op[0], gy: op[1], name: 'อบต.' + short(v.name) });
+        var mp = nearFree(v.gx, v.gy, nx * 0.012, nx * 0.04, 5); if (mp) pois.push({ type: 'market', gx: mp[0], gy: mp[1], name: 'ตลาด' + short(v.name) });
       }
     });
     // ลานกางเต็นท์ (ที่ราบใกล้ลำห้วย ห่างหมู่บ้าน)
@@ -665,7 +698,7 @@
     for (j = 0; j < ny; j++) for (i = 0; i < nx; i++) {
       p = j * nx + i;
       var r0 = rel(p), sl = slope[p], dv = dVil[p], nrs = fbm(nF, i * 0.035, j * 0.035, 3, 0.5), nrf = fbm(nA, i * 0.05 + 30, j * 0.05, 2, 0.5);
-      var forest = 0.5 * smooth(0.2, 0.6, r0) + 0.5 * smooth(4, 14, sl) + 0.5 * nrs - 0.7 * smooth(nx * 0.12, nx * 0.02, dv);
+      var forest = (P.forest || 0) + 0.5 * smooth(0.2, 0.6, r0) + 0.5 * smooth(4, 14, sl) + 0.5 * nrs - 0.7 * smooth(nx * 0.12, nx * 0.02, dv);
       var field = (1 - smooth(5, 11, sl)) * (1 - smooth(0.45, 0.75, r0)) * (0.35 + 0.65 * smooth(nx * 0.4, nx * 0.04, dv)) + 0.45 * nrf;
       var paddy = field * (1 - smooth(1.2, 3.2, sl)) * (1 - smooth(0.2, 0.4, r0)) * smooth(nx * 0.07, nx * 0.015, dStream[p]);
       var orch = smooth(nx * 0.3, nx * 0.04, dv) * (1 - smooth(8, 14, sl)) * (0.5 + 0.9 * fbm(nO, i * 0.05, j * 0.05, 2, 0.5));

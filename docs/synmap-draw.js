@@ -147,7 +147,8 @@
     function mm(v) { return v * pxmm; }
     function X(gx) { return fx + gx * kx; }
     function Y(gy) { return fy + gy * ky; }
-    var PAPER = '#e2ede8';
+    var BW = o.color === 'bw'; // พิมพ์ขาว-ดำล้วน: ไม่ระบายพื้น ไม่แรเงา ให้เหลือแต่เส้นและสัญลักษณ์
+    var PAPER = BW ? '#ffffff' : '#e2ede8';
     var rnd = I.mulberry32((world.seed | 0) * 97 + 13);
     var placed = []; // กล่องป้ายชื่อที่วางแล้ว กันทับกัน
     function fontOf(sizeMM, bold, italic) { return (italic ? 'italic ' : '') + (bold ? '700 ' : '400 ') + mm(sizeMM).toFixed(1) + 'px ' + FONT; }
@@ -194,6 +195,7 @@
       if (f > 0.55 && f > bv - 0.05) { best = 'forest'; bv = f; }
       return best;
     }
+    if (BW) Object.keys(COL).forEach(function (k) { COL[k] = [255, 255, 255]; });
     function shownClass(cl) { return L[cl === 'pond' ? 'grass' : cl] ? (cl === 'pond' ? 'grass' : cl) : (L.grass ? 'grass' : 'none'); }
     if (anyCover || true) {
       var st = Math.max(1, Math.round(pxmm * 0.28)), bw = Math.ceil(fw / st), bh = Math.ceil(fh / st), img = c.createImageData(bw, bh), dd = img.data, bx, by;
@@ -224,7 +226,7 @@
     if (L.grass) { c.strokeStyle = '#8fb59a'; c.lineWidth = mm(0.12); scatter('grass', 9, function (x, y) { c.beginPath(); c.moveTo(x - mm(0.4), y); c.lineTo(x, y - mm(0.7)); c.lineTo(x + mm(0.4), y); c.stroke(); }); }
 
     /* 2) เงาภูเขา */
-    if (L.shade) {
+    if (L.shade && !BW) {
       var hs0 = 1e9, hs1 = -1e9; for (var qq = 0; qq < world.N; qq++) { if (world.h[qq] < hs0) hs0 = world.h[qq]; if (world.h[qq] > hs1) hs1 = world.h[qq]; } world.hmin0 = hs0; world.hspan0 = Math.max(1, hs1 - hs0);
       var sh = c.createImageData(nx, ny), sd = sh.data, h = world.h, p, i, j;
       for (j = 1; j < ny - 1; j++) for (i = 1; i < nx - 1; i++) {
@@ -448,13 +450,13 @@
       var big = sg.kind === 'river' || sg.accEnd >= world.T_STREAM * 2.4;
       if (big && !L.river) return;
       if (!big && !L.stream) return;
-      var wmm = sg.kind === 'river' ? clamp(0.3 + Math.log(sg.accEnd / world.T_RIVER + 1) * 0.35, 0.35, 0.9) : (big ? 0.2 : 0.13);
+      var wmm = sg.kind === 'river' ? clamp(0.22 + Math.log(sg.accEnd / world.T_RIVER + 1) * 0.2, 0.25, 0.55) : (big ? 0.16 : 0.1);
       c.strokeStyle = big ? '#2a6fc9' : '#3b7fd0'; c.lineWidth = mm(wmm);
       dash(big ? null : [2.2, 0.9]);
       path(wiggle(sg.pts, sg.kind === 'river' ? 1.3 : 0.7)); c.stroke(); dash(null);
     });
     if (L.pond) {
-      world.ponds.forEach(function (pd) { path(pd.poly, true); c.fillStyle = '#3f7fe6'; c.fill(); c.strokeStyle = '#2a5fc0'; c.lineWidth = mm(0.15); c.stroke(); });
+      world.ponds.forEach(function (pd) { path(pd.poly, true); c.fillStyle = BW ? '#fff' : '#3f7fe6'; c.fill(); c.strokeStyle = '#2a5fc0'; c.lineWidth = mm(BW ? 0.25 : 0.15); c.stroke(); });
     }
     if (L.river && L.names) {
       world.streamSegs.forEach(function (sg) { if (!sg.name) return; var m = sg.pts[Math.floor(sg.pts.length / 2)]; label(sg.name, X(m[0]), Y(m[1]), 2.4, { italic: true, color: '#1f58b0' }); });
@@ -469,7 +471,7 @@
     if (L.foot) world.roads.filter(function (r) { return r.cls === 'foot'; }).forEach(function (rd) { c.strokeStyle = '#1a1a1a'; c.lineWidth = mm(0.16); dash([1.2, 0.8]); path(roadPath(rd)); c.stroke(); dash(null); });
     if (L.roadMain) {
       world.roads.filter(function (r) { return r.cls === 'main'; }).forEach(function (rd) { c.strokeStyle = '#7a1f2b'; c.lineWidth = mm(0.95); path(roadPath(rd)); c.stroke(); });
-      world.roads.filter(function (r) { return r.cls === 'main'; }).forEach(function (rd) { c.strokeStyle = '#e8b9b0'; c.lineWidth = mm(0.45); path(roadPath(rd)); c.stroke(); });
+      world.roads.filter(function (r) { return r.cls === 'main'; }).forEach(function (rd) { c.strokeStyle = BW ? '#fff' : '#e8b9b0'; c.lineWidth = mm(0.45); path(roadPath(rd)); c.stroke(); });
     }
     if (L.bridge) {
       world.bridges.forEach(function (b) {
@@ -490,12 +492,12 @@
 
     /* 8) บ้านเรือนและสถานที่ */
     var counter = 0;
-    function num(x, y) { if (!L.numbers) return; counter++; c.beginPath(); c.arc(x + mm(2.1), y - mm(2.1), mm(1.6), 0, 7); c.fillStyle = '#fff'; c.fill(); c.lineWidth = mm(0.25); c.strokeStyle = '#d6261c'; c.stroke(); c.font = fontOf(2.1, true); c.fillStyle = '#d6261c'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(String(counter), x + mm(2.1), y - mm(2.1)); return counter; }
+    function num(x, y) { if (!L.numbers) return; counter++; c.beginPath(); c.arc(x + mm(1.9), y - mm(1.9), mm(1.5), 0, 7); c.fillStyle = '#fff'; c.fill(); c.lineWidth = mm(0.25); c.strokeStyle = '#d6261c'; c.stroke(); c.font = fontOf(2.1, true); c.fillStyle = '#d6261c'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(String(counter), x + mm(1.9), y - mm(1.9)); return counter; }
     var numbered = []; // [{n, type, name, gx, gy, elev}]
     function note(type, name, gx, gy, x, y, withElev) { var n = num(x, y); numbered.push({ n: n || null, type: type, name: name, gx: gx, gy: gy, elev: withElev ? sampleH(world, gx, gy) : null }); }
     if (L.village) {
       world.villages.forEach(function (v) {
-        v.houses.forEach(function (hh) { var s = mm(v.size === 'large' ? 0.85 : 0.75); c.fillStyle = '#111'; c.fillRect(X(hh[0]) - s / 2, Y(hh[1]) - s / 2, s, s); });
+        v.houses.forEach(function (hh) { var s = mm(0.9); c.fillStyle = '#111'; c.fillRect(X(hh[0]) - s / 2, Y(hh[1]) - s / 2, s, s); });
       });
     }
     placed = placed.filter(function (b) { return !b.soft; });
@@ -528,8 +530,8 @@
     world.pois.forEach(function (pp) {
       if (!enabledType[pp.type]) return;
       var x = X(pp.gx), y = Y(pp.gy), fnSym = SYM[pp.type]; if (!fnSym) return;
-      fnSym(c, x, y, mm(3.1)); reserve(x, y, mm(1.6));
-      if (L.names && pp.type !== 'gas' && pp.type !== 'graveyard') label(pp.name, x, y, 2.2, {});
+      fnSym(c, x, y, mm(1.6)); reserve(x, y, mm(1.0));
+      if (L.names && pp.type !== 'gas' && pp.type !== 'graveyard') label(pp.name, x, y, 2.1, { gap: mm(1.5) });
       note(TYPE_TH[pp.type], pp.name, pp.gx, pp.gy, x, y, pp.type === 'viewpoint' || pp.type === 'camp');
     });
     if (L.village) world.villages.forEach(function (v, idx) {

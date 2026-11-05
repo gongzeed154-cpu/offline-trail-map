@@ -8,7 +8,7 @@
   var FONT = '"Sarabun","Noto Sans Thai",-apple-system,sans-serif';
   var BARS = [[100, 25], [200, 50], [500, 100], [1000, 250], [2000, 500], [2500, 500], [4000, 1000], [5000, 1000], [8000, 2000], [10000, 2000], [20000, 5000], [25000, 5000], [40000, 10000], [50000, 10000]];
 
-  var cfg = { title: 'แบบฝึกอ่านพิกัดกริด', paper: 'A4', land: false, scale: 50000, grid: 'auto', style: 'lines', center: '', cfmt: 'mgrs', base: 'none', fade: 55, sym: true, routes: true, dpi: 150, cw: 210, ch: 297, scaleCustom: 0, foot: {}, syn: null };
+  var cfg = { title: 'แบบฝึกอ่านพิกัดกริด', paper: 'A4', land: false, scale: 50000, grid: 'auto', style: 'lines', center: '', cfmt: 'mgrs', base: 'none', fade: 55, sym: true, routes: true, dpi: 150, cw: 210, ch: 297, scaleCustom: 0, foot: {}, syn: null, color: 'color' };
   var ctx = null;
   var last = null;
   var busy = false;
@@ -601,6 +601,8 @@
     var keyRes = null;
     if (syn && fo.key && world) keyRes = renderKey(o, world, g, cf, mm, pxmm);
 
+    toneCanvas(cv, o.color, syn);
+    if (keyRes) keyRes.pages.forEach(function (pg) { toneCanvas(pg.cv, o.color, true); });
     return { cv: cv, wmm: wmm, hmm: hmm, w: W, h: H, nsym: nsym, dpi: Math.round(o.dpi), key: keyRes };
   }
 
@@ -626,11 +628,32 @@
     c.fillText('แผ่นวัดมุมสี่เหลี่ยม 1 : ' + o.scale.toLocaleString('en-US'), W / 2, y - pxmm * 8);
     c.font = '400 ' + (pxmm * 2.8).toFixed(1) + 'px ' + FONT;
     c.fillText('ด้านละ ' + side.toFixed(0) + ' มม. (= ' + (TrailPlate.SIDE / 1000) + ' กม.) · พิมพ์ที่ 100% ลงแผ่นใสหรือกระดาษแล้วตัดตามกรอบ', W / 2, y - pxmm * 3.5);
+    toneCanvas(cv, o.color);
     return { cv: cv, wmm: wmm, hmm: hmm, w: W, h: H, plate: true };
   }
 
 
   /* ---------- หน้าเฉลย ---------- */
+  // แปลงสีทั้งแผ่นสำหรับเครื่องพิมพ์ขาว-ดำ: 'gray' = เฉดเทา, 'bw' = ขาว/ดำล้วน (เฉดกลางเป็นจุดสกรีน ไม่ให้เงาเขาทึบดำ)
+  var BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+  function toneCanvas(cv, mode, lineArt) {
+    if (!mode || mode === 'color') return;
+    var c = cv.getContext('2d'), W = cv.width, H = cv.height, strip = 256;
+    for (var y0 = 0; y0 < H; y0 += strip) {
+      var hh = Math.min(strip, H - y0), im = c.getImageData(0, y0, W, hh), d = im.data;
+      for (var y = 0; y < hh; y++) for (var x = 0; x < W; x++) {
+        var k = (y * W + x) * 4, lum = 0.299 * d[k] + 0.587 * d[k + 1] + 0.114 * d[k + 2], v;
+        if (mode === 'gray') v = lum;
+        else if (lineArt) v = lum < 222 ? 0 : 255; // แผนที่สมมุติวาดแบบเส้นล้วนแล้ว ตัดสองระดับได้เลย
+        else if (lum >= 205) v = 255;
+        else if (lum < 105) v = 0;
+        else v = ((lum - 105) / 100 * 16 > BAYER[((y0 + y) & 3) * 4 + (x & 3)] + 0.5) ? 255 : 0;
+        d[k] = d[k + 1] = d[k + 2] = v;
+      }
+      c.putImageData(im, 0, y0);
+    }
+  }
+
   function renderKey(o, world, g, cf, mmMain, pxmmMain) {
     var dpi = Math.min(o.dpi, 150), pxmm = dpi / 25.4, wmm = 210, hmm = 297, pages = [];
     function mm(v) { return v * pxmm; }
@@ -762,8 +785,9 @@
       synBox = '<div id="pSynBox" style="border:1px solid #cfe0d2;background:#f6fbf7;border-radius:12px;padding:10px;margin:8px 0">' +
         '<b>แผนที่สมมุติสำหรับสอน</b><div class="note" style="margin-top:2px">สร้างภูมิประเทศสมมุติ ไม่ต้องใช้แผนที่จริง เลือกได้ว่าจะให้มีรายละเอียดอะไรบ้าง รหัสแผนที่เดียวกัน + ตัวเลือกเดียวกัน = ได้แผนที่เดิมทุกครั้ง</div>' +
         fld('ภูมิประเทศ', opts('sPreset', Object.keys(TrailSynMap._internal.PRESETS).map(function (k) { return [k, TrailSynMap._internal.PRESETS[k].name]; }), sy.preset)) +
+        '<div class="note" style="margin:-2px 0 6px">แบบที่ขึ้นต้นด้วย "แบบ…" จำลองลักษณะภูมิประเทศคล้ายอุทยานนั้น ไม่ใช่แผนที่จริงของอุทยาน</div>' +
         fld('รหัสแผนที่', '<input type="number" id="sSeed" min="0" max="999999" style="' + INP + '"><button type="button" class="btn alt" id="sRand" style="flex:none;padding:8px 10px">สุ่มใหม่</button>') +
-        fld('ต่างระดับ', '<input type="range" id="sRelief" min="40" max="200" step="10" style="flex:1"><span id="sReliefV" style="flex:0 0 46px;text-align:right"></span>') +
+        fld('ต่างระดับ', '<input type="range" id="sRelief" min="40" max="500" step="10" style="flex:1"><span id="sReliefV" style="flex:0 0 46px;text-align:right"></span>') +
         fld('ความสูงฐาน (ม.)', '<input type="number" id="sBase" min="0" max="4000" step="10" style="' + INP + '">') +
         fld('ระยะเส้นชั้น', opts('sIv', [[20, '20 ม. · หลักทุก 100 ม. (มาตรฐาน)'], [10, '10 ม. · หลักทุก 50 ม.'], [5, '5 ม. · หลักทุก 25 ม.'], [2, '2 ม. · หลักทุก 10 ม.'], [40, '40 ม. · หลักทุก 200 ม.'], [100, '100 ม. · หลักทุก 500 ม.']], sy.interval === 'auto' ? 20 : sy.interval)) +
         '<h4 style="margin:10px 0 4px">ชุดสำเร็จรูป</h4><div id="sSets" style="display:flex;flex-wrap:wrap;gap:6px">' +
@@ -802,6 +826,7 @@
       '<label class="opt"><input type="checkbox" id="pSym"><span>วางสัญลักษณ์ทหารและหมุดที่ปักไว้<small>เฉพาะงานที่ติ๊กแสดงอยู่</small></span></label>' +
       '<label class="opt"><input type="checkbox" id="pRoutes"><span>วาดเส้นทางที่แสดงอยู่</span></label></div>' +
       footBox +
+      fld('สีที่พิมพ์', opts('pColor', [['color', 'สี'], ['gray', 'ขาว-ดำ แบบมีเฉดเทา'], ['bw', 'ขาว-ดำล้วน (เส้นดำ พื้นขาว)']], cfg.color || 'color')) +
       fld('ความละเอียด', opts('pDpi', [[100, '100 dpi (เร็ว ไฟล์เล็ก)'], [150, '150 dpi (แนะนำ)'], [200, '200 dpi (คมที่สุด)'], [300, '300 dpi (กระดาษเล็ก)']], cfg.dpi)) +
       '<div class="btnrow"><button class="btn" id="pBuild">สร้างแผนที่ฝึก</button><button class="btn alt" id="pPlate">แผ่นวัดมุมขนาดจริง</button></div>' +
       '<div id="pStat" class="note"></div><div id="pOut"></div>' +
@@ -846,7 +871,7 @@
       cfg.scale = sc;
       cfg.grid = $('pGrid').value; cfg.style = $('pStyle').value;
       cfg.center = $('pCenter').value.trim(); cfg.base = $('pBase').value; cfg.fade = parseInt($('pFade').value, 10);
-      cfg.sym = $('pSym').checked; cfg.routes = $('pRoutes').checked; cfg.dpi = parseInt($('pDpi').value, 10);
+      cfg.sym = $('pSym').checked; cfg.routes = $('pRoutes').checked; cfg.dpi = parseInt($('pDpi').value, 10); cfg.color = $('pColor').value;
       cfg.foot = { bar: $('fBar').checked, north: $('fNorth').checked, grid: $('fGrid').checked, corners: $('fCorners').checked, credit: $('fCredit').checked, student: $('fStudent').checked, questions: $('fQ').value, answerLines: $('fAns').checked };
       if (hasSyn) {
         cfg.foot.interval = $('fInterval').checked; cfg.foot.legend = $('fLegend').checked; cfg.foot.key = $('fKey').checked;

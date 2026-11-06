@@ -33,6 +33,7 @@ var SHELL_FILES = [
   './lib/maplibre-gl.js',
   './lib/maplibre-contour.min.js',
   './contour.js',
+  './spots.js',
   './terrain.js',
   './search.js',
   './view3d.js',

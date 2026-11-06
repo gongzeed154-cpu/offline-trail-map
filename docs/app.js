@@ -240,9 +240,10 @@
     });
     TrailContour.init({
       map: function () { return map; }, toast: toast,
-      enable: function () { if (!prefs.contour) { prefs.contour = true; savePrefs(); } }
+      enable: function () { if (!prefs.contour) { prefs.contour = true; savePrefs(); } if (window.TrailSpots) TrailSpots.setEnabled(true); }
     });
     TrailTerrain.init({ map: function () { return map; }, toast: toast });
+    TrailSpots.init({ map: function () { return map; } });
     TrailSearch.init({ map: function () { return map; }, toast: toast, closeSheet: closeSheet });
     TrailView3D.init({
       map: function () { return map; }, toast: toast, closeSheet: closeSheet,
@@ -289,6 +290,7 @@
     map.setLayoutProperty('topo', 'visibility', prefs.base === 'topo' ? 'visible' : 'none');
     TrailPaper.setSolo(prefs.base === 'paper');
     TrailContour.apply(!!prefs.contour);
+    TrailSpots.setEnabled(!!prefs.contour);
     if (window.TrailView3D) TrailView3D.refreshBase();
   }
 
@@ -764,7 +766,7 @@
     Array.prototype.forEach.call(document.querySelectorAll('input[name=base]'), function (el) {
       el.onchange = function () { prefs.base = el.value; savePrefs(); applyBase(); setDownloadLabel(); };
     });
-    $('ovContour').onchange = function () { prefs.contour = this.checked; savePrefs(); TrailContour.apply(prefs.contour); };
+    $('ovContour').onchange = function () { prefs.contour = this.checked; savePrefs(); TrailContour.apply(prefs.contour); TrailSpots.setEnabled(prefs.contour); };
     $('ovWeather').onchange = function () { prefs.weather = this.checked ? 'radar' : 'off'; savePrefs(); applyWeather(); };
     $('ovTraffic').onchange = function () { prefs.traffic = this.checked; savePrefs(); applyTraffic(); };
     Array.prototype.forEach.call(document.querySelectorAll('input[name=disp]'), function (el) {

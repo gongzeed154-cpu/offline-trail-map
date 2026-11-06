@@ -603,7 +603,7 @@
 
     toneCanvas(cv, o.color, syn);
     if (keyRes) keyRes.pages.forEach(function (pg) { toneCanvas(pg.cv, o.color, true); });
-    return { cv: cv, wmm: wmm, hmm: hmm, w: W, h: H, nsym: nsym, dpi: Math.round(o.dpi), key: keyRes };
+    return { cv: cv, wmm: wmm, hmm: hmm, w: W, h: H, nsym: nsym, dpi: Math.round(o.dpi), key: keyRes, world: world };
   }
 
   function renderPlate(o) {
@@ -923,6 +923,12 @@
         row.className = 'btnrow';
         fileButtons(row, 'map', res.key ? 'แผนที่ ' : '');
         $('pOut').appendChild(row);
+        if (res.world && window.TrailSyn3D) {
+          var row3d = document.createElement('div'); row3d.className = 'btnrow';
+          var b3d = document.createElement('button'); b3d.className = 'btn'; b3d.id = 'p3d'; b3d.textContent = '⛰ ดูภาพ 3 มิติ ของแผนที่นี้';
+          b3d.onclick = function () { TrailSyn3D.open(res.world, { scale: cfg.scale, title: cfg.title }); };
+          row3d.appendChild(b3d); $('pOut').appendChild(row3d);
+        }
         if (res.key) {
           var row2 = document.createElement('div');
           row2.className = 'btnrow';

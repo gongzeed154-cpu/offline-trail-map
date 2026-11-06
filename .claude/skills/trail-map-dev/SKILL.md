@@ -9,7 +9,7 @@ Project language: README, manual and UI text are in **Thai**. Keep new user-faci
 
 ## Layout
 - **Native app (Expo + MapLibre RN):** `App.tsx` (all screens), `trailStyle.ts` (map style: hillshade, peaks, trails, optional contours via `CONTOUR_TILES_URL`), `app.json`, `eas.json`.
-- **PWA (plain JS, no build step):** `docs/` is served as-is (GitHub Pages). `index.html` loads one script per module (`app.js`, `nav.js`, `route.js`, `geo.js`, `stars.js`, `wind.js`, `sensors.js`, `cam.js`, `sound.js`, `jump.js`, `projects.js`, `symbols.js`, `print.js`, `synmap.js` (fictional-terrain generator), `synmap-draw.js` (layer groups + drawing + legend/answer key), `export.js`, `paper.js`, `plate.js`, `common.js`). Shared helpers live in `common.js`.
+- **PWA (plain JS, no build step):** `docs/` is served as-is (GitHub Pages). `index.html` loads one script per module (`app.js`, `nav.js`, `route.js`, `geo.js`, `stars.js`, `wind.js`, `sensors.js`, `cam.js`, `sound.js`, `jump.js`, `projects.js`, `symbols.js`, `print.js`, `synmap.js` (fictional-terrain generator), `synmap-draw.js` (layer groups + drawing + legend/answer key), `synmap-3d.js` (canvas block-diagram 3D view of a synthetic map), `export.js`, `paper.js`, `plate.js`, `common.js`). Shared helpers live in `common.js`.
 - **Docs:** `manual/manual.html` (user manual), `manual/plan.html` (mobile/pricing plan), `README.md`.
 - **CI:** `.github/workflows/build-ios.yml` builds an unsigned iOS .ipa.
 

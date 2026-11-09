@@ -31,6 +31,7 @@
     traffic: false,
     grid: false,
     llStep: 'auto',
+    coordDigits: 5, // จำนวนหลักพิกัด MGRS กลางจอ/หมุด
     utmStep: 'auto', // ระยะตาราง UTM/MGRS (เมตร) 10000=1 หลัก 1000=2 หลัก 100=3 หลัก 10=4 หลัก
     fmt: 'dms', // mgrs | utm | dms | dm | dd
     anchor: 'center', // จุดของแผ่นวัดมุมที่ตรงกับหมุด A: center | romer | sixty
@@ -412,10 +413,9 @@
   var lastGridNote = '';
   // พิกัดกลางจอ/หมุด: ถ้าเลือกจำนวนหลัก MGRS ไว้ แสดงตามนั้น (เช่น 3 หลัก = 47P QA 123 678 ความละเอียด 100 ม.)
   function fmtCoord(lat, lng) {
-    var st = +prefs.utmStep, d = st > 0 ? Math.round(5 - Math.log(st) / Math.LN10) : 5;
-    if (prefs.fmt === 'mgrs' && st > 0 && Math.pow(10, 5 - d) === st && lat >= -80 && lat < 84) {
-      var u = G.toUTM(lat, lng); return G.mgrsFromUTM ? G.mgrsFromUTM(u, lat, d) : G.formatPoint(lat, lng, prefs.fmt);
-    }
+    // จำนวนหลักของพิกัดกลางจอแยกจากเส้นกริด (ค่าเริ่มต้น 5 หลัก = ละเอียด 1 ม. เหมือนเดิม)
+    var d = +prefs.coordDigits || 5;
+    if (prefs.fmt === 'mgrs' && d < 5 && lat >= -80 && lat < 84) return G.mgrsFromUTM(G.toUTM(lat, lng), lat, d);
     return G.formatPoint(lat, lng, prefs.fmt);
   }
   function updateGrid() {
@@ -992,7 +992,9 @@
     var utmOpts = [['auto', 'อัตโนมัติตามซูม'], [10000, '10 กม. · 1 หลัก (เช่น QA 1 6)'], [1000, '1 กม. · 2 หลัก (เช่น QA 12 67)'], [500, '500 ม.'], [100, '100 ม. · 3 หลัก (เช่น QA 123 678)'], [50, '50 ม.'], [10, '10 ม. · 4 หลัก (เช่น QA 1234 6789)']];
     h += '<div id="utmBox"' + (isUTM ? '' : ' hidden') + '><h4>ระยะห่างเส้นกริด UTM/MGRS (จำนวนหลัก)</h4><div class="field"><select id="utmStep" style="flex:1;font-size:16px;padding:8px;border:1px solid #ccc;border-radius:8px;background:#fff">' +
       utmOpts.map(function (o) { return '<option value="' + o[0] + '"' + (String(prefs.utmStep || 'auto') === String(o[0]) ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') +
-      '</select></div><p class="note" style="margin-top:2px">จำนวนหลักต่อค่า (ตะวันออก/เหนือ): 1 หลัก = 10 กม. · 2 หลัก = 1 กม. · 3 หลัก = 100 ม. · 4 หลัก = 10 ม. ใช้กับป้ายตัวเลขบนเส้นกริด และพิกัด MGRS กลางจอ/หมุด · ซูมออกมากจะแสดงทุก ๆ 2, 5, 10 เส้น</p></div>';
+      '</select></div><p class="note" style="margin-top:2px">จำนวนหลักต่อค่า (ตะวันออก/เหนือ): 1 หลัก = 10 กม. · 2 หลัก = 1 กม. · 3 หลัก = 100 ม. · 4 หลัก = 10 ม. ใช้กับเส้นกริดและตัวเลขบนเส้นเท่านั้น · ซูมออกมากจะแสดงทุก ๆ 2, 5, 10 เส้น</p>' +
+      '<h4>จำนวนหลักพิกัด MGRS ที่มุมซ้ายบน (แยกจากเส้นกริด)</h4><div class="field"><select id="coordDigits" style="flex:1;font-size:16px;padding:8px;border:1px solid #ccc;border-radius:8px;background:#fff">' +
+      [[5, '5 หลัก · 1 ม. (เหมือนเดิม)'], [4, '4 หลัก · 10 ม.'], [3, '3 หลัก · 100 ม.'], [2, '2 หลัก · 1 กม.'], [1, '1 หลัก · 10 กม.']].map(function (o) { return '<option value="' + o[0] + '"' + ((+prefs.coordDigits || 5) === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></div></div>';
     var stepOpts = [['auto', 'อัตโนมัติตามซูม'], [1, '1 ฟิลิปดา'], [5, '5 ฟิลิปดา'], [10, '10 ฟิลิปดา'], [30, '30 ฟิลิปดา'], [60, '1 ลิปดา'], [120, '2 ลิปดา'], [300, '5 ลิปดา'], [600, '10 ลิปดา'], [900, '15 ลิปดา'], [1800, '30 ลิปดา'], [3600, '1 องศา']];
     h += '<div id="llBox"' + (isUTM ? ' hidden' : '') + '><h4>ระยะห่างเส้นละติจูด/ลองจิจูด</h4><div class="field"><select id="llStep" style="flex:1;font-size:16px;padding:8px;border:1px solid #ccc;border-radius:8px;background:#fff">' +
       stepOpts.map(function (o) { return '<option value="' + o[0] + '"' + (String(prefs.llStep || 'auto') === String(o[0]) ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') +
@@ -1007,6 +1009,7 @@
       if (!prefs.grid) { prefs.grid = true; $('gridOn').checked = true; $('toolGrid').classList.toggle('on', true); }
       updateGrid();
     };
+    $('coordDigits').onchange = function () { prefs.coordDigits = +this.value; savePrefs(); updateCoord(); };
     $('utmStep').onchange = function () {
       prefs.utmStep = this.value === 'auto' ? 'auto' : +this.value; savePrefs();
       if (!prefs.grid) { prefs.grid = true; $('gridOn').checked = true; $('toolGrid').classList.toggle('on', true); }

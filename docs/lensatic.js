@@ -4,12 +4,12 @@
 // แกน: จุดกำเนิดที่ศูนย์กลางหน้าปัด, +x ชี้ไปทางฝาที่มีลวดเล็ง (ทิศที่อ่านมุม), +y ไปทางขวามือของทิศนั้น
 (function (root) {
   var M_PER_MM = 50;
-  var B = { xmin: -66, xmax: 114, ymin: -33, ymax: 28 }; // กรอบภาพตัวเข็มทิศ (มม.)
+  var B = { xmin: -66, xmax: 113, ymin: -33.5, ymax: 28.5 }; // กรอบภาพตัวเข็มทิศ (มม.)
   var DIAL_R = 23.2; // รัศมีช่องกระจก (มม.)
   var CARD_R = 23.0; // รัศมีจานหน้าปัด
   var RULER0 = -24; // ตำแหน่ง 0 ของไม้บรรทัด (มม.) · 6000 ม. = +120 มม.
-  var MOVE_AT = { x: -52, y: 1 }; // ที่จับเลื่อน (ห่วงนิ้วโป้งด้านหลัง)
-  var ROT_AT = { x: 110, y: -4 }; // ที่จับหมุน (ปลายฝา)
+  var MOVE_AT = { x: -46, y: 0 }; // ที่จับเลื่อน (ขาเลนส์/ห่วงนิ้วโป้งด้านหลัง)
+  var ROT_AT = { x: 108, y: -4 }; // ที่จับหมุน (ปลายฝา)
   var SANS = '-apple-system, "Helvetica Neue", Arial, sans-serif';
 
   function rr(c, x, y, w, h, r) { c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); }
@@ -26,33 +26,34 @@
 
     // เงาใต้ตัวเข็มทิศ
     c.save(); c.shadowColor = 'rgba(0,0,0,.45)'; c.shadowBlur = 3 * s; c.shadowOffsetX = 0.8 * s; c.shadowOffsetY = 1.2 * s;
-    rr(c, -40, -31, 152, 56, 5); c.fillStyle = OL; c.fill();
+    rr(c, -28, -31.5, 138, 56, 4); c.fillStyle = OL; c.fill();
     c.restore();
 
-    // ห่วงสอดนิ้วโป้ง (ด้านหลัง)
-    c.fillStyle = '#16180f'; rr(c, -63, -14, 22, 30, 4); c.fill();
-    c.fillStyle = 'rgba(255,255,255,.08)'; rr(c, -61, -11, 4, 24, 2); c.fill();
-    c.fillStyle = '#2a2d1d'; rr(c, -44, -9, 8, 22, 2); c.fill(); // บานพับห่วง
-    c.fillStyle = '#9a9a92'; [[-40, -6], [-40, 9]].forEach(function (p) { c.beginPath(); c.arc(p[0], p[1], 0.8, 0, 7); c.fill(); });
+    // ขาเลนส์และห่วงสอดนิ้วโป้ง (ด้านหลัง สีดำ) ตามสัดส่วนของจริง
+    c.fillStyle = '#15160e'; rr(c, -64, -16.5, 40, 31.5, 6); c.fill();
+    c.fillStyle = '#23251a'; rr(c, -61.5, -13.5, 7, 25.5, 3.2); c.fill(); // ห่วงนิ้ว
+    c.fillStyle = 'rgba(255,255,255,.07)'; rr(c, -60.5, -11, 2.2, 20, 1.1); c.fill();
+    c.fillStyle = '#2b2e20'; rr(c, -31.5, -12.5, 6.5, 24, 1.6); c.fill(); // บานพับขาเลนส์
+    c.fillStyle = '#9a9a92'; [[-28.2, -9.5], [-28.2, 8.5]].forEach(function (p) { c.beginPath(); c.arc(p[0], p[1], 0.75, 0, 7); c.fill(); });
 
     // ตัวฐาน (ส่วนหน้าปัด + ส่วนฝา)
-    c.fillStyle = metal(0, -31, 0, 25, OL_L, OL_D); rr(c, -40, -31, 152, 56, 5); c.fill();
+    c.fillStyle = metal(0, -31.5, 0, 24.5, OL_L, OL_D); rr(c, -28, -31.5, 138, 56, 4); c.fill();
     c.strokeStyle = 'rgba(0,0,0,.55)'; c.lineWidth = 0.35; c.stroke();
     // แนวแบ่งสองส่วน
     c.strokeStyle = 'rgba(0,0,0,.45)'; c.lineWidth = 0.4; c.beginPath(); c.moveTo(29, -31); c.lineTo(29, -23); c.stroke();
 
     // ---------- ไม้บรรทัด 1:50,000 ที่ขอบบน ----------
-    c.fillStyle = metal(0, -31, 0, -22, OL_LL, OL); c.fillRect(-36, -31, 146, 8.6);
-    c.strokeStyle = 'rgba(0,0,0,.4)'; c.lineWidth = 0.25; c.beginPath(); c.moveTo(-36, -22.4); c.lineTo(110, -22.4); c.stroke();
+    c.fillStyle = metal(0, -31.5, 0, -22, OL_LL, OL); c.fillRect(-27, -31.5, 136, 9);
+    c.strokeStyle = 'rgba(0,0,0,.4)'; c.lineWidth = 0.25; c.beginPath(); c.moveTo(-27, -22.5); c.lineTo(109, -22.5); c.stroke();
     // ขีดทุก 100 ม. (2 มม.) ยาวขึ้นทุก 500 / 1000 ม.
-    for (var m = 0; m <= 6000; m += 100) {
+    for (var m = 0; m <= 6400; m += 100) { // ขีดเริ่มที่ขอบบนพอดี
       var x = RULER0 + m / M_PER_MM, L = m % 1000 === 0 ? 4.2 : m % 500 === 0 ? 3.0 : 1.9;
       c.strokeStyle = '#11130b'; c.lineWidth = m % 1000 === 0 ? 0.32 : 0.2;
-      c.beginPath(); c.moveTo(x, -31); c.lineTo(x, -31 + L); c.stroke();
+      c.beginPath(); c.moveTo(x, -31.5); c.lineTo(x, -31.5 + L); c.stroke();
     }
     c.fillStyle = '#e9e4cf'; c.font = '700 3.6px ' + SANS; c.textAlign = 'center'; c.textBaseline = 'alphabetic';
-    [2000, 4000, 6000].forEach(function (v) { var x = RULER0 + v / M_PER_MM; c.fillText(String(v), x - (v === 6000 ? 4.6 : 0), -23.4); });
-    c.font = '700 2.6px ' + SANS; c.fillText('1:50000 METERS', 36, -23.4);
+    [2000, 4000, 6000].forEach(function (v) { var x = RULER0 + v / M_PER_MM; c.fillText(String(v), x, -23.6); });
+    c.font = '700 2.6px ' + SANS; c.fillText('1:50000 METERS', 36, -23.6);
     c.fillStyle = '#11130b'; c.font = '700 2.2px ' + SANS; c.fillText('0', RULER0 + 1.2, -26.6);
 
     // ---------- บานพับฝา ----------
@@ -64,10 +65,10 @@
     // ---------- ฝา (ด้านในมีช่องลวดเล็ง) ----------
     c.save(); c.shadowColor = 'rgba(0,0,0,.35)'; c.shadowBlur = 1.5 * s;
     c.fillStyle = metal(50, -28, 100, 24, OL_L, OL_D);
-    c.beginPath(); c.arc(76, -2, 26.5, 0, Math.PI * 2); c.fill(); c.restore();
-    c.fillStyle = metal(100, -14, 112, 6, OL_L, OL_D); rr(c, 96, -15, 16, 22, 3); c.fill(); // ลิ้นปลายฝา
-    c.strokeStyle = 'rgba(0,0,0,.5)'; c.lineWidth = 0.35; c.beginPath(); c.arc(76, -2, 26.5, 0, Math.PI * 2); c.stroke();
-    c.strokeStyle = 'rgba(255,255,255,.12)'; c.lineWidth = 0.6; c.beginPath(); c.arc(76, -2, 23.5, Math.PI * 1.05, Math.PI * 1.75); c.stroke();
+    c.beginPath(); c.arc(76, -0.5, 27.5, 0, Math.PI * 2); c.fill(); c.restore();
+    c.fillStyle = metal(100, -14, 112, 6, OL_L, OL_D); rr(c, 98, -14.5, 14, 22, 3); c.fill(); // ลิ้นปลายฝา
+    c.strokeStyle = 'rgba(0,0,0,.5)'; c.lineWidth = 0.35; c.beginPath(); c.arc(76, -0.5, 27.5, 0, Math.PI * 2); c.stroke();
+    c.strokeStyle = 'rgba(255,255,255,.12)'; c.lineWidth = 0.6; c.beginPath(); c.arc(76, -0.5, 24.5, Math.PI * 1.05, Math.PI * 1.75); c.stroke();
     // ช่องเล็งและลวดเล็ง (อยู่แนวเดียวกับเส้นอ่านมุม y = 0)
     c.fillStyle = '#d8dad2'; rr(c, 62, -2.6, 30, 5.2, 2.6); c.fill();
     c.strokeStyle = '#3a3f2a'; c.lineWidth = 0.5; c.stroke();

@@ -15,16 +15,30 @@
 
   function init(c) { ctx = c; }
 
-  function setup() {
-    if (added) return true;
-    if (!root.mlcontour) { ctx.toast('โหลดตัวสร้างเส้นชั้นความสูงไม่ได้'); return false; }
-    var map = ctx.map();
+  function ensureDem() {
     if (!dem) {
       dem = new root.mlcontour.DemSource({
         url: C.DEM_TEMPLATE, encoding: 'terrarium', maxzoom: C.DEM_MAXZOOM, worker: true, cacheSize: 100, timeoutMs: 15000
       });
       dem.setupMaplibre(root.maplibregl);
     }
+  }
+  function setup() {
+    if (added) return true;
+    if (!root.mlcontour) { ctx.toast('โหลดตัวสร้างเส้นชั้นความสูงไม่ได้'); return false; }
+    var map = ctx.map();
+    addLayers(map, false);
+    map.on('error', function (e) {
+      if (failedWarn || !e || e.sourceId !== 'contours') return;
+      failedWarn = true;
+      ctx.toast('สร้างเส้นชั้นความสูงบางส่วนไม่ได้ (ไม่มีข้อมูลความสูงของพื้นที่นี้ ต้องมีอินเทอร์เน็ตหรือดาวน์โหลดพื้นที่ไว้)');
+    });
+    added = true;
+    return true;
+  }
+  // เพิ่มเส้นชั้นความสูงลงแผนที่ใดก็ได้ (ใช้กับแผนที่ชั่วคราวสำหรับพิมพ์ด้วย)
+  function addLayers(map, forPrint) {
+    ensureDem();
     map.addSource('contours', {
       type: 'vector', minzoom: MIN_ZOOM, maxzoom: 15,
       tiles: [dem.contourProtocolUrl({
@@ -64,14 +78,8 @@
       layout: { 'visibility': 'none' },
       paint: { 'line-color': LINE_COLOR, 'line-opacity': 0.7, 'line-width': 0.5, 'line-dasharray': [3, 2] }
     }, map.getLayer('contour-lines') ? 'contour-lines' : undefined);
-    map.on('error', function (e) {
-      if (failedWarn || !e || e.sourceId !== 'contours') return;
-      failedWarn = true;
-      ctx.toast('สร้างเส้นชั้นความสูงบางส่วนไม่ได้ (ไม่มีข้อมูลความสูงของพื้นที่นี้ ต้องมีอินเทอร์เน็ตหรือดาวน์โหลดพื้นที่ไว้)');
-    });
-    added = true;
-    return true;
   }
+  function addTo(map) { if (!root.mlcontour) return false; addLayers(map, true); return true; }
 
   function apply(on) {
     var map = ctx && ctx.map();
@@ -98,5 +106,5 @@
     return true;
   }
 
-  root.TrailContour = { init: init, apply: apply, showClass: showClass, getClass: function () { return cls; } };
+  root.TrailContour = { init: init, apply: apply, addTo: addTo, showClass: showClass, getClass: function () { return cls; } };
 })(typeof self !== 'undefined' ? self : this);

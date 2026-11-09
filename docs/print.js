@@ -111,6 +111,74 @@
     c.putImageData(out, g.fx, g.fy);
   }
 
+  /* ---------- พื้นหลังแผนที่เดินป่า: วาดแผนที่ของแอพเองบนแผนที่ชั่วคราว (เส้นชั้น เงาเขา ยอดเขา X คุ้งกระทะ) แล้วดัดเข้ากริด UTM ---------- */
+  function waitIdle(m, ms) { return new Promise(function (res) { var done = false; function fin() { if (!done) { done = true; res(); } } m.once('idle', fin); setTimeout(fin, ms); }); }
+  async function drawTrail(c, o, g, onStatus) {
+    var tpl = ctx.vectorTpl && ctx.vectorTpl();
+    if (!root.maplibregl || !tpl) throw new Error('แผนที่เดินป่ายังไม่พร้อม (เปิดแผนที่ให้โหลดเสร็จก่อน ต้องออนไลน์หรือดาวน์โหลดพื้นที่ไว้)');
+    var S = 16, nx = Math.ceil(g.fw / S) + 1, ny = Math.ceil(g.fh / S) + 1, MX = new Float64Array(nx * ny), MY = new Float64Array(nx * ny);
+    var mnx = 1e9, mxx = -1e9, mny = 1e9, mxy = -1e9, w0 = 1e9, e0 = -1e9, s0 = 1e9, n0 = -1e9, i, j;
+    for (j = 0; j < ny; j++) for (i = 0; i < nx; i++) {
+      var ll = G.fromUTM(g.zone, g.north, g.E0 + (i * S - g.fw / 2) * g.mpp, g.N0 - (j * S - g.fh / 2) * g.mpp), m = mercXY(ll), k = j * nx + i;
+      MX[k] = m[0]; MY[k] = m[1];
+      mnx = Math.min(mnx, m[0]); mxx = Math.max(mxx, m[0]); mny = Math.min(mny, m[1]); mxy = Math.max(mxy, m[1]);
+      w0 = Math.min(w0, ll.lng); e0 = Math.max(e0, ll.lng); s0 = Math.min(s0, ll.lat); n0 = Math.max(n0, ll.lat);
+    }
+    // ขนาดตัวหนังสือบนแผนที่คงที่ราว 2 มม. ไม่ว่าจะพิมพ์กี่ dpi (pixelRatio = dpi/150)
+    var lat0 = (s0 + n0) / 2, pr = Math.max(1, o.dpi / 150), zf = Math.log(78271.517 * Math.cos(lat0 * Math.PI / 180) / (g.mpp * pr)) / Math.LN2;
+    zf = Math.max(8, Math.min(17, zf));
+    var world = 512 * Math.pow(2, zf), regW = Math.ceil((mxx - mnx) * world) + 4, regH = Math.ceil((mxy - mny) * world) + 4;
+    var mos = document.createElement('canvas'); mos.width = Math.ceil(regW * pr); mos.height = Math.ceil(regH * pr);
+    var mc = mos.getContext('2d'); mc.fillStyle = '#f1efe6'; mc.fillRect(0, 0, mos.width, mos.height);
+    var MG = 140, CH = Math.floor(3800 / pr) - 2 * MG; CH -= CH % 2; // ช่องใหญ่สุดที่ WebGL บนมือถือรับได้ (≤ 4096 px) ส่วนใหญ่จึงวาดครั้งเดียว ไม่มีรอยต่อ // ทีละช่อง (กันหน่วยความจำ WebGL) เผื่อขอบไว้ให้ป้ายชื่อวางได้ไม่ขาด
+    var div = document.createElement('div');
+    div.style.cssText = 'position:fixed;left:0;top:0;width:' + (Math.min(CH, regW + (regW % 2)) + 2 * MG) + 'px;height:' + (Math.min(CH, regH + (regH % 2)) + 2 * MG) + 'px;opacity:0;pointer-events:none;z-index:-1';
+    document.body.appendChild(div);
+    function unproj(mx, my) { return [mx * 360 - 180, Math.atan(Math.sinh(Math.PI * (1 - 2 * my))) * 180 / Math.PI]; }
+    var pm = null;
+    try {
+      onStatus('เตรียมแผนที่เดินป่า…');
+      pm = new root.maplibregl.Map({ container: div, style: C.buildStyle(tpl), interactive: false, attributionControl: false, preserveDrawingBuffer: true, pixelRatio: pr, fadeDuration: 0, center: unproj((mnx + mxx) / 2, (mny + mxy) / 2), zoom: zf, maxZoom: 22 });
+      await new Promise(function (res, rej) { pm.once('load', res); pm.once('error', function () {}); setTimeout(function () { rej(new Error('โหลดแผนที่เดินป่าไม่สำเร็จ')); }, 40000); });
+      // เงาเขาอ่อนลงสำหรับกระดาษ ให้เส้นชั้นความสูงเด่นกว่า
+      if (pm.getLayer('hillshade')) { pm.setPaintProperty('hillshade', 'hillshade-exaggeration', 0.35); pm.setPaintProperty('hillshade', 'hillshade-shadow-color', '#6e6656'); pm.setPaintProperty('hillshade', 'hillshade-accent-color', '#8a8270'); }
+      if (window.TrailContour && TrailContour.addTo) TrailContour.addTo(pm);
+      if (window.TrailSpots && TrailSpots.computeFor) {
+        onStatus('คำนวณยอดเขาและที่ต่ำ…');
+        var sp = await TrailSpots.computeFor([w0, s0, e0, n0], zf).catch(function () { return null; });
+        if (sp) TrailSpots.addTo(pm, sp, true);
+      }
+      var nCx = Math.ceil(regW / CH), nCy = Math.ceil(regH / CH), cnt = 0;
+      for (var cy = 0; cy < nCy; cy++) for (var cx = 0; cx < nCx; cx++) {
+        cnt++; onStatus('วาดแผนที่เดินป่า ' + cnt + '/' + (nCx * nCy) + '…');
+        var cw = Math.min(CH, regW + (regW % 2)), chh = Math.min(CH, regH + (regH % 2)), x0 = cx * CH, y0 = cy * CH;
+        // ศูนย์กลางของช่องนี้ (รวมขอบ)
+        pm.jumpTo({ center: unproj(mnx + (x0 + cw / 2) / world, mny + (y0 + chh / 2) / world), zoom: zf });
+        await waitIdle(pm, 45000);
+        mc.drawImage(pm.getCanvas(), MG * pr, MG * pr, cw * pr, chh * pr, x0 * pr, y0 * pr, cw * pr, chh * pr);
+      }
+    } finally {
+      if (pm) pm.remove();
+      div.remove();
+    }
+    onStatus('ปรับภาพให้ตรงกริด…');
+    await new Promise(function (r) { setTimeout(r, 20); });
+    var md = mc.getImageData(0, 0, mos.width, mos.height).data, mw = mos.width, mh = mos.height;
+    var out = c.createImageData(g.fw, g.fh), od = out.data, fade = o.fade / 100, sc = world * pr;
+    for (var py = 0; py < g.fh; py++) {
+      var jj = Math.floor(py / S), fyy = (py - jj * S) / S;
+      for (var px = 0; px < g.fw; px++) {
+        var ii = Math.floor(px / S), fxx = (px - ii * S) / S, a = jj * nx + ii, b = a + 1, d = a + nx, e = d + 1;
+        var wx = (MX[a] * (1 - fxx) + MX[b] * fxx) * (1 - fyy) + (MX[d] * (1 - fxx) + MX[e] * fxx) * fyy;
+        var wy = (MY[a] * (1 - fxx) + MY[b] * fxx) * (1 - fyy) + (MY[d] * (1 - fxx) + MY[e] * fxx) * fyy;
+        var sx = Math.floor((wx - mnx) * sc), sy = Math.floor((wy - mny) * sc), o4 = (py * g.fw + px) * 4, r0 = 255, g0 = 255, b0 = 255;
+        if (sx >= 0 && sy >= 0 && sx < mw && sy < mh) { var m4 = (sy * mw + sx) * 4; r0 = md[m4]; g0 = md[m4 + 1]; b0 = md[m4 + 2]; }
+        od[o4] = 255 + (r0 - 255) * fade; od[o4 + 1] = 255 + (g0 - 255) * fade; od[o4 + 2] = 255 + (b0 - 255) * fade; od[o4 + 3] = 255;
+      }
+    }
+    c.putImageData(out, g.fx, g.fy);
+  }
+
   /* ---------- พื้นหลังแผนที่กระดาษที่นำเข้า (ดัดเข้ากริด UTM) ---------- */
   function mercXY(ll) {
     var s = Math.sin(ll.lat * Math.PI / 180);
@@ -240,7 +308,7 @@
     }
     // รายการส่วนท้ายที่เลือก: คำนวณความสูงก่อน เพื่อให้เหลือพื้นที่แผนที่ที่เหลือ
     var rows = [];
-    var credit = !!fo.credit && (syn || o.base === 'topo' || o.base === 'sat' || o.base === 'paper');
+    var credit = !!fo.credit && (syn || o.base === 'topo' || o.base === 'sat' || o.base === 'paper' || o.base === 'trail');
     var nNotes = (fo.grid ? 1 : 0) + (fo.corners ? 1 : 0) + (syn && fo.interval ? 1 : 0) + (credit ? 1 : 0);
     if (fo.bar || fo.north) rows.push({ h: 15, draw: function (y) { drawBarNorth(y); } });
     if (nNotes) rows.push({ h: nNotes * 3.4 + 1.2, draw: function (y) { drawNotes(y); } });
@@ -285,6 +353,7 @@
       onStatus('วาดแผนที่สมมุติ…');
       TrailSynDraw.draw(c, o, g, world, onStatus);
     } else if (o.base === 'paper') await drawPaper(c, o, g, onStatus);
+    else if (o.base === 'trail') await drawTrail(c, o, g, onStatus);
     else if (o.base !== 'none') await drawBase(c, o, g, onStatus);
 
     // กริด
@@ -555,6 +624,7 @@
         if (syn) notes.push('แผนที่สมมุติสร้างเพื่อการสอน ชื่อและสถานที่ทั้งหมดเป็นข้อมูลสมมุติ ไม่ใช่สถานที่จริง · รหัสแผนที่ ' + ((o.syn && o.syn.seed) | 0) + ' (' + (TrailSynMap._internal.PRESETS[o.syn.preset] || {}).name + ')');
         else if (o.base === 'topo') notes.push('พื้นหลัง: © OpenTopoMap (CC-BY-SA) · ข้อมูล © ผู้ร่วมจัดทำ OpenStreetMap');
         else if (o.base === 'sat') notes.push('พื้นหลัง: Esri World Imagery');
+        else if (o.base === 'trail') notes.push('พื้นหลัง: แผนที่เดินป่า ข้อมูล © OpenStreetMap (OpenFreeMap) · เส้นชั้น ยอดเขา (X) และที่ต่ำ คำนวณจากข้อมูลความสูง SRTM ละเอียดราว 30 ม. เป็นค่าประมาณ');
         else if (o.base === 'paper') notes.push('พื้นหลัง: แผนที่กระดาษที่นำเข้า (ความแม่นยำขึ้นกับการปรับพิกัด)');
       }
       notes.forEach(function (n, i) { text(n, fx, y0 + mm(2.6 + i * 3.4), 2.2, false, 'left', '#333'); });
@@ -777,7 +847,7 @@
     function f(k, d) { return fo[k] === undefined ? d : fo[k]; }
     var scaleSel = SCALES.indexOf(cfg.scale) >= 0 ? cfg.scale : 'custom';
     var paperList = Object.keys(PAPERS).map(function (k) { return [k, k + ' (' + PAPERS[k][0] + '×' + PAPERS[k][1] + ' มม.)']; }).concat([['custom', 'กำหนดเอง (กว้าง × ยาว มม.)']]);
-    var baseList = [['none', 'กริดเปล่า (สำหรับฝึกลงพิกัด)'], ['topo', 'ภูมิประเทศ (เส้นชั้นความสูง)'], ['sat', 'ภาพถ่ายดาวเทียม'], ['paper', 'แผนที่กระดาษ (ที่นำเข้า)']];
+    var baseList = [['none', 'กริดเปล่า (สำหรับฝึกลงพิกัด)'], ['trail', 'แผนที่เดินป่า (เส้นชั้น ยอดเขา X คุ้งกระทะ)'], ['topo', 'ภูมิประเทศ OpenTopoMap'], ['sat', 'ภาพถ่ายดาวเทียม'], ['paper', 'แผนที่กระดาษ (ที่นำเข้า)']];
     if (hasSyn) baseList.push(['syn', 'แผนที่สมมุติ (สร้างเองสำหรับสอน)']);
 
     var synBox = '';
@@ -861,6 +931,7 @@
       $('pRealOpts').style.display = isSyn ? 'none' : '';
     }
     ['pPaper', 'pScale', 'pBase'].forEach(function (id) { $(id).onchange = syncVis; });
+    $('pBase').addEventListener('change', function () { if (this.value === 'trail' && +$('pFade').value < 90) { $('pFade').value = 100; $('pFadeV').textContent = '100%'; } });
     syncVis();
     function readCfg() {
       cfg.title = $('pTitle').value.trim() || 'แบบฝึกอ่านพิกัดกริด';

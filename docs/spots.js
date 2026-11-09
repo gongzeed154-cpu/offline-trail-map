@@ -11,13 +11,18 @@
 
   function init(c) {
     ctx = c;
-    var map = ctx.map();
-    map.addSource('spot-pts', { type: 'geojson', data: EMPTY });
-    map.addSource('spot-depr', { type: 'geojson', data: EMPTY });
+    addTo(ctx.map(), null, false);
+    ctx.map().on('moveend', schedule);
+  }
+
+  // เพิ่มชั้นข้อมูลลงแผนที่ใดก็ได้ (แผนที่หลัก หรือแผนที่ชั่วคราวสำหรับพิมพ์) data = { pts, depr } หรือ null
+  function addTo(map, data, visible) {
+    map.addSource('spot-pts', { type: 'geojson', data: data ? data.pts : EMPTY });
+    map.addSource('spot-depr', { type: 'geojson', data: data ? data.depr : EMPTY });
     var before = map.getLayer('traffic') ? 'traffic' : undefined;
     map.addLayer({
       id: 'depr-lines', type: 'line', source: 'spot-depr', minzoom: MIN_ZOOM,
-      layout: { 'line-join': 'round', 'line-cap': 'butt', visibility: 'none' },
+      layout: { 'line-join': 'round', 'line-cap': 'butt', visibility: visible ? 'visible' : 'none' },
       paint: {
         'line-color': LINE_COLOR, 'line-opacity': 0.95,
         'line-width': ['interpolate', ['linear'], ['zoom'], 12, ['match', ['get', 'k'], 'ring1', 0.9, 0.6], 16, ['match', ['get', 'k'], 'ring1', 2.0, 1.1]]
@@ -31,17 +36,33 @@
     if (!map.hasImage('spot-x')) map.addImage('spot-x', g.getImageData(0, 0, sz, sz), { pixelRatio: px });
     map.addLayer({
       id: 'spot-x', type: 'symbol', source: 'spot-pts', minzoom: MIN_ZOOM,
-      layout: { visibility: 'none', 'icon-image': 'spot-x', 'icon-allow-overlap': true, 'icon-ignore-placement': true }
+      layout: { visibility: visible ? 'visible' : 'none', 'icon-image': 'spot-x', 'icon-allow-overlap': true, 'icon-ignore-placement': true }
     }, before);
     map.addLayer({
       id: 'spot-ele', type: 'symbol', source: 'spot-pts', minzoom: MIN_ZOOM,
       layout: {
-        visibility: 'none', 'text-field': ['to-string', ['get', 'ele']], 'text-font': ['Noto Sans Bold'], 'text-size': 12,
+        visibility: visible ? 'visible' : 'none', 'text-field': ['to-string', ['get', 'ele']], 'text-font': ['Noto Sans Bold'], 'text-size': 12,
         'text-anchor': 'left', 'text-offset': [0.55, 0], 'text-optional': true, 'symbol-sort-key': ['-', 0, ['get', 'ele']]
       },
       paint: { 'text-color': '#2b1a0a', 'text-halo-color': '#ffffff', 'text-halo-width': 1.5 }
     }, before);
-    map.on('moveend', schedule);
+    if (visible) peakNameOnly(map, true);
+  }
+  function peakNameOnly(map, yes) {
+    if (!map.getLayer('peak')) return;
+    map.setLayoutProperty('peak', 'text-field', yes ? ['coalesce', ['get', 'name'], ''] :
+      ['format', ['coalesce', ['get', 'name'], ''], {}, '\n', {}, ['concat', '▲ ', ['to-string', ['coalesce', ['get', 'ele'], '']], ' ม.'], { 'font-scale': 0.9 }]);
+    map.setLayoutProperty('peak', 'text-offset', yes ? [0, 0.9] : [0, 0]);
+  }
+
+  // คำนวณยอดเขาและที่ต่ำสำหรับกรอบพิกัด [w, s, e, n] ที่ซูม (สำหรับพิมพ์)
+  function computeFor(bbox, zoom) {
+    var n = Math.pow(2, Z);
+    function tx(lng) { return Math.floor((lng + 180) / 360 * n); }
+    function ty(lat) { var r = lat * Math.PI / 180; return Math.floor((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * n); }
+    var r = { x0: tx(bbox[0]) - 1, x1: tx(bbox[2]) + 1, y0: Math.max(0, ty(bbox[3]) - 1), y1: Math.min(n - 1, ty(bbox[1]) + 1) };
+    if ((r.x1 - r.x0 + 1) * (r.y1 - r.y0 + 1) > 64) return Promise.reject(new Error('พื้นที่ใหญ่เกินไปสำหรับคำนวณยอดเขา'));
+    return loadMosaic(r).then(function (m) { return analyse(m, r, intervalFor(zoom), Math.max(12, Math.min(16, Math.round(zoom)))); });
   }
 
   function setEnabled(v) {
@@ -50,11 +71,7 @@
     if (!map) return;
     ['spot-x', 'spot-ele', 'depr-lines'].forEach(function (id) { if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none'); });
     // ยอดเขาจาก OpenStreetMap: เหลือแค่ชื่อ (ความสูงใช้ X ของเรา ไม่ให้ซ้อนสองค่า)
-    if (map.getLayer('peak')) {
-      map.setLayoutProperty('peak', 'text-field', on ? ['coalesce', ['get', 'name'], ''] :
-        ['format', ['coalesce', ['get', 'name'], ''], {}, '\n', {}, ['concat', '▲ ', ['to-string', ['coalesce', ['get', 'ele'], '']], ' ม.'], { 'font-scale': 0.9 }]);
-      map.setLayoutProperty('peak', 'text-offset', on ? [0, 0.9] : [0, 0]);
-    }
+    peakNameOnly(map, on);
     if (on) { lastKey = ''; schedule(); }
   }
 
@@ -270,5 +287,5 @@
     return a;
   }
 
-  root.TrailSpots = { init: init, setEnabled: setEnabled, _analyse: analyse, _map: function () { return ctx && ctx.map(); } };
+  root.TrailSpots = { init: init, setEnabled: setEnabled, addTo: addTo, computeFor: computeFor, _analyse: analyse, _map: function () { return ctx && ctx.map(); } };
 })(typeof self !== 'undefined' ? self : this);

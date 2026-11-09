@@ -1,0 +1,422 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<title>เกมแผนที่</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#2e6b3f">
+<link rel="stylesheet" href="lib/maplibre-gl.css">
+<style>
+  :root { --green: #2e6b3f; --dark: #14301c; --red: #d93025; --gold: #f5b301; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; -webkit-user-select: none; user-select: none;
+    font-family: -apple-system, "Sarabun", "Noto Sans Thai", sans-serif; background: #dfe8ee; color: #1b1b1b; }
+  #map { position: fixed; inset: 0; }
+  #cover { position: fixed; inset: 0; z-index: 2; background: radial-gradient(circle at 50% 40%, #2a6a3b, #12301b 75%); }
+  button { font-family: inherit; }
+  [hidden] { display: none !important; }
+
+  #top { position: fixed; left: 0; right: 0; top: 0; z-index: 5; padding: calc(env(safe-area-inset-top) + 8px) 10px 0; pointer-events: none; }
+  .card { background: #fff; border-radius: 14px; box-shadow: 0 2px 10px rgba(0,0,0,.3); padding: 10px 14px; pointer-events: auto; }
+  #qn { font-size: 12px; color: #666; display: flex; justify-content: space-between; align-items: center; }
+  #snd { border: 0; background: none; font-size: 16px; padding: 0 4px; }
+  #prompt { font-size: 18px; font-weight: 700; line-height: 1.3; margin-top: 2px; }
+  #hint { font-size: 13px; color: #555; margin-top: 3px; }
+  #bar { height: 6px; background: #e4e4e4; border-radius: 3px; margin-top: 8px; overflow: hidden; }
+  #barIn { height: 100%; width: 100%; background: var(--green); }
+  #barIn.low { background: var(--red); }
+
+  #bottom { position: fixed; left: 10px; right: 10px; bottom: calc(env(safe-area-inset-bottom) + 10px); z-index: 5; display: flex; flex-direction: column; gap: 8px; align-items: stretch; }
+  #readout { align-self: center; background: rgba(0,0,0,.75); color: #fff; font: 600 14px ui-monospace, Menlo, monospace; padding: 6px 12px; border-radius: 16px; }
+  .btn { height: 52px; border: 0; border-radius: 26px; background: var(--green); color: #fff; font-size: 19px; font-weight: 700; box-shadow: 0 3px 10px rgba(0,0,0,.35); }
+  .btn:disabled { background: #8aa592; }
+  #result { text-align: center; }
+  #result .big { font-size: 32px; font-weight: 800; color: var(--green); line-height: 1.1; }
+  #result .sub { font-size: 14px; color: #444; margin-top: 3px; }
+  #result .tot { margin-top: 7px; padding-top: 7px; border-top: 1px solid #e3e3e3; font-size: 14px; }
+  #result b { font-size: 18px; }
+
+  /* กรอกพิกัด */
+  #pDms { padding: 8px 10px; }
+  .dline { display: flex; align-items: center; gap: 4px; justify-content: center; margin-bottom: 6px; font-weight: 700; }
+  .dline .h { width: 22px; font-size: 16px; color: var(--green); text-align: center; }
+  .df { min-width: 54px; height: 42px; border: 2px solid #cfd8d2; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 800; background: #f7faf8; }
+  .df.act { border-color: var(--green); background: #e6f3ea; box-shadow: 0 0 0 3px rgba(46,107,63,.2); }
+  .du { font-size: 20px; color: #666; margin-right: 4px; }
+  #keys { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; margin-top: 4px; }
+  #keys button { height: 38px; border: 0; border-radius: 9px; background: #eef2ef; font-size: 20px; font-weight: 700; color: #222; }
+  #keys button:active { background: #cfe3d5; }
+  #keys .nx { background: #dcecdf; color: var(--green); }
+
+  /* เข็มทิศ */
+  #pDial { padding: 8px 10px 10px; text-align: center; }
+  #dialHost { width: min(60vw, 230px); height: min(60vw, 230px); margin: 0 auto; }
+  #dialHost.big { width: min(78vw, 330px); height: min(78vw, 330px); }
+  #dRead { font-size: 22px; font-weight: 800; color: var(--green); min-height: 28px; margin-top: 2px; }
+  #dRead small { font-size: 14px; color: #666; font-weight: 600; }
+
+  /* หน้าจอเต็ม */
+  #screen { position: fixed; inset: 0; z-index: 10; background: linear-gradient(160deg, #1f4d2c, #2e6b3f 60%, #4b8f5c); color: #fff;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 18px; gap: 11px; overflow-y: auto; }
+  #screen h1 { margin: 0; font-size: 28px; }
+  #screen p { margin: 0; font-size: 16px; opacity: .92; }
+  #screen input { width: 100%; max-width: 330px; height: 48px; border: 0; border-radius: 24px; padding: 0 18px; font-size: 18px; text-align: center; font-family: inherit; user-select: text; -webkit-user-select: text; }
+  #screen .go { width: 100%; max-width: 330px; height: 52px; border: 0; border-radius: 26px; background: var(--gold); color: #3a2a00; font-size: 19px; font-weight: 800; }
+  .count { font-size: 120px; font-weight: 800; line-height: 1; animation: pulse 1s infinite; }
+  @keyframes pulse { 0% { transform: scale(1.25); opacity: .4; } 40% { transform: scale(1); opacity: 1; } }
+  .pct { font-size: 72px; font-weight: 800; line-height: 1; color: var(--gold); }
+  .spin { width: 30px; height: 30px; border: 4px solid rgba(255,255,255,.3); border-top-color: #fff; border-radius: 50%; animation: sp 1s linear infinite; }
+  @keyframes sp { to { transform: rotate(360deg); } }
+  .pin { width: 30px; height: 40px; }
+
+  /* เลือกตัวละคร */
+  #picker { width: 100%; max-width: 340px; }
+  #tabs { display: flex; gap: 5px; justify-content: center; margin-bottom: 7px; }
+  #tabs button { flex: 1; border: 0; border-radius: 14px; padding: 6px 2px; background: rgba(255,255,255,.18); color: #fff; font-size: 13px; font-weight: 700; }
+  #tabs button.on { background: #fff; color: var(--green); }
+  #avs { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+  #avs button { aspect-ratio: 1; border: 3px solid transparent; border-radius: 14px; background: rgba(255,255,255,.16); font-size: 26px; padding: 0; }
+  #avs button.on { border-color: var(--gold); background: rgba(255,255,255,.35); transform: scale(1.08); }
+  #cols { display: flex; gap: 8px; justify-content: center; margin-top: 8px; }
+  #cols button { width: 28px; height: 28px; border-radius: 14px; border: 3px solid rgba(255,255,255,.5); padding: 0; }
+  #cols button.on { border-color: #fff; transform: scale(1.25); }
+  .nrow { display: flex; gap: 6px; width: 100%; max-width: 340px; }
+  #dice { width: 48px; height: 48px; border: 0; border-radius: 24px; background: rgba(255,255,255,.25); font-size: 22px; flex: none; }
+  .me { margin: 0 auto; width: 96px; height: 96px; border-radius: 48px; background: #fff; display: flex; align-items: center; justify-content: center; font-size: 56px; border: 5px solid var(--gold); animation: bob 1.6s ease-in-out infinite; }
+  @keyframes bob { 50% { transform: translateY(-8px); } }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div id="cover" hidden></div>
+
+<div id="top" hidden>
+  <div class="card">
+    <div id="qn"><span id="qno"></span><span><span id="tleft"></span> <button id="snd">🔊</button></span></div>
+    <div id="prompt"></div>
+    <div id="hint"></div>
+    <div id="bar"><div id="barIn"></div></div>
+  </div>
+</div>
+
+<div id="bottom" hidden>
+  <div id="readout" hidden></div>
+  <div id="pDial" class="card" hidden>
+    <div id="dialHost"></div>
+    <div id="dRead">แตะ/ลากบนหน้าปัดเพื่อตั้งเข็ม</div>
+  </div>
+  <div id="pDms" class="card" hidden>
+    <div class="dline"><span class="h">N</span><div class="df" data-i="0"></div><span class="du">°</span><div class="df" data-i="1"></div><span class="du">′</span><div class="df" data-i="2"></div><span class="du">″</span></div>
+    <div class="dline"><span class="h">E</span><div class="df" data-i="3"></div><span class="du">°</span><div class="df" data-i="4"></div><span class="du">′</span><div class="df" data-i="5"></div><span class="du">″</span></div>
+    <div id="keys"></div>
+  </div>
+  <button id="confirm" class="btn" disabled>แตะแผนที่เพื่อปักหมุด</button>
+  <div id="result" class="card" hidden></div>
+</div>
+
+<div id="screen">
+  <h1 id="sTitle">🗺️ เกมแผนที่</h1>
+  <p id="sText">เลือกตัวละคร แล้วตั้งชื่อ</p>
+  <div id="picker">
+    <div id="tabs"></div>
+    <div id="avs"></div>
+    <div id="cols"></div>
+  </div>
+  <div class="nrow"><input id="name" maxlength="20" placeholder="ชื่อ หรือ เลขที่" autocomplete="off"><button id="dice" title="สุ่มชื่อ">🎲</button></div>
+  <button id="join" class="go">⚔️ เข้าร่วม</button>
+  <div id="sExtra"></div>
+</div>
+
+<script src="lib/maplibre-gl.js"></script>
+<script src="qmap.js"></script>
+<script src="dial.js"></script>
+<script src="audio.js"></script>
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var store = { get: function (k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+                set: function (k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
+  function esc(t) { return String(t).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  var A = window.GameAudio;
+
+  // ---------- เลือกตัวละคร ----------
+  var AVS = {
+    'สัตว์': ['🦁', '🐯', '🐘', '🦅', '🐺', '🦈', '🐼', '🦊', '🐬', '🦉', '🐙', '🦖'],
+    'ทหาร': ['🪖', '🎖️', '🛡️', '🪂', '🚁', '🧭', '⛺', '🔭', '🎯', '🥾', '⚓', '🚤'],
+    'การ์ตูน': ['🤖', '👻', '🦸', '🧙', '🥷', '🧛', '🧜', '🧚', '👽', '🐲', '🦄', '🤡'],
+    'กีฬา': ['⚽', '🏀', '🏐', '🏸', '🥊', '🏹', '🏓', '🥋', '🚴', '🏊', '🏋️', '⛳']
+  };
+  var COLS = ['#e53935', '#fb8c00', '#fdd835', '#43a047', '#00acc1', '#1e88e5', '#8e24aa', '#ec407a'];
+  var pick = { cat: store.get('mg_cat') || 'สัตว์', av: store.get('mg_av') || '🦁', color: store.get('mg_col') || '#fb8c00' };
+  function drawPicker() {
+    $('tabs').innerHTML = Object.keys(AVS).map(function (c) { return '<button data-c="' + c + '" class="' + (c === pick.cat ? 'on' : '') + '">' + c + '</button>'; }).join('');
+    $('avs').innerHTML = AVS[pick.cat].map(function (a) { return '<button data-a="' + a + '" class="' + (a === pick.av ? 'on' : '') + '">' + a + '</button>'; }).join('');
+    $('cols').innerHTML = COLS.map(function (c) { return '<button data-k="' + c + '" class="' + (c === pick.color ? 'on' : '') + '" style="background:' + c + '"></button>'; }).join('');
+  }
+  $('tabs').onclick = function (e) { var c = e.target.dataset && e.target.dataset.c; if (c) { pick.cat = c; drawPicker(); A.unlock(); A.sfx('pop'); } };
+  $('avs').onclick = function (e) { var a = e.target.dataset && e.target.dataset.a; if (a) { pick.av = a; drawPicker(); A.unlock(); A.sfx('pop'); } };
+  $('cols').onclick = function (e) { var k = e.target.dataset && e.target.dataset.k; if (k) { pick.color = k; drawPicker(); A.sfx('pop'); } };
+  var ADJ = ['สายฟ้า', 'เงียบกริบ', 'ตาเหยี่ยว', 'ไร้เทียมทาน', 'ใจเด็ด', 'ว่องไว', 'พิชิต', 'นักสำรวจ', 'ทะลวง', 'ตัวจริง'];
+  var NOUN = ['เสือ', 'เหยี่ยว', 'หมาป่า', 'พยัคฆ์', 'พายุ', 'ทัพหน้า', 'นักล่า', 'ฟ้าผ่า', 'จ่าฝูง', 'ราชา'];
+  $('dice').onclick = function () {
+    A.unlock(); A.sfx('pop');
+    $('name').value = (NOUN[Math.random() * NOUN.length | 0] + ADJ[Math.random() * ADJ.length | 0]).slice(0, 20);
+  };
+  drawPicker();
+
+  // ---------- แผนที่ ----------
+  var qm = QMap.create({ container: 'map', pad: { top: 150, bottom: 110, left: 14, right: 14 }, maxZoom: 15 });
+  var map = qm.map;
+  var myMarker = null, ansMarker = null;
+  function clearMarkers() {
+    if (myMarker) { myMarker.remove(); myMarker = null; }
+    if (ansMarker) { ansMarker.remove(); ansMarker = null; }
+    qm.setAux(null);
+  }
+  function fmtKm(km) { return km < 1 ? Math.round(km * 1000) + ' ม.' : (km < 10 ? km.toFixed(1) : Math.round(km)) + ' กม.'; }
+  var kindOf = function (q) { return q.type === 'compass' ? 'dial' : q.type === 'dms' ? 'dms' : 'pin'; };
+
+  // ---------- สถานะ ----------
+  var S = null, offset = 0, myId = store.get('mapgame_id'), submitted = false, curQ = -2, curPhase = '', es = null, qMs = 25000, lastSec = -1;
+  var dial = Dial.create($('dialHost'), { interactive: true, onChange: function (a) { dialChanged(a); } });
+  var dmsVals = ['', '', '', '', '', ''], dmsIdx = 0, DMS_MAX = [2, 2, 2, 3, 2, 2];
+
+  // ปักหมุด
+  function updateReadout() {
+    var q = S && S.q;
+    if (!myMarker || !q || q.readout === 'none') { $('readout').hidden = true; return; }
+    var ll = myMarker.getLngLat();
+    $('readout').hidden = false; $('readout').textContent = q.readout === 'dms' ? QMap.fmtLL(ll.lat, ll.lng) : QMap.fmtDec(ll.lat, ll.lng);
+  }
+  map.on('click', function (e) {
+    if (submitted || !S || S.phase !== 'question' || kindOf(S.q) !== 'pin') return;
+    if (!myMarker) {
+      myMarker = new maplibregl.Marker({ element: QMap.pinEl('#d93025'), anchor: 'bottom', draggable: true }).setLngLat(e.lngLat).addTo(map);
+      myMarker.on('drag', updateReadout);
+    } else myMarker.setLngLat(e.lngLat);
+    updateReadout(); A.sfx('pop');
+    $('confirm').disabled = false; $('confirm').textContent = '✔ ยืนยันคำตอบ';
+  });
+
+  // กรอกพิกัด
+  (function buildKeys() {
+    var h = '';
+    [1, 2, 3, 4, 5, 6, 7, 8, 9, '⌫', 0, '➜'].forEach(function (k) { h += '<button data-k="' + k + '"' + (k === '➜' ? ' class="nx"' : '') + '>' + k + '</button>'; });
+    $('keys').innerHTML = h;
+  })();
+  function drawDms() {
+    [].forEach.call(document.querySelectorAll('.df'), function (d) {
+      var i = +d.dataset.i; d.textContent = dmsVals[i]; d.className = 'df' + (i === dmsIdx && !submitted ? ' act' : '');
+    });
+    var ok = dmsVals.every(function (v) { return v !== ''; });
+    if (!submitted) { $('confirm').disabled = !ok; $('confirm').textContent = ok ? '✔ ยืนยันคำตอบ' : 'กรอกพิกัดให้ครบ'; }
+  }
+  document.querySelectorAll('.df').forEach(function (d) { d.onclick = function () { if (!submitted) { dmsIdx = +d.dataset.i; drawDms(); A.sfx('tickLow'); } }; });
+  $('keys').onclick = function (e) {
+    var k = e.target.dataset && e.target.dataset.k; if (k == null || submitted) return;
+    A.unlock(); A.sfx('tickLow');
+    if (k === '⌫') dmsVals[dmsIdx] = dmsVals[dmsIdx].slice(0, -1);
+    else if (k === '➜') dmsIdx = (dmsIdx + 1) % 6;
+    else {
+      var nv = dmsVals[dmsIdx] + k;
+      if (nv.length <= DMS_MAX[dmsIdx] && !((dmsIdx === 1 || dmsIdx === 2 || dmsIdx === 4 || dmsIdx === 5) && +nv > 59)) {
+        dmsVals[dmsIdx] = nv;
+        var full = (dmsIdx === 0 && nv.length === 2) || (dmsIdx === 3 && nv.length === 3) || ((dmsIdx === 1 || dmsIdx === 2 || dmsIdx === 4 || dmsIdx === 5) && nv.length === 2);
+        if (full && dmsIdx < 5) dmsIdx++;
+      }
+    }
+    drawDms();
+  };
+
+  // เข็มทิศ
+  function dialChanged(a) {
+    if (submitted) return;
+    $('dRead').innerHTML = a + '° <small>≈ ' + QMap.pointName(a) + '</small>';
+    $('confirm').disabled = false; $('confirm').textContent = '✔ ยืนยันคำตอบ';
+  }
+
+  function submit() {
+    if (submitted || !S || S.phase !== 'question') return;
+    var kind = kindOf(S.q), body = { id: myId };
+    if (kind === 'pin') { if (!myMarker) return; var ll = myMarker.getLngLat(); body.lat = ll.lat; body.lng = ll.lng; myMarker.setDraggable(false); }
+    else if (kind === 'dms') { if (!dmsVals.every(function (v) { return v !== ''; })) return; body.d = dmsVals.map(Number); }
+    else { var a = dial.getAngle(); if (a == null) return; body.ang = a; dial.setInteractive(false); }
+    submitted = true; A.sfx('ding'); drawDms();
+    $('confirm').disabled = true; $('confirm').textContent = 'ส่งแล้ว ✓ รอเฉลย…';
+    fetch('api/answer', { method: 'POST', body: JSON.stringify(body) }).catch(function () { submitted = false; });
+  }
+  $('confirm').onclick = function () { A.unlock(); submit(); };
+  $('snd').onclick = function () { var on = A.toggle('sfx'); $('snd').textContent = on ? '🔊' : '🔇'; };
+
+  function showScreen(title, text, extra, mode) { // mode: 'join' แสดงฟอร์มเข้าร่วม
+    $('screen').hidden = false;
+    $('sTitle').innerHTML = title; $('sText').innerHTML = text; $('sExtra').innerHTML = extra || '';
+    ['picker'].forEach(function (id) { $(id).hidden = mode !== 'join'; });
+    document.querySelector('.nrow').hidden = mode !== 'join'; $('join').hidden = mode !== 'join';
+  }
+  function hideScreen() { $('screen').hidden = true; }
+  function avBubble(m) { return '<div class="me" style="border-color:' + m.color + '">' + m.av + '</div>'; }
+
+  function layoutFor(kind, hasMap) {
+    var bottom = kind === 'pin' ? 110 : kind === 'dms' ? 340 : 390;
+    qm.pad = { top: 150, bottom: bottom, left: 14, right: 14 };
+    $('cover').hidden = hasMap;
+    $('pDial').hidden = kind !== 'dial'; $('pDms').hidden = kind !== 'dms';
+    $('dialHost').className = (kind === 'dial' && !hasMap) ? 'big' : '';
+  }
+
+  function render(s) {
+    var phaseChanged = s.phase !== curPhase, qChanged = s.qi !== curQ;
+    curPhase = s.phase;
+
+    if (s.phase === 'lobby') {
+      curQ = -2; clearMarkers(); $('top').hidden = true; $('bottom').hidden = true; $('cover').hidden = true;
+      showScreen('🗺️ ' + esc(s.title), 'เข้าร่วมแล้ว — รอครูกดเริ่มเกม', avBubble(s.me) + '<p style="margin-top:10px"><b>' + esc(s.me.name) + '</b></p><div class="spin"></div><p>ผู้เล่น ' + s.players + ' คน</p>');
+    } else if (s.phase === 'countdown') {
+      $('top').hidden = true; $('bottom').hidden = true;
+      showScreen('เตรียมตัว!', 'มี ' + s.total + ' ข้อ — ตอบให้ใกล้ที่สุด', '<div class="count" id="cd"></div>');
+    } else if (s.phase === 'question') {
+      hideScreen(); $('top').hidden = false; $('bottom').hidden = false;
+      var q = s.q, kind = kindOf(q);
+      if (qChanged) {
+        curQ = s.qi; clearMarkers(); submitted = false; lastSec = -1; A.sfx('whoosh');
+        $('qno').textContent = 'ข้อ ' + (s.qi + 1) + ' / ' + s.total;
+        $('prompt').textContent = q.prompt; $('hint').textContent = q.hint; $('hint').hidden = !q.hint;
+        var hasMap = !(kind === 'dial' && !(q.markers && q.markers.length));
+        layoutFor(kind, hasMap);
+        if (hasMap) qm.setQuestion(q);
+        $('result').hidden = true; $('readout').hidden = true;
+        $('confirm').hidden = kind === 'dial' ? false : false; $('confirm').disabled = true;
+        if (kind === 'pin') $('confirm').textContent = 'แตะแผนที่เพื่อปักหมุด';
+        if (kind === 'dms') { dmsVals = ['', '', '', '', '', '']; dmsIdx = 0; $('confirm').textContent = 'กรอกพิกัดให้ครบ'; drawDms(); }
+        if (kind === 'dial') { dial.setAngle(null); dial.setTarget(null); dial.setHist(null); dial.setInteractive(true); $('dRead').innerHTML = 'แตะ/ลากบนหน้าปัดเพื่อตั้งเข็ม'; $('confirm').textContent = 'ตั้งเข็มก่อน'; }
+      }
+      if (s.me.answered && !submitted) { // กลับเข้ามาใหม่หลังตอบแล้ว
+        submitted = true; var c = s.me.cur;
+        if (kind === 'pin' && !myMarker) { myMarker = new maplibregl.Marker({ element: QMap.pinEl('#d93025'), anchor: 'bottom' }).setLngLat([c.lng, c.lat]).addTo(map); updateReadout(); }
+        if (kind === 'dial') { dial.setAngle(c.ang); dial.setInteractive(false); }
+        $('confirm').disabled = true; $('confirm').textContent = 'ส่งแล้ว ✓ รอเฉลย…'; drawDms();
+      }
+    } else if (s.phase === 'reveal') {
+      hideScreen(); $('top').hidden = false; $('bottom').hidden = false;
+      var kd = kindOf(s.q), t = s.reveal, r = s.me.last;
+      $('confirm').hidden = true; $('readout').hidden = true; $('pDms').hidden = true;
+      if (phaseChanged) {
+        A.sfx(r ? (r.pct >= 70 ? 'good' : r.pct >= 30 ? 'ok' : 'bad') : 'bad');
+        clearMarkers();
+        if (kd === 'dial') {
+          dial.setTarget(t.angle); dial.setInteractive(false);
+          if (r) dial.setAngle(r.ang);
+          if (s.q.markers && s.q.markers.length > 1) qm.setAux([[s.q.markers[0].lng, s.q.markers[0].lat], [s.q.markers[1].lng, s.q.markers[1].lat]]);
+        } else {
+          qm.setLabels(true);
+          ansMarker = new maplibregl.Marker({ element: QMap.pinEl('#2e6b3f', true), anchor: 'bottom' }).setLngLat([t.lng, t.lat]).addTo(map);
+          var pts = [[t.lng, t.lat]];
+          if (r) {
+            pts.push([r.lng, r.lat]);
+            myMarker = new maplibregl.Marker({ element: QMap.pinEl('#d93025'), anchor: 'bottom' }).setLngLat(pts[1]).addTo(map);
+            qm.setAux(pts);
+          }
+          qm.pad = { top: 170, bottom: 240, left: 50, right: 50 };
+          qm.whenReady(function () { if (kd === 'pin' && !s.q.frame) qm.unlock(); else map.setMaxBounds(null); qm.fitPoints(pts, { maxZoom: s.q.frame ? 14 : 9, pad: qm.pad }); });
+        }
+      }
+      var big, sub, extra = '';
+      if (r) { big = r.pct.toFixed(1) + '%'; } else big = '<span style="color:#b3261e">0%</span>';
+      if (kd === 'dial') sub = r ? 'คลาดเคลื่อน ' + r.diff.toFixed(0) + '° (ตอบ ' + r.ang + '°)' : 'ไม่ได้ตอบข้อนี้';
+      else sub = r ? 'ห่างจากคำตอบ ' + fmtKm(r.km) : 'ไม่ได้ตอบข้อนี้';
+      if (kd === 'dial') extra = '<div class="sub">เฉลย <b>' + Math.round(t.angle) + '°</b> · ' + esc(t.name) + '</div>';
+      else if (kd === 'dms') extra = '<div class="sub">เฉลย <b style="font-size:15px">' + esc(t.dmsText) + '</b><br>' + esc(t.name) + '</div>';
+      else extra = '<div class="sub"><b>' + esc(t.name) + '</b></div>';
+      $('result').hidden = false;
+      $('result').innerHTML = '<div class="big">' + big + '</div><div class="sub">' + sub + '</div>' + extra +
+        '<div class="tot">คะแนนรวม <b>' + s.me.pct.toFixed(1) + '%</b> · อันดับ <b>' + s.me.rank + '</b>/' + s.me.of + '</div>';
+    } else if (s.phase === 'final') {
+      clearMarkers(); $('top').hidden = true; $('bottom').hidden = true; $('cover').hidden = true;
+      if (phaseChanged) A.sfx(s.me.rank <= 3 ? 'fanfare' : 'applause');
+      var medal = s.me.rank === 1 ? '🥇' : s.me.rank === 2 ? '🥈' : s.me.rank === 3 ? '🥉' : '🏁';
+      showScreen(medal + ' จบเกม', esc(s.me.name) + ' ได้คะแนนรวม',
+        avBubble(s.me) + '<div class="pct">' + s.me.pct.toFixed(1) + '%</div><p>อันดับ ' + s.me.rank + ' จาก ' + s.me.of + ' คน</p><p>เฉลี่ยทั้งห้อง ' + s.avg.toFixed(1) + '%</p>');
+    }
+  }
+
+  // นับเวลา + เสียงนับถอยหลัง + ส่งอัตโนมัติเมื่อหมดเวลา
+  setInterval(function () {
+    if (!S) return;
+    var left = S.deadline - (Date.now() + offset), sec = Math.ceil(left / 1000);
+    if (S.phase === 'countdown') {
+      var cd = $('cd'); if (cd) cd.textContent = Math.max(1, sec);
+      if (sec !== lastSec && sec >= 1) { lastSec = sec; A.sfx('tick'); }
+    }
+    if (S.phase === 'question') {
+      $('tleft').textContent = '⏱ ' + Math.max(0, sec) + ' วิ';
+      $('barIn').style.width = Math.max(0, Math.min(100, left / qMs * 100)) + '%';
+      $('barIn').className = sec <= 5 ? 'low' : '';
+      if (sec <= 5 && sec >= 1 && sec !== lastSec) { lastSec = sec; if (!submitted) A.sfx('tickLow'); }
+      if (left <= 400 && !submitted) { // หมดเวลา — ส่งคำตอบที่มีอยู่ให้อัตโนมัติ
+        var k = kindOf(S.q);
+        if ((k === 'pin' && myMarker) || (k === 'dms' && dmsVals.every(function (v) { return v !== ''; })) || (k === 'dial' && dial.getAngle() != null)) submit();
+      }
+    }
+    if (S.phase === 'reveal') $('tleft').textContent = '';
+  }, 100);
+
+  // ---------- เชื่อมต่อ ----------
+  function handle(s) {
+    offset = s.now - Date.now();
+    if (s.phase === 'question' && (!S || S.qi !== s.qi || S.phase !== 'question')) qMs = Math.max(1000, s.deadline - s.now);
+    S = s; render(s);
+  }
+  function kickedScreen() {
+    pollGen++; if (es) { es.close(); es = null; }
+    showScreen('🚫 ถูกเชิญออก', 'ครูเอาคุณออกจากเกม', '', 'none');
+  }
+  function rejoin() { // id ถูกลบ (เซิร์ฟเวอร์รีสตาร์ท) -> สมัครใหม่
+    return fetch('api/join', { method: 'POST', body: JSON.stringify({ id: myId, name: store.get('mapgame_name') || '', av: pick.av, color: pick.color }) })
+      .then(function (r) { if (r.status === 410) { kickedScreen(); return null; } return r.json(); })
+      .then(function (j) { if (j && j.id && j.id !== myId) { myId = j.id; store.set('mapgame_id', myId); connect(); } })
+      .catch(function () {});
+  }
+  var mode = store.get('mapgame_mode') === 'poll' ? 'poll' : 'sse', pollGen = 0, pv = 0;
+  function startPoll() {
+    mode = 'poll'; store.set('mapgame_mode', 'poll');
+    if (es) { es.close(); es = null; }
+    var gen = ++pollGen;
+    (function loop() {
+      if (gen !== pollGen) return;
+      fetch('api/poll?id=' + encodeURIComponent(myId) + '&v=' + pv)
+        .then(function (r) { if (r.status === 404 || r.status === 410) throw r.status; return r.json(); })
+        .then(function (s) { if (gen !== pollGen) return; pv = s.v; handle(s); loop(); })
+        .catch(function (e) { if (gen !== pollGen) return; if (e === 404 || e === 410) { pollGen++; rejoin(); } else setTimeout(loop, 1500); });
+    })();
+  }
+  function connect() {
+    if (es) { es.close(); es = null; }
+    pollGen++; pv = 0;
+    if (mode === 'poll') return startPoll();
+    var got = false, gen = pollGen;
+    es = new EventSource('api/stream?id=' + encodeURIComponent(myId));
+    setTimeout(function () { if (!got && gen === pollGen) startPoll(); }, 3500);
+    es.onmessage = function (e) { got = true; handle(JSON.parse(e.data)); };
+    es.onerror = function () { rejoin(); };
+  }
+  function join() {
+    var name = $('name').value.trim();
+    if (!name) { $('name').focus(); return; }
+    A.unlock(); A.sfx('join');
+    store.set('mapgame_name', name); store.set('mg_cat', pick.cat); store.set('mg_av', pick.av); store.set('mg_col', pick.color);
+    fetch('api/join', { method: 'POST', body: JSON.stringify({ name: name, av: pick.av, color: pick.color }) })
+      .then(function (r) { return r.json(); })
+      .then(function (j) { myId = j.id; store.set('mapgame_id', myId); connect(); })
+      .catch(function () { alert('เชื่อมต่อไม่ได้ ตรวจสอบสัญญาณอินเทอร์เน็ต'); });
+  }
+  $('join').onclick = join;
+  $('name').addEventListener('keydown', function (e) { if (e.key === 'Enter') join(); });
+
+  fetch('api/info').then(function (r) { return r.json(); }).then(function (i) { $('sTitle').innerHTML = '🗺️ ' + esc(i.title); }).catch(function () {});
+  var saved = store.get('mapgame_name'); if (saved) $('name').value = saved;
+  if (myId) connect(); // กลับเข้าเกมเดิมอัตโนมัติ
+})();
+</script>
+</body>
+</html>

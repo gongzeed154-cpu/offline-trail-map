@@ -18,8 +18,8 @@
 
   #top { position: fixed; left: 0; right: 0; top: 0; z-index: 5; padding: calc(env(safe-area-inset-top) + 8px) 10px 0; pointer-events: none; }
   .card { background: #fff; border-radius: 14px; box-shadow: 0 2px 10px rgba(0,0,0,.3); padding: 10px 14px; pointer-events: auto; }
-  #qn { font-size: 12px; color: #666; display: flex; justify-content: space-between; align-items: center; }
-  #snd { border: 0; background: none; font-size: 16px; padding: 0 4px; }
+  #qn { font-size: 13px; color: #666; display: flex; justify-content: space-between; align-items: center; }
+  #tleft { font-size: 22px; font-weight: 800; color: var(--green); }
   #prompt { font-size: 18px; font-weight: 700; line-height: 1.3; margin-top: 2px; }
   #hint { font-size: 13px; color: #555; margin-top: 3px; }
   #bar { height: 6px; background: #e4e4e4; border-radius: 3px; margin-top: 8px; overflow: hidden; }
@@ -92,7 +92,7 @@
 
 <div id="top" hidden>
   <div class="card">
-    <div id="qn"><span id="qno"></span><span><span id="tleft"></span> <button id="snd">🔊</button></span></div>
+    <div id="qn"><span id="qno"></span><span><span id="tleft"></span></span></div>
     <div id="prompt"></div>
     <div id="hint"></div>
     <div id="bar"><div id="barIn"></div></div>
@@ -130,14 +130,13 @@
 <script src="lib/maplibre-gl.js"></script>
 <script src="qmap.js"></script>
 <script src="dial.js"></script>
-<script src="audio.js"></script>
 <script>
 (function () {
   var $ = function (id) { return document.getElementById(id); };
   var store = { get: function (k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
                 set: function (k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
   function esc(t) { return String(t).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
-  var A = window.GameAudio;
+  var A = { unlock: function () {}, sfx: function () {} }; // เสียงออกที่จอหลักเท่านั้น มือถือเงียบ
 
   // ---------- เลือกตัวละคร ----------
   var AVS = {
@@ -246,7 +245,6 @@
     fetch('api/answer', { method: 'POST', body: JSON.stringify(body) }).catch(function () { submitted = false; });
   }
   $('confirm').onclick = function () { A.unlock(); submit(); };
-  $('snd').onclick = function () { var on = A.toggle('sfx'); $('snd').textContent = on ? '🔊' : '🔇'; };
 
   function showScreen(title, text, extra, mode) { // mode: 'join' แสดงฟอร์มเข้าร่วม
     $('screen').hidden = false;
@@ -321,22 +319,18 @@
           qm.whenReady(function () { if (kd === 'pin' && !s.q.frame) qm.unlock(); else map.setMaxBounds(null); qm.fitPoints(pts, { maxZoom: s.q.frame ? 14 : 9, pad: qm.pad }); });
         }
       }
-      var big, sub, extra = '';
-      if (r) { big = r.pct.toFixed(1) + '%'; } else big = '<span style="color:#b3261e">0%</span>';
-      if (kd === 'dial') sub = r ? 'คลาดเคลื่อน ' + r.diff.toFixed(0) + '° (ตอบ ' + r.ang + '°)' : 'ไม่ได้ตอบข้อนี้';
-      else sub = r ? 'ห่างจากคำตอบ ' + fmtKm(r.km) : 'ไม่ได้ตอบข้อนี้';
-      if (kd === 'dial') extra = '<div class="sub">เฉลย <b>' + Math.round(t.angle) + '°</b> · ' + esc(t.name) + '</div>';
-      else if (kd === 'dms') extra = '<div class="sub">เฉลย <b style="font-size:15px">' + esc(t.dmsText) + '</b><br>' + esc(t.name) + '</div>';
-      else extra = '<div class="sub"><b>' + esc(t.name) + '</b></div>';
+      var sub, extra = '';
+      if (kd === 'dial') sub = r ? 'คำตอบของคุณ ' + r.ang + '° (คลาดเคลื่อน ' + r.diff.toFixed(0) + '°)' : 'ไม่ได้ตอบข้อนี้';
+      else sub = r ? 'คำตอบของคุณห่าง ' + fmtKm(r.km) : 'ไม่ได้ตอบข้อนี้';
+      if (kd === 'dial') extra = '<div class="big">' + Math.round(t.angle) + '°</div><div class="sub">' + esc(t.name) + '</div>';
+      else if (kd === 'dms') extra = '<div class="big" style="font-size:22px">' + esc(t.dmsText) + '</div><div class="sub">' + esc(t.name) + '</div>';
+      else extra = '<div class="big" style="font-size:24px">' + esc(t.name) + '</div>';
       $('result').hidden = false;
-      $('result').innerHTML = '<div class="big">' + big + '</div><div class="sub">' + sub + '</div>' + extra +
-        '<div class="tot">คะแนนรวม <b>' + s.me.pct.toFixed(1) + '%</b> · อันดับ <b>' + s.me.rank + '</b>/' + s.me.of + '</div>';
+      $('result').innerHTML = '<div class="sub">✅ คำตอบที่ถูกต้อง</div>' + extra + '<div class="sub" style="margin-top:6px">' + sub + '</div>' +
+        '<div class="tot">ดูคะแนนที่หน้าจอหลัก 📺</div>';
     } else if (s.phase === 'final') {
       clearMarkers(); $('top').hidden = true; $('bottom').hidden = true; $('cover').hidden = true;
-      if (phaseChanged) A.sfx(s.me.rank <= 3 ? 'fanfare' : 'applause');
-      var medal = s.me.rank === 1 ? '🥇' : s.me.rank === 2 ? '🥈' : s.me.rank === 3 ? '🥉' : '🏁';
-      showScreen(medal + ' จบเกม', esc(s.me.name) + ' ได้คะแนนรวม',
-        avBubble(s.me) + '<div class="pct">' + s.me.pct.toFixed(1) + '%</div><p>อันดับ ' + s.me.rank + ' จาก ' + s.me.of + ' คน</p><p>เฉลี่ยทั้งห้อง ' + s.avg.toFixed(1) + '%</p>');
+      showScreen('🏁 จบเกม', esc(s.me.name), avBubble(s.me) + '<p style="margin-top:10px">ดูคะแนนและอันดับที่หน้าจอหลัก 📺</p>');
     }
   }
 

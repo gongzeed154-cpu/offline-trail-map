@@ -582,17 +582,20 @@
   }
 
   /* ---------- แผ่นวัดมุม (ฝึกใช้แผนที่) ---------- */
-  var prot = { on: false, a: null, b: null, markA: null, markB: null, hide: false, revealed: false };
+  // placed = วางแผ่นแล้ว, follow = แผ่นตามจุด A, platePos = ตำแหน่งจุดอ้างอิงของแผ่นเมื่อย้ายเอง, locked = ล็อคไม่ให้ย้ายแผ่น
+  var prot = { on: false, a: null, b: null, markA: null, markB: null, hide: false, revealed: false, placed: false, follow: true, platePos: null, locked: false, handle: null };
 
   // วางแผ่นวัดมุมสี่เหลี่ยม 1:50,000 บนแผนที่ โดยให้จุดอ้างอิงที่เลือกตรงกับหมุด A และหันเหนือกริด
   function updatePlate() {
     var src = map.getSource("plate");
     if (!src) return;
-    var show = prot.on && prot.a;
+    var pos = prot.follow ? prot.a : prot.platePos;
+    var show = !!(prot.on && prot.placed && pos);
     map.setLayoutProperty("plate", "visibility", show ? "visible" : "none");
+    syncHandle(show ? pos : null);
     if (!show) return;
-    var zone = G.zoneOf(prot.a.lng);
-    var u = G.toUTM(prot.a.lat, prot.a.lng, zone);
+    var zone = G.zoneOf(pos.lng);
+    var u = G.toUTM(pos.lat, pos.lng, zone);
     var off = TrailPlate.ANCHORS[prefs.anchor] || TrailPlate.ANCHORS.center;
     var cE = u.e - off.x, cN = u.n - off.y, h = TrailPlate.SIDE / 2;
     function pt(dx, dy) {
@@ -602,9 +605,23 @@
     src.setCoordinates([pt(-h, h), pt(h, h), pt(h, -h), pt(-h, -h)]);
   }
 
+  // ที่จับสำหรับลากแผ่นวัดมุม (อยู่ที่จุดอ้างอิงของแผ่น) ซ่อนเมื่อล็อค
+  function syncHandle(pos) {
+    if (!pos || prot.locked) { if (prot.handle) { prot.handle.remove(); prot.handle = null; } return; }
+    if (!prot.handle) {
+      var el = document.createElement('div');
+      el.style.cssText = 'width:44px;height:44px;margin-top:0;border-radius:50%;background:rgba(255,255,255,.55);border:2px dashed #c4501b;display:flex;align-items:center;justify-content:center;font-size:22px;color:#c4501b;touch-action:none;cursor:move';
+      el.textContent = '✥'; el.title = 'ลากเพื่อเลื่อนแผ่นวัดมุม';
+      prot.handle = new maplibregl.Marker({ element: el, draggable: true }).setLngLat([pos.lng, pos.lat]).addTo(map);
+      prot.handle.on('drag', function () { var l = prot.handle.getLngLat(); prot.follow = false; prot.platePos = { lat: l.lat, lng: l.lng }; updatePlate(); });
+      prot.handle.on('dragend', function () { refreshProt(); });
+    } else prot.handle.setLngLat([pos.lng, pos.lat]);
+  }
+
   function protTap(ll) {
     var p = { lat: ll.lat, lng: ll.lng };
     if (!prot.a) { setProtPoint('a', p); toast('แตะแผนที่อีกครั้งเพื่อวางจุด B (ลากหมุดเพื่อปรับได้)'); }
+    else if (prot.b && prot.placed && !prot.locked) return; // วางแผ่นแล้ว: แตะแผนที่ไม่ย้ายจุด B (กันพลาดระหว่างลากแผ่น) ลากหมุดแทน
     else setProtPoint('b', p);
   }
 
@@ -665,7 +682,8 @@
     if (!prot.on) { card.hidden = true; return; }
     card.hidden = false;
     if (!r) {
-      card.textContent = prot.a ? 'แตะแผนที่เพื่อวางจุด B' : 'แตะแผนที่เพื่อวางจุด A (จุดศูนย์กลางแผ่นวัดมุม)';
+      card.innerHTML = '<div>' + (prot.a ? 'แตะแผนที่เพื่อวางจุด B' : 'แตะแผนที่เพื่อวางจุด A') + '</div>' + plateButtons();
+      bindPlateButtons();
       return;
     }
     var hidden = prot.hide && !prot.revealed;
@@ -678,7 +696,9 @@
       '<div><span class="lbl">มุมเหนือจริง</span><br><span id="azTrue"></span></div>' +
       '<div><span class="lbl">มุมแม่เหล็ก (เบี่ยง ' + prefs.decl + '°)</span><br><span id="azMag"></span></div>' +
       '</div>' +
-      (prot.hide ? '<div class="btnrow"><button class="btn alt" id="azReveal">' + (prot.revealed ? 'ซ่อนค่า' : 'เฉลย') + '</button></div>' : '');
+      (prot.hide ? '<div class="btnrow"><button class="btn alt" id="azReveal">' + (prot.revealed ? 'ซ่อนค่า' : 'เฉลย') + '</button></div>' : '') +
+      plateButtons();
+    bindPlateButtons();
     card.querySelector('.big').textContent = q(r.az.toFixed(1) + '°  (' + Math.round(r.mil) + ' มิล)');
     $('azBack').textContent = q(r.back.toFixed(1) + '° (' + Math.round((r.back * 6400) / 360) + ' มิล)');
     $('azDist').textContent = fmtDist(r.dist);
@@ -688,11 +708,30 @@
     if (rev) rev.onclick = function () { prot.revealed = !prot.revealed; refreshProt(); };
   }
 
+  function plateButtons() {
+    if (!prot.a) return '';
+    var st = 'flex:none;padding:6px 10px;font-size:13px';
+    if (!prot.placed) return '<div class="btnrow" style="margin-top:6px"><button class="btn" id="plPlace" style="' + st + '">📐 วางแผ่นวัดมุม</button></div>';
+    return '<div class="btnrow" style="margin-top:6px;flex-wrap:wrap">' +
+      '<button class="btn' + (prot.locked ? '' : ' alt') + '" id="plLock" style="' + st + '">' + (prot.locked ? '🔒 ล็อคอยู่ (แตะปลดล็อค)' : '🔓 ล็อคแผ่น') + '</button>' +
+      (prot.follow ? '' : '<button class="btn alt" id="plBack" style="' + st + '">กลับไปที่จุด A</button>') +
+      '<button class="btn alt" id="plRemove" style="' + st + '">เก็บแผ่น</button></div>' +
+      (prot.locked ? '' : '<div class="lbl">ลากวงกลม ✥ เพื่อเลื่อนแผ่น · แผ่นหันเหนือกริดเสมอ</div>');
+  }
+  function bindPlateButtons() {
+    var b;
+    if ((b = $('plPlace'))) b.onclick = function () { prot.placed = true; prot.follow = true; prot.locked = false; refreshProt(); };
+    if ((b = $('plLock'))) b.onclick = function () { prot.locked = !prot.locked; if (prot.locked && prot.follow && prot.a) { prot.follow = false; prot.platePos = { lat: prot.a.lat, lng: prot.a.lng }; } refreshProt(); toast(prot.locked ? 'ล็อคแผ่นวัดมุมแล้ว เลื่อนไม่ได้จนกว่าจะปลดล็อค' : 'ปลดล็อคแล้ว ลาก ✥ เพื่อเลื่อนแผ่น'); };
+    if ((b = $('plBack'))) b.onclick = function () { prot.follow = true; refreshProt(); };
+    if ((b = $('plRemove'))) b.onclick = function () { prot.placed = false; refreshProt(); };
+  }
+
   function setProtOn(on) {
     prot.on = on;
     $('toolProt').classList.toggle('on', on);
     if (prot.markA) prot.markA.getElement().style.display = on ? '' : 'none';
     if (prot.markB) prot.markB.getElement().style.display = on ? '' : 'none';
+    if (!on && prot.handle) { prot.handle.remove(); prot.handle = null; }
     if (on && pinMarker) { pinMarker.remove(); pinMarker = null; pinPos = null; updateCoord(); }
     refreshProt();
   }
@@ -701,6 +740,7 @@
     if (prot.markA) prot.markA.remove();
     if (prot.markB) prot.markB.remove();
     prot.a = prot.b = prot.markA = prot.markB = null;
+    prot.placed = false; prot.follow = true; prot.platePos = null; prot.locked = false;
     prot.revealed = false;
     refreshProt();
   }
@@ -849,7 +889,7 @@
   function renderProtSheet() {
     var h = '<div class="btnrow"><button class="btn" id="protToggle">' + (prot.on ? 'ปิดแผ่นวัดมุม' : 'เปิดแผ่นวัดมุม') + '</button>' +
       '<button class="btn alt" id="protClear">ล้างจุด</button></div>' +
-      '<p class="note">วิธีใช้: แตะแผนที่วางจุด A แล้วแตะวางจุด B ลากหมุดเพื่อปรับ แผ่นวัดมุมสี่เหลี่ยม 1:50,000 (5 กม. × 5 กม.) จะวางทับตามขนาดจริงของมาตราส่วน หันเหนือกริดเสมอ ซูมเข้าให้เห็นสเกลแล้วอ่านมุมที่เส้นประส้มตัดขอบแผ่น เทียบกับค่าที่แอพคำนวณ</p>' +
+      '<p class="note">วิธีใช้: แตะแผนที่วางจุด A แล้วแตะวางจุด B ลากหมุดเพื่อปรับ จากนั้นกด "📐 วางแผ่นวัดมุม" ในการ์ดด้านล่าง (ลาก ✥ เพื่อเลื่อนแผ่น กดล็อคเพื่อไม่ให้เลื่อน) แผ่นวัดมุมสี่เหลี่ยม 1:50,000 (5 กม. × 5 กม.) จะวางทับตามขนาดจริงของมาตราส่วน หันเหนือกริดเสมอ ซูมเข้าให้เห็นสเกลแล้วอ่านมุมที่เส้นประส้มตัดขอบแผ่น เทียบกับค่าที่แอพคำนวณ</p>' +
       '<h4>จุดของแผ่นที่ตรงกับหมุด A</h4>' +
       radio('anchor', 'center', 'ศูนย์กลางแผ่น', 'วัดมุม A→B ด้วยสเกลองศา', prefs.anchor === 'center') +
       radio('anchor', 'romer', 'มุมสเกล 1000 ม. (จุดแดง)', 'อ่านพิกัดกริดด้วยสเกลโรเมอร์', prefs.anchor === 'romer') +

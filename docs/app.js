@@ -226,7 +226,7 @@
       showSheet: function (k) { if (sheetKind !== k) openSheet(k); else TrailSym.renderSheet($('sheetBody')); }
     });
     TrailPrint.init({
-      map: function () { return map; }, toast: toast, prefs: prefs,
+      map: function () { return map; }, toast: toast, prefs: prefs, vectorTpl: function () { return vectorTpl; },
       visibleRoutes: function () { return TrailNav.visibleRoutes(); }
     });
     TrailSound.init({ map: function () { return map; }, toast: toast });

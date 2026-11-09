@@ -30,6 +30,7 @@
     weather: 'off', // off | radar
     traffic: false,
     grid: false,
+    llStep: 'auto',
     fmt: 'dms', // mgrs | utm | dms | dm | dd
     anchor: 'center', // จุดของแผ่นวัดมุมที่ตรงกับหมุด A: center | romer | sixty
     camOffset: 0, // ค่าปรับแก้ทิศของกล้องเล็ง (องศา)
@@ -400,6 +401,7 @@
     return { type: 'Feature', properties: { t: text, a: anchor, k: kind || 'l' }, geometry: { type: 'Point', coordinates: [lng, lat] } };
   }
 
+  var lastGridNote = '';
   function updateGrid() {
     if (!map || !map.getSource('grid')) return;
     var lines = emptyFC();
@@ -412,6 +414,8 @@
     }
     map.getSource('grid').setData(lines);
     map.getSource('grid-labels').setData(labels);
+    if (gridNote && gridNote !== lastGridNote) toast(gridNote);
+    lastGridNote = gridNote;
   }
 
   // ตารางละติจูด/ลองจิจูด (องศา-ลิปดา-ฟิลิปดา / องศา-ลิปดาทศนิยม / องศาทศนิยม)
@@ -419,7 +423,17 @@
     var fmt = prefs.fmt;
     var spanArc = Math.max(e - w, n - s) * 3600;
     var step = G.pickStep(G.LL_STEPS[fmt], spanArc, 8);
-    var labLat = s + 0.17 * (n - s);
+    var fixed = +prefs.llStep > 0;
+    if (fixed) { // ระยะที่ผู้ใช้เลือก: ถ้าเส้นถี่เกินไปเพราะซูมออกมาก แสดงทุก ๆ k เส้น (ยังตรงกับเส้นที่เลือกเสมอ)
+      step = +prefs.llStep;
+      var mult = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000], mi = 0;
+      while (spanArc / (step * mult[mi]) > 30 && mi < mult.length - 1) mi++;
+      step *= mult[mi];
+      gridNote = mult[mi] > 1 ? 'ซูมออกมาก แสดงทุก ' + mult[mi] + ' เส้น (ซูมเข้าเพื่อดูทุก ' + llStepName(+prefs.llStep) + ')' : '';
+    } else gridNote = '';
+    // ป้ายวางให้พ้นแถบ/การ์ดด้านล่างจอ และพ้นช่องค้นหามุมซ้ายบน
+    var band = labelBand();
+    var labLat = band ? band.lat : s + 0.17 * (n - s);
     var labLng = w + 0.02 * (e - w);
     var k0 = Math.ceil((w * 3600) / step - 1e-9), k1 = Math.floor((e * 3600) / step + 1e-9);
     var k;
@@ -434,6 +448,21 @@
       lines.features.push(lineFeature([[w, lat], [e, lat]], isWholeDeg(k * step)));
       labels.features.push(labelFeature(labLng, lat, G.labelLL(lat, true, fmt, step), 'bottom-left'));
     }
+  }
+  var gridNote = '';
+  function llStepName(a) { return a >= 3600 ? (a / 3600) + '°' : a >= 60 ? (a / 60) + ' ลิปดา' : a + ' ฟิลิปดา'; }
+  // หาตำแหน่งแนวนอนบนจอที่ว่างสำหรับป้ายลองจิจูด: เหนือการ์ด/แถบด้านล่างที่สูงที่สุดที่เปิดอยู่
+  function labelBand() {
+    try {
+      var mr = map.getContainer().getBoundingClientRect(), top = mr.bottom;
+      ['azcard', 'routecard', 'navcard', 'bottom', 'statusbar'].forEach(function (id) {
+        var el = $(id); if (!el || el.hidden || !el.getClientRects().length) return; // (fixed elements have no offsetParent)
+        var r = el.getBoundingClientRect(); if (r.height > 0 && r.top < top && r.top > mr.top + mr.height * 0.35) top = r.top;
+      });
+      var y = Math.min(mr.height * 0.85, top - mr.top - 18);
+      var ll = map.unproject([mr.width / 2, y]);
+      return { lat: ll.lat };
+    } catch (e) { return null; }
   }
   function isWholeDeg(arc) {
     var d = arc / 3600;
@@ -630,7 +659,8 @@
     var r = protReadout();
     updatePlate();
 
-    var card = $('azcard');
+    var card = $('azcard'), wasHidden = card.hidden;
+    setTimeout(function () { if (card.hidden !== wasHidden && prefs.grid) updateGrid(); }, 0);
     if (!$('navcard').hidden || !$('routecard').hidden) { card.hidden = true; return; }
     if (!prot.on) { card.hidden = true; return; }
     card.hidden = false;
@@ -751,6 +781,8 @@
       Object.keys(DISPLAYS).map(function (k) { return radio('disp', k, DISPLAYS[k].icon + ' ' + DISPLAYS[k].name, DISPLAYS[k].sub, prefs.display === k); }).join('') +
       '<div class="field"><label>ความสว่าง</label><input type="range" id="dispBright" min="20" max="100" step="5" value="' + prefs.bright + '" style="flex:1"></div>' +
       check('dispMute', 'ปิดเสียง', 'ไม่พูดแจ้งเตือนนำทาง (โหมดพรางตัวปิดเสียงให้อัตโนมัติ)', prefs.mute) +
+      '<div class="btnrow"><button class="btn alt" id="fullBtn">' + (document.fullscreenElement || document.webkitFullscreenElement ? 'ออกจากเต็มจอ' : '⛶ เต็มจอ (ซ่อนแถบที่อยู่เว็บ)') + '</button></div>' +
+      '<p class="note" style="margin-top:2px">คอมพิวเตอร์: กด F11 ก็ได้ หรือติดตั้งเป็นแอพ (Edge/Chrome เมนู ⋯ → แอพ → ติดตั้งไซต์นี้เป็นแอพ) จะเปิดเป็นหน้าต่างแยกไม่มีแถบที่อยู่ · iPhone: Safari ปุ่มแชร์ → เพิ่มไปยังหน้าจอโฮม แล้วเปิดจากไอคอน</p>' +
       '<h4>แผนที่พื้นหลัง</h4>' +
       radio('base', 'trail', 'แผนที่เดินป่า', 'ทางเดินเท้า ป่า น้ำ เงาภูเขา ยอดเขา ซูมเห็นอาคาร/ชื่อถนน', prefs.base === 'trail') +
       radio('base', 'sat', 'ภาพถ่ายดาวเทียม', 'ซูมได้ละเอียดสุด · ดาวน์โหลดเก็บไว้ใช้ออฟไลน์ได้', prefs.base === 'sat') +
@@ -774,6 +806,14 @@
     });
     $('dispBright').oninput = function () { prefs.bright = parseInt(this.value, 10) || 100; savePrefs(); applyDisplay(); };
     $('dispMute').onchange = function () { prefs.mute = this.checked; savePrefs(); applyDisplay(); };
+    $('fullBtn').onclick = function () {
+      var d = document, el = d.documentElement, isFull = d.fullscreenElement || d.webkitFullscreenElement;
+      var req = el.requestFullscreen || el.webkitRequestFullscreen, ex = d.exitFullscreen || d.webkitExitFullscreen;
+      if (isFull) { if (ex) ex.call(d); }
+      else if (req) { try { var r = req.call(el); if (r && r.catch) r.catch(function () { toast('เบราว์เซอร์นี้ไม่ให้เต็มจอ ลองกด F11 หรือเพิ่มไปยังหน้าจอโฮม'); }); } catch (e) { toast('เบราว์เซอร์นี้ไม่ให้เต็มจอ'); } }
+      else toast('iPhone ไม่รองรับปุ่มเต็มจอ: Safari ปุ่มแชร์ → เพิ่มไปยังหน้าจอโฮม แล้วเปิดจากไอคอน จะไม่มีแถบที่อยู่');
+      setTimeout(function () { var b = $('fullBtn'); if (b) b.textContent = d.fullscreenElement || d.webkitFullscreenElement ? 'ออกจากเต็มจอ' : '⛶ เต็มจอ (ซ่อนแถบที่อยู่เว็บ)'; }, 400);
+    };
   }
 
   function renderGridSheet() {
@@ -786,10 +826,20 @@
         f === 'dm' ? 'ตัวอย่าง 15°52.205′N' : 'ตัวอย่าง 15.87000°N';
       h += radio('fmt', f, G.FORMAT_NAMES[f], sub, prefs.fmt === f);
     });
+    var stepOpts = [['auto', 'อัตโนมัติตามซูม'], [1, '1 ฟิลิปดา'], [5, '5 ฟิลิปดา'], [10, '10 ฟิลิปดา'], [30, '30 ฟิลิปดา'], [60, '1 ลิปดา'], [120, '2 ลิปดา'], [300, '5 ลิปดา'], [600, '10 ลิปดา'], [900, '15 ลิปดา'], [1800, '30 ลิปดา'], [3600, '1 องศา']];
+    h += '<h4>ระยะห่างเส้นละติจูด/ลองจิจูด</h4><div class="field"><select id="llStep" style="flex:1;font-size:16px;padding:8px;border:1px solid #ccc;border-radius:8px;background:#fff">' +
+      stepOpts.map(function (o) { return '<option value="' + o[0] + '"' + (String(prefs.llStep || 'auto') === String(o[0]) ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') +
+      '</select></div><p class="note" style="margin-top:2px">ใช้กับรูปแบบ องศา-ลิปดา-ฟิลิปดา / องศา-ลิปดา / องศาทศนิยม (UTM/MGRS ใช้ระยะเป็นเมตรอัตโนมัติ) · ถ้าซูมออกจนเส้นถี่เกินไป จะแสดงทุก ๆ 2, 5, 10 เส้นของระยะที่เลือก</p>';
     h += '<p class="note">แตะแผนที่เพื่อปักหมุดดูพิกัดของจุดนั้น แตะที่เดิมอีกครั้งเพื่อลบ · จุดกึ่งกลางจอ (กากบาทแดง) แสดงพิกัดที่มุมซ้ายบนตลอดเวลา · UTM/MGRS ใช้ datum WGS84</p>';
     $('sheetBody').innerHTML = h;
     $('gridOn').onchange = function () {
       prefs.grid = this.checked; savePrefs(); updateGrid();
+    };
+    $('llStep').onchange = function () {
+      prefs.llStep = this.value === 'auto' ? 'auto' : +this.value; savePrefs();
+      if (!prefs.grid) { prefs.grid = true; $('gridOn').checked = true; $('toolGrid').classList.toggle('on', true); }
+      if (prefs.fmt === 'mgrs' || prefs.fmt === 'utm') toast('ระยะนี้ใช้กับพิกัดแบบองศา เลือกรูปแบบพิกัดด้านบนเป็น องศา-ลิปดา-ฟิลิปดา');
+      updateGrid();
     };
     Array.prototype.forEach.call(document.querySelectorAll('input[name=fmt]'), function (el) {
       el.onchange = function () { prefs.fmt = el.value; savePrefs(); updateGrid(); updateCoord(); };

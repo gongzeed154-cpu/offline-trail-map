@@ -31,6 +31,7 @@
     traffic: false,
     grid: false,
     llStep: 'auto',
+    utmStep: 'auto', // ระยะตาราง UTM/MGRS (เมตร) 10000=1 หลัก 1000=2 หลัก 100=3 หลัก 10=4 หลัก
     fmt: 'dms', // mgrs | utm | dms | dm | dd
     anchor: 'center', // จุดของแผ่นวัดมุมที่ตรงกับหมุด A: center | romer | sixty
     camOffset: 0, // ค่าปรับแก้ทิศของกล้องเล็ง (องศา)
@@ -205,6 +206,13 @@
         paint: { 'raster-fade-duration': 0, 'raster-resampling': 'linear' }
       }, 'az-line');
     } catch (e) { /* ไม่มีแผ่นวัดมุม */ }
+    try { // เข็มทิศเลนเซติก: จานหน้าปัด (ชี้เหนือ) อยู่ใต้ตัวเข็มทิศ (มีช่องกระจกโปร่ง)
+      var LS = 12, lc = TrailLens.drawCard(LS), lb = TrailLens.drawBody(LS), z4 = [[0, 1], [1, 1], [1, 0], [0, 0]];
+      map.addSource('lens-card', { type: 'image', url: lc.canvas.toDataURL('image/png'), coordinates: z4 });
+      map.addSource('lens-body', { type: 'image', url: lb.canvas.toDataURL('image/png'), coordinates: z4 });
+      map.addLayer({ id: 'lens-card', type: 'raster', source: 'lens-card', layout: { visibility: 'none' }, paint: { 'raster-fade-duration': 0, 'raster-resampling': 'linear' } }, 'az-line');
+      map.addLayer({ id: 'lens-body', type: 'raster', source: 'lens-body', layout: { visibility: 'none' }, paint: { 'raster-fade-duration': 0, 'raster-resampling': 'linear' } }, 'az-line');
+    } catch (e) { /* ไม่มีเข็มทิศ */ }
     TrailPaper.init({ map: function () { return map; }, toast: toast, closeSheet: closeSheet });
     TrailPaper.loadAll();
     TrailProj.init({
@@ -350,9 +358,9 @@
     var html = '<small></small><span></span>';
     el.innerHTML = html;
     el.querySelector('small').textContent = 'กลางจอ · ' + G.FORMAT_NAMES[prefs.fmt] + ' · ซูม ' + map.getZoom().toFixed(1);
-    var txt = G.formatPoint(c.lat, c.lng, prefs.fmt) + (centerEle !== null ? '  ·  สูง ~' + Math.round(centerEle) + ' ม.' : '');
+    var txt = fmtCoord(c.lat, c.lng) + (centerEle !== null ? '  ·  สูง ~' + Math.round(centerEle) + ' ม.' : '');
     if (pinPos) {
-      txt += '\n📍 ' + G.formatPoint(pinPos.lat, pinPos.lng, prefs.fmt) + (pinEle !== null ? '  ·  สูง ~' + Math.round(pinEle) + ' ม.' : '');
+      txt += '\n📍 ' + fmtCoord(pinPos.lat, pinPos.lng) + (pinEle !== null ? '  ·  สูง ~' + Math.round(pinEle) + ' ม.' : '');
       el.querySelector('span').style.whiteSpace = 'pre-line';
     }
     el.querySelector('span').textContent = txt;
@@ -402,6 +410,14 @@
   }
 
   var lastGridNote = '';
+  // พิกัดกลางจอ/หมุด: ถ้าเลือกจำนวนหลัก MGRS ไว้ แสดงตามนั้น (เช่น 3 หลัก = 47P QA 123 678 ความละเอียด 100 ม.)
+  function fmtCoord(lat, lng) {
+    var st = +prefs.utmStep, d = st > 0 ? Math.round(5 - Math.log(st) / Math.LN10) : 5;
+    if (prefs.fmt === 'mgrs' && st > 0 && Math.pow(10, 5 - d) === st && lat >= -80 && lat < 84) {
+      var u = G.toUTM(lat, lng); return G.mgrsFromUTM ? G.mgrsFromUTM(u, lat, d) : G.formatPoint(lat, lng, prefs.fmt);
+    }
+    return G.formatPoint(lat, lng, prefs.fmt);
+  }
   function updateGrid() {
     if (!map || !map.getSource('grid')) return;
     var lines = emptyFC();
@@ -450,6 +466,7 @@
     }
   }
   var gridNote = '';
+  function fmtStepM(m) { return m >= 1000 ? (m / 1000) + ' กม.' : m + ' ม.'; }
   function llStepName(a) { return a >= 3600 ? (a / 3600) + '°' : a >= 60 ? (a / 60) + ' ลิปดา' : a + ' ฟิลิปดา'; }
   // หาตำแหน่งแนวนอนบนจอที่ว่างสำหรับป้ายลองจิจูด: เหนือการ์ด/แถบด้านล่างที่สูงที่สุดที่เปิดอยู่
   function labelBand() {
@@ -475,7 +492,13 @@
     var cLat = (s + n) / 2, cLng = (w + e) / 2;
     var spanM = Math.max(G.haversine({ lat: cLat, lng: w }, { lat: cLat, lng: e }), G.haversine({ lat: s, lng: cLng }, { lat: n, lng: cLng }));
     var step = G.pickStep(mgrs ? G.MGRS_STEPS : G.UTM_STEPS, spanM, mgrs ? 10 : 8);
-    var digits = Math.round(5 - Math.log(step) / Math.LN10); // MGRS: จำนวนหลักบนป้าย
+    if (+prefs.utmStep > 0) { // ระยะที่ผู้ใช้เลือก (ซูมออกมากแสดงทุก k เส้น)
+      var base = +prefs.utmStep, mult = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000], mi = 0;
+      while (spanM / (base * mult[mi]) > 30 && mi < mult.length - 1) mi++;
+      step = base * mult[mi];
+      gridNote = mult[mi] > 1 ? 'ซูมออกมาก แสดงทุก ' + mult[mi] + ' เส้น (ซูมเข้าเพื่อดูทุก ' + fmtStepM(base) + ')' : '';
+    } else gridNote = '';
+    var digits = Math.round(5 - Math.log(+prefs.utmStep > 0 ? Math.min(step, +prefs.utmStep) : step) / Math.LN10); // MGRS: จำนวนหลักบนป้าย
     var north = cLat >= 0;
     var z0 = G.zoneOf(w), z1 = G.zoneOf(e);
     if (z1 - z0 > 3) return; // กว้างเกินไป
@@ -593,35 +616,113 @@
     var show = !!(prot.on && prot.placed && pos);
     map.setLayoutProperty("plate", "visibility", show ? "visible" : "none");
     syncHandle(show ? pos : null);
-    if (!show) return;
+    if (!show) { syncRotHandle(null); return; }
     var zone = G.zoneOf(pos.lng);
     var u = G.toUTM(pos.lat, pos.lng, zone);
     var off = TrailPlate.ANCHORS[prefs.anchor] || TrailPlate.ANCHORS.center;
-    var cE = u.e - off.x, cN = u.n - off.y, h = TrailPlate.SIDE / 2;
+    var rot = (prot.rot || 0) * Math.PI / 180, cr = Math.cos(rot), sr = Math.sin(rot);
+    function R2(dx, dy) { return [dx * cr + dy * sr, -dx * sr + dy * cr]; } // หมุนตามเข็มนาฬิกา (กรอบแผ่น → ตะวันออก/เหนือ)
+    var o2 = R2(off.x, off.y), cE = u.e - o2[0], cN = u.n - o2[1], h = TrailPlate.SIDE / 2;
     function pt(dx, dy) {
-      var p = G.fromUTM(zone, u.north, cE + dx, cN + dy);
+      var r = R2(dx, dy), p = G.fromUTM(zone, u.north, cE + r[0], cN + r[1]);
       return [p.lng, p.lat];
     }
     src.setCoordinates([pt(-h, h), pt(h, h), pt(h, -h), pt(-h, -h)]);
+    // ที่จับหมุนแผ่น: มุมขวาบน
+    var rp = pt(h * 0.94, h * 0.94);
+    prot.plateCenter = { zone: zone, north: u.north, e: cE, n: cN };
+    syncRotHandle(prot.on && prot.placed && !prot.locked ? { lng: rp[0], lat: rp[1] } : null);
+  }
+  function syncRotHandle(pos) {
+    if (!pos) { if (prot.rotHandle) { prot.rotHandle.remove(); prot.rotHandle = null; } return; }
+    if (!prot.rotHandle) {
+      prot.rotHandle = makeHandle('⟳', 'ลากเพื่อหมุนแผ่นวัดมุม', function (l) {
+        var pc = prot.plateCenter; if (!pc) return;
+        var u2 = G.toUTM(l.lat, l.lng, pc.zone), a = Math.atan2(u2.e - pc.e, u2.n - pc.n) * 180 / Math.PI;
+        prot.rot = Math.round(G.norm360(a - 45) * 10) / 10; if (prot.rot > 180) prot.rot -= 360;
+        updatePlate(); refreshProt(true);
+      });
+    } else if (!prot.rotHandle._dragging) prot.rotHandle.setLngLat([pos.lng, pos.lat]);
+  }
+  // ที่จับแบบลากได้ (วงกลมเส้นประ) ใช้กับแผ่นวัดมุมและเข็มทิศ
+  function makeHandle(sym, title, onDrag, onEnd) {
+    var el = document.createElement('div');
+    el.style.cssText = 'width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,.6);border:2px dashed #c4501b;display:flex;align-items:center;justify-content:center;font-size:21px;font-weight:700;color:#c4501b;touch-action:none;cursor:grab';
+    el.textContent = sym; el.title = title;
+    var m = new maplibregl.Marker({ element: el, draggable: true }).setLngLat(map.getCenter()).addTo(map);
+    m.on('dragstart', function () { m._dragging = true; });
+    m.on('drag', function () { onDrag(m.getLngLat()); });
+    m.on('dragend', function () { m._dragging = false; if (onEnd) onEnd(); refreshProt(); });
+    return m;
+  }
+
+  /* ---------- เข็มทิศเลนเซติก ---------- */
+  var lens = { placed: false, c: null, th: 0, locked: false, hMove: null, hRot: null };
+  function lensFrame() {
+    var zone = G.zoneOf(lens.c.lng), u = G.toUTM(lens.c.lat, lens.c.lng, zone);
+    return { zone: zone, north: u.north, e: u.e, n: u.n };
+  }
+  // จุดในกรอบเข็มทิศ (มม.) → พิกัด · th = ทิศของแกน +x (องศาภาคกริด)
+  function lensPt(f, th, x, y) {
+    var t = th * Math.PI / 180, k = TrailLens.M_PER_MM, st = Math.sin(t), ct = Math.cos(t);
+    var p = G.fromUTM(f.zone, f.north, f.e + (x * st + y * ct) * k, f.n + (x * ct - y * st) * k);
+    return [p.lng, p.lat];
+  }
+  function updateLens() {
+    var show = !!(prot.on && lens.placed && lens.c);
+    ['lens-card', 'lens-body'].forEach(function (id) { if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', show ? 'visible' : 'none'); });
+    if (!show || !map.getSource('lens-body')) { lensHandles(false); return; }
+    var f = lensFrame(), B = TrailLens.BODY, R = TrailLens.CARD_R, nb = prefs.decl || 0;
+    map.getSource('lens-body').setCoordinates([lensPt(f, lens.th, B.xmin, B.ymin), lensPt(f, lens.th, B.xmax, B.ymin), lensPt(f, lens.th, B.xmax, B.ymax), lensPt(f, lens.th, B.xmin, B.ymax)]);
+    // จานหน้าปัด: ด้านบนของภาพ = ทิศเหนือแม่เหล็ก (เหนือกริด + มุมเบี่ยงเบนที่ตั้งไว้)
+    var tc = nb + 90;
+    map.getSource('lens-card').setCoordinates([lensPt(f, tc, -R, -R), lensPt(f, tc, R, -R), lensPt(f, tc, R, R), lensPt(f, tc, -R, R)]);
+    lensHandles(!lens.locked);
+  }
+  function lensHandles(on) {
+    if (!on) { if (lens.hMove) { lens.hMove.remove(); lens.hMove = null; } if (lens.hRot) { lens.hRot.remove(); lens.hRot = null; } return; }
+    var f = lensFrame(), mv = TrailLens.MOVE_AT, ro = TrailLens.ROT_AT;
+    if (!lens.hMove) lens.hMove = makeHandle('✥', 'ลากเพื่อเลื่อนเข็มทิศ', function (l) {
+      // ให้ที่จับอยู่ตำแหน่งเดิมบนตัวเข็มทิศ: ศูนย์หน้าปัด = ที่จับ − ระยะ (หมุนตามทิศ)
+      var t = lens.th * Math.PI / 180, k = TrailLens.M_PER_MM, z = G.zoneOf(l.lng), u = G.toUTM(l.lat, l.lng, z);
+      var p = G.fromUTM(z, u.north, u.e - (mv.x * Math.sin(t) + mv.y * Math.cos(t)) * k, u.n - (mv.x * Math.cos(t) - mv.y * Math.sin(t)) * k);
+      lens.c = { lat: p.lat, lng: p.lng }; updateLens(); refreshProt(true);
+    });
+    if (!lens.hRot) lens.hRot = makeHandle('⟳', 'ลากเพื่อหมุนเข็มทิศ', function (l) {
+      var f2 = lensFrame(), u = G.toUTM(l.lat, l.lng, f2.zone), a = Math.atan2(u.e - f2.e, u.n - f2.n) * 180 / Math.PI;
+      lens.th = Math.round(G.norm360(a - Math.atan2(ro.y, ro.x) * 180 / Math.PI) * 10) / 10; updateLens(); refreshProt(true);
+    });
+    var pm = lensPt(f, lens.th, mv.x, mv.y), pr = lensPt(f, lens.th, ro.x, ro.y);
+    if (!lens.hMove._dragging) lens.hMove.setLngLat(pm);
+    if (!lens.hRot._dragging) lens.hRot.setLngLat(pr);
+  }
+  function placeLens() {
+    lens.placed = true; lens.locked = false;
+    var c0 = prot.a || map.getCenter();
+    lens.c = { lat: c0.lat, lng: c0.lng };
+    lens.th = prot.a && prot.b ? Math.round(G.gridAzimuth(prot.a, prot.b).az * 10) / 10 : 0;
+    updateLens(); refreshProt();
   }
 
   // ที่จับสำหรับลากแผ่นวัดมุม (อยู่ที่จุดอ้างอิงของแผ่น) ซ่อนเมื่อล็อค
   function syncHandle(pos) {
     if (!pos || prot.locked) { if (prot.handle) { prot.handle.remove(); prot.handle = null; } return; }
+    if (prot.handle && prot.handle._dragging) return;
     if (!prot.handle) {
       var el = document.createElement('div');
       el.style.cssText = 'width:44px;height:44px;margin-top:0;border-radius:50%;background:rgba(255,255,255,.55);border:2px dashed #c4501b;display:flex;align-items:center;justify-content:center;font-size:22px;color:#c4501b;touch-action:none;cursor:move';
       el.textContent = '✥'; el.title = 'ลากเพื่อเลื่อนแผ่นวัดมุม';
       prot.handle = new maplibregl.Marker({ element: el, draggable: true }).setLngLat([pos.lng, pos.lat]).addTo(map);
+      prot.handle.on('dragstart', function () { prot.handle._dragging = true; });
       prot.handle.on('drag', function () { var l = prot.handle.getLngLat(); prot.follow = false; prot.platePos = { lat: l.lat, lng: l.lng }; updatePlate(); });
-      prot.handle.on('dragend', function () { refreshProt(); });
+      prot.handle.on('dragend', function () { prot.handle._dragging = false; refreshProt(); });
     } else prot.handle.setLngLat([pos.lng, pos.lat]);
   }
 
   function protTap(ll) {
     var p = { lat: ll.lat, lng: ll.lng };
     if (!prot.a) { setProtPoint('a', p); toast('แตะแผนที่อีกครั้งเพื่อวางจุด B (ลากหมุดเพื่อปรับได้)'); }
-    else if (prot.b && prot.placed && !prot.locked) return; // วางแผ่นแล้ว: แตะแผนที่ไม่ย้ายจุด B (กันพลาดระหว่างลากแผ่น) ลากหมุดแทน
+    else if (prot.b && ((prot.placed && !prot.locked) || (lens.placed && !lens.locked))) return; // วางแผ่นแล้ว: แตะแผนที่ไม่ย้ายจุด B (กันพลาดระหว่างลากแผ่น) ลากหมุดแทน
     else setProtPoint('b', p);
   }
 
@@ -675,6 +776,7 @@
 
     var r = protReadout();
     updatePlate();
+    updateLens();
 
     var card = $('azcard'), wasHidden = card.hidden;
     setTimeout(function () { if (card.hidden !== wasHidden && prefs.grid) updateGrid(); }, 0);
@@ -709,14 +811,29 @@
   }
 
   function plateButtons() {
-    if (!prot.a) return '';
     var st = 'flex:none;padding:6px 10px;font-size:13px';
+    return lensSection(st) + (prot.a ? plateSection(st) : '');
+  }
+  function lensSection(st) {
+    if (!lens.placed) return '<div class="btnrow" style="margin-top:6px"><button class="btn alt" id="lnPlace" style="' + st + '">🧭 วางเข็มทิศเลนเซติก</button></div>';
+    var hidden = prot.hide && !prot.revealed, mag = G.norm360(lens.th - (prefs.decl || 0));
+    return '<div style="margin-top:6px;border-top:1px solid #eee;padding-top:6px"><span class="lbl">เข็มทิศ (อ่านที่เส้นดำบนกระจก)</span><br>' +
+      '<b style="color:#c8102e;font-size:18px">' + (hidden ? '???' : mag.toFixed(1) + '°') + '</b> <span style="color:#333">' + (hidden ? '' : '· ' + Math.round(mag * 6400 / 360) + ' มิล') + '</span></div>' +
+      '<div class="btnrow" style="margin-top:4px;flex-wrap:wrap">' +
+      '<button class="btn' + (lens.locked ? '' : ' alt') + '" id="lnLock" style="' + st + '">' + (lens.locked ? '🔒 ล็อคอยู่' : '🔓 ล็อคเข็มทิศ') + '</button>' +
+      (prot.a && prot.b ? '<button class="btn alt" id="lnAim" style="' + st + '">ชี้ไปจุด B</button>' : '') +
+      (prot.a ? '<button class="btn alt" id="lnToA" style="' + st + '">ไปที่จุด A</button>' : '') +
+      '<button class="btn alt" id="lnRemove" style="' + st + '">เก็บเข็มทิศ</button></div>' +
+      (lens.locked ? '' : '<div class="lbl">ลาก ✥ (ห่วงด้านหลัง) เพื่อเลื่อน · ลาก ⟳ (ปลายฝา) เพื่อหมุน · ขอบบนเป็นไม้บรรทัด 1:50,000 ขีดละ 100 ม.</div>');
+  }
+  function plateSection(st) {
     if (!prot.placed) return '<div class="btnrow" style="margin-top:6px"><button class="btn" id="plPlace" style="' + st + '">📐 วางแผ่นวัดมุม</button></div>';
     return '<div class="btnrow" style="margin-top:6px;flex-wrap:wrap">' +
+      (prot.rot ? '<button class="btn alt" id="plNorth" style="' + st + '">↑ หันเหนือกริด (หมุนอยู่ ' + prot.rot + '°)</button>' : '') +
       '<button class="btn' + (prot.locked ? '' : ' alt') + '" id="plLock" style="' + st + '">' + (prot.locked ? '🔒 ล็อคอยู่ (แตะปลดล็อค)' : '🔓 ล็อคแผ่น') + '</button>' +
       (prot.follow ? '' : '<button class="btn alt" id="plBack" style="' + st + '">กลับไปที่จุด A</button>') +
       '<button class="btn alt" id="plRemove" style="' + st + '">เก็บแผ่น</button></div>' +
-      (prot.locked ? '' : '<div class="lbl">ลากวงกลม ✥ เพื่อเลื่อนแผ่น · แผ่นหันเหนือกริดเสมอ</div>');
+      (prot.locked ? '' : '<div class="lbl">ลาก ✥ เพื่อเลื่อนแผ่น · ลาก ⟳ (มุมขวาบน) เพื่อหมุนแผ่น</div>');
   }
   function bindPlateButtons() {
     var b;
@@ -724,6 +841,12 @@
     if ((b = $('plLock'))) b.onclick = function () { prot.locked = !prot.locked; if (prot.locked && prot.follow && prot.a) { prot.follow = false; prot.platePos = { lat: prot.a.lat, lng: prot.a.lng }; } refreshProt(); toast(prot.locked ? 'ล็อคแผ่นวัดมุมแล้ว เลื่อนไม่ได้จนกว่าจะปลดล็อค' : 'ปลดล็อคแล้ว ลาก ✥ เพื่อเลื่อนแผ่น'); };
     if ((b = $('plBack'))) b.onclick = function () { prot.follow = true; refreshProt(); };
     if ((b = $('plRemove'))) b.onclick = function () { prot.placed = false; refreshProt(); };
+    if ((b = $('plNorth'))) b.onclick = function () { prot.rot = 0; refreshProt(); };
+    if ((b = $('lnPlace'))) b.onclick = placeLens;
+    if ((b = $('lnLock'))) b.onclick = function () { lens.locked = !lens.locked; refreshProt(); toast(lens.locked ? 'ล็อคเข็มทิศแล้ว' : 'ปลดล็อคแล้ว ลาก ✥ เลื่อน · ลาก ⟳ หมุน'); };
+    if ((b = $('lnAim'))) b.onclick = function () { lens.th = Math.round(G.gridAzimuth(lens.c || prot.a, prot.b).az * 10) / 10; refreshProt(); };
+    if ((b = $('lnToA'))) b.onclick = function () { lens.c = { lat: prot.a.lat, lng: prot.a.lng }; refreshProt(); };
+    if ((b = $('lnRemove'))) b.onclick = function () { lens.placed = false; refreshProt(); };
   }
 
   function setProtOn(on) {
@@ -732,6 +855,7 @@
     if (prot.markA) prot.markA.getElement().style.display = on ? '' : 'none';
     if (prot.markB) prot.markB.getElement().style.display = on ? '' : 'none';
     if (!on && prot.handle) { prot.handle.remove(); prot.handle = null; }
+    if (!on) { syncRotHandle(null); lensHandles(false); }
     if (on && pinMarker) { pinMarker.remove(); pinMarker = null; pinPos = null; updateCoord(); }
     refreshProt();
   }
@@ -740,7 +864,7 @@
     if (prot.markA) prot.markA.remove();
     if (prot.markB) prot.markB.remove();
     prot.a = prot.b = prot.markA = prot.markB = null;
-    prot.placed = false; prot.follow = true; prot.platePos = null; prot.locked = false;
+    prot.placed = false; prot.follow = true; prot.platePos = null; prot.locked = false; prot.rot = 0;
     prot.revealed = false;
     refreshProt();
   }
@@ -866,10 +990,15 @@
         f === 'dm' ? 'ตัวอย่าง 15°52.205′N' : 'ตัวอย่าง 15.87000°N';
       h += radio('fmt', f, G.FORMAT_NAMES[f], sub, prefs.fmt === f);
     });
+    var isUTM = prefs.fmt === 'mgrs' || prefs.fmt === 'utm';
+    var utmOpts = [['auto', 'อัตโนมัติตามซูม'], [10000, '10 กม. · 1 หลัก (เช่น QA 1 6)'], [1000, '1 กม. · 2 หลัก (เช่น QA 12 67)'], [500, '500 ม.'], [100, '100 ม. · 3 หลัก (เช่น QA 123 678)'], [50, '50 ม.'], [10, '10 ม. · 4 หลัก (เช่น QA 1234 6789)']];
+    h += '<div id="utmBox"' + (isUTM ? '' : ' hidden') + '><h4>ระยะห่างเส้นกริด UTM/MGRS (จำนวนหลัก)</h4><div class="field"><select id="utmStep" style="flex:1;font-size:16px;padding:8px;border:1px solid #ccc;border-radius:8px;background:#fff">' +
+      utmOpts.map(function (o) { return '<option value="' + o[0] + '"' + (String(prefs.utmStep || 'auto') === String(o[0]) ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') +
+      '</select></div><p class="note" style="margin-top:2px">จำนวนหลักต่อค่า (ตะวันออก/เหนือ): 1 หลัก = 10 กม. · 2 หลัก = 1 กม. · 3 หลัก = 100 ม. · 4 หลัก = 10 ม. ใช้กับป้ายตัวเลขบนเส้นกริด และพิกัด MGRS กลางจอ/หมุด · ซูมออกมากจะแสดงทุก ๆ 2, 5, 10 เส้น</p></div>';
     var stepOpts = [['auto', 'อัตโนมัติตามซูม'], [1, '1 ฟิลิปดา'], [5, '5 ฟิลิปดา'], [10, '10 ฟิลิปดา'], [30, '30 ฟิลิปดา'], [60, '1 ลิปดา'], [120, '2 ลิปดา'], [300, '5 ลิปดา'], [600, '10 ลิปดา'], [900, '15 ลิปดา'], [1800, '30 ลิปดา'], [3600, '1 องศา']];
-    h += '<h4>ระยะห่างเส้นละติจูด/ลองจิจูด</h4><div class="field"><select id="llStep" style="flex:1;font-size:16px;padding:8px;border:1px solid #ccc;border-radius:8px;background:#fff">' +
+    h += '<div id="llBox"' + (isUTM ? ' hidden' : '') + '><h4>ระยะห่างเส้นละติจูด/ลองจิจูด</h4><div class="field"><select id="llStep" style="flex:1;font-size:16px;padding:8px;border:1px solid #ccc;border-radius:8px;background:#fff">' +
       stepOpts.map(function (o) { return '<option value="' + o[0] + '"' + (String(prefs.llStep || 'auto') === String(o[0]) ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') +
-      '</select></div><p class="note" style="margin-top:2px">ใช้กับรูปแบบ องศา-ลิปดา-ฟิลิปดา / องศา-ลิปดา / องศาทศนิยม (UTM/MGRS ใช้ระยะเป็นเมตรอัตโนมัติ) · ถ้าซูมออกจนเส้นถี่เกินไป จะแสดงทุก ๆ 2, 5, 10 เส้นของระยะที่เลือก</p>';
+      '</select></div><p class="note" style="margin-top:2px">ใช้กับรูปแบบ องศา-ลิปดา-ฟิลิปดา / องศา-ลิปดา / องศาทศนิยม (UTM/MGRS ใช้ระยะเป็นเมตรอัตโนมัติ) · ถ้าซูมออกจนเส้นถี่เกินไป จะแสดงทุก ๆ 2, 5, 10 เส้นของระยะที่เลือก</p></div>';
     h += '<p class="note">แตะแผนที่เพื่อปักหมุดดูพิกัดของจุดนั้น แตะที่เดิมอีกครั้งเพื่อลบ · จุดกึ่งกลางจอ (กากบาทแดง) แสดงพิกัดที่มุมซ้ายบนตลอดเวลา · UTM/MGRS ใช้ datum WGS84</p>';
     $('sheetBody').innerHTML = h;
     $('gridOn').onchange = function () {
@@ -878,11 +1007,15 @@
     $('llStep').onchange = function () {
       prefs.llStep = this.value === 'auto' ? 'auto' : +this.value; savePrefs();
       if (!prefs.grid) { prefs.grid = true; $('gridOn').checked = true; $('toolGrid').classList.toggle('on', true); }
-      if (prefs.fmt === 'mgrs' || prefs.fmt === 'utm') toast('ระยะนี้ใช้กับพิกัดแบบองศา เลือกรูปแบบพิกัดด้านบนเป็น องศา-ลิปดา-ฟิลิปดา');
       updateGrid();
     };
+    $('utmStep').onchange = function () {
+      prefs.utmStep = this.value === 'auto' ? 'auto' : +this.value; savePrefs();
+      if (!prefs.grid) { prefs.grid = true; $('gridOn').checked = true; $('toolGrid').classList.toggle('on', true); }
+      updateGrid(); updateCoord();
+    };
     Array.prototype.forEach.call(document.querySelectorAll('input[name=fmt]'), function (el) {
-      el.onchange = function () { prefs.fmt = el.value; savePrefs(); updateGrid(); updateCoord(); };
+      el.onchange = function () { prefs.fmt = el.value; savePrefs(); updateGrid(); updateCoord(); var u2 = el.value === 'mgrs' || el.value === 'utm'; $('utmBox').hidden = !u2; $('llBox').hidden = u2; };
     });
   }
 

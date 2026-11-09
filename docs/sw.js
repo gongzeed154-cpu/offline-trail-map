@@ -10,6 +10,7 @@ var SHELL_FILES = [
   './common.js',
   './geo.js',
   './plate.js',
+  './lensatic.js',
   './paper.js',
   './route.js',
   './export.js',

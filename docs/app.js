@@ -784,65 +784,63 @@
     if (!prot.on) { card.hidden = true; return; }
     card.hidden = false;
     if (!r) {
-      card.innerHTML = '<div>' + (prot.a ? 'แตะแผนที่เพื่อวางจุด B' : 'แตะแผนที่เพื่อวางจุด A') + '</div>' + plateButtons();
+      card.innerHTML = '<div>' + (prot.a ? 'แตะแผนที่เพื่อวางจุด B' : 'แตะแผนที่เพื่อวางจุด A') + '</div>' + lensLine() + plateButtons();
       bindPlateButtons();
       return;
     }
     var hidden = prot.hide && !prot.revealed;
-    var q = function (s) { return hidden ? '???' : s; };
+    var q = function (v) { return hidden ? '???' : v; };
+    // การ์ดแบบกะทัดรัด: แถวแรกค่าหลัก + ปุ่มย่อ/ขยาย · รายละเอียดและปุ่มซ่อนได้
     card.innerHTML =
-      '<div><span class="lbl">มุมภาคกริด A→B</span><br><span class="big"></span></div>' +
-      '<div class="grid2">' +
-      '<div><span class="lbl">มุมกลับ B→A</span><br><span id="azBack"></span></div>' +
-      '<div><span class="lbl">ระยะ</span><br><span id="azDist"></span></div>' +
-      '<div><span class="lbl">มุมเหนือจริง</span><br><span id="azTrue"></span></div>' +
-      '<div><span class="lbl">มุมแม่เหล็ก (เบี่ยง ' + prefs.decl + '°)</span><br><span id="azMag"></span></div>' +
-      '</div>' +
-      (prot.hide ? '<div class="btnrow"><button class="btn alt" id="azReveal">' + (prot.revealed ? 'ซ่อนค่า' : 'เฉลย') + '</button></div>' : '') +
-      plateButtons();
+      '<div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap"><span class="lbl">A→B</span><span class="big" style="font-size:18px"></span>' +
+      '<span id="azDist" style="color:#333"></span><button id="azMini" class="btn alt" style="margin-left:auto;flex:none;padding:2px 10px;font-size:13px">' + (prot.mini ? '▴ ขยาย' : '▾ ย่อ') + '</button></div>' +
+      (prot.mini ? lensLine() : '<div style="font-size:12.5px;color:#444"><span id="azBack"></span> · <span id="azTrue"></span> · <span id="azMag"></span></div>' + lensLine() +
+        (prot.hide ? '<div class="btnrow" style="margin-top:4px"><button class="btn alt" id="azReveal" style="flex:none;padding:4px 10px;font-size:13px">' + (prot.revealed ? 'ซ่อนค่า' : 'เฉลย') + '</button></div>' : '') +
+        plateButtons());
     bindPlateButtons();
-    card.querySelector('.big').textContent = q(r.az.toFixed(1) + '°  (' + Math.round(r.mil) + ' มิล)');
-    $('azBack').textContent = q(r.back.toFixed(1) + '° (' + Math.round((r.back * 6400) / 360) + ' มิล)');
-    $('azDist').textContent = fmtDist(r.dist);
-    $('azTrue').textContent = q(r.trueAz.toFixed(1) + '°');
-    $('azMag').textContent = q(r.mag.toFixed(1) + '°');
+    card.querySelector('.big').textContent = q(r.az.toFixed(1) + '° (' + Math.round(r.mil) + ' มิล)');
+    $('azDist').textContent = '· ' + fmtDist(r.dist);
+    if ($('azBack')) {
+      $('azBack').textContent = 'กลับ ' + q(r.back.toFixed(1) + '° (' + Math.round((r.back * 6400) / 360) + ' มิล)');
+      $('azTrue').textContent = 'เหนือจริง ' + q(r.trueAz.toFixed(1) + '°');
+      $('azMag').textContent = 'แม่เหล็ก ' + q(r.mag.toFixed(1) + '°') + (prefs.decl ? ' (เบี่ยง ' + prefs.decl + '°)' : '');
+    }
+    $('azMini').onclick = function () { prot.mini = !prot.mini; refreshProt(); };
     var rev = $('azReveal');
     if (rev) rev.onclick = function () { prot.revealed = !prot.revealed; refreshProt(); };
   }
+  function lensLine() {
+    if (!lens.placed) return '';
+    var hidden = prot.hide && !prot.revealed, mag = G.norm360(lens.th - (prefs.decl || 0));
+    return '<div style="font-size:13px">🧭 เข็มทิศ <b style="color:#c8102e;font-size:16px">' + (hidden ? '???' : mag.toFixed(1) + '°') + '</b> ' + (hidden ? '' : Math.round(mag * 6400 / 360) + ' มิล') + '</div>';
+  }
 
   function plateButtons() {
-    var st = 'flex:none;padding:6px 10px;font-size:13px';
-    return lensSection(st) + (prot.a ? plateSection(st) : '');
+    var st = 'flex:none;padding:4px 9px;font-size:12.5px';
+    return '<div class="btnrow" style="margin-top:4px;flex-wrap:wrap;gap:5px">' + lensSection(st) + (prot.a ? plateSection(st) : '') + '</div>';
   }
   function lensSection(st) {
-    if (!lens.placed) return '<div class="btnrow" style="margin-top:6px"><button class="btn alt" id="lnPlace" style="' + st + '">🧭 วางเข็มทิศเลนเซติก</button></div>';
-    var hidden = prot.hide && !prot.revealed, mag = G.norm360(lens.th - (prefs.decl || 0));
-    return '<div style="margin-top:6px;border-top:1px solid #eee;padding-top:6px"><span class="lbl">เข็มทิศ (อ่านที่เส้นดำบนกระจก)</span><br>' +
-      '<b style="color:#c8102e;font-size:18px">' + (hidden ? '???' : mag.toFixed(1) + '°') + '</b> <span style="color:#333">' + (hidden ? '' : '· ' + Math.round(mag * 6400 / 360) + ' มิล') + '</span></div>' +
-      '<div class="btnrow" style="margin-top:4px;flex-wrap:wrap">' +
-      '<button class="btn' + (lens.locked ? '' : ' alt') + '" id="lnLock" style="' + st + '">' + (lens.locked ? '🔒 ล็อคอยู่' : '🔓 ล็อคเข็มทิศ') + '</button>' +
-      (prot.a && prot.b ? '<button class="btn alt" id="lnAim" style="' + st + '">ชี้ไปจุด B</button>' : '') +
-      (prot.a ? '<button class="btn alt" id="lnToA" style="' + st + '">ไปที่จุด A</button>' : '') +
-      '<button class="btn alt" id="lnRemove" style="' + st + '">เก็บเข็มทิศ</button></div>' +
-      (lens.locked ? '' : '<div class="lbl">ลาก ✥ (ห่วงด้านหลัง) เพื่อเลื่อน · ลาก ⟳ (ปลายฝา) เพื่อหมุน · ขอบบนเป็นไม้บรรทัด 1:50,000 ขีดละ 100 ม.</div>');
+    if (!lens.placed) return '<button class="btn alt" id="lnPlace" style="' + st + '">🧭 วางเข็มทิศ</button>';
+    return '<button class="btn' + (lens.locked ? '' : ' alt') + '" id="lnLock" style="' + st + '">' + (lens.locked ? '🔒 ปลดล็อค🧭' : '🔓 ล็อค🧭') + '</button>' +
+      (prot.a && prot.b ? '<button class="btn alt" id="lnAim" style="' + st + '">🧭→B</button>' : '') +
+      (prot.a ? '<button class="btn alt" id="lnToA" style="' + st + '">🧭→A</button>' : '') +
+      '<button class="btn alt" id="lnRemove" style="' + st + '">เก็บ🧭</button>';
   }
   function plateSection(st) {
-    if (!prot.placed) return '<div class="btnrow" style="margin-top:6px"><button class="btn" id="plPlace" style="' + st + '">📐 วางแผ่นวัดมุม</button></div>';
-    return '<div class="btnrow" style="margin-top:6px;flex-wrap:wrap">' +
-      (prot.rot ? '<button class="btn alt" id="plNorth" style="' + st + '">↑ หันเหนือกริด (หมุนอยู่ ' + prot.rot + '°)</button>' : '') +
-      '<button class="btn' + (prot.locked ? '' : ' alt') + '" id="plLock" style="' + st + '">' + (prot.locked ? '🔒 ล็อคอยู่ (แตะปลดล็อค)' : '🔓 ล็อคแผ่น') + '</button>' +
-      (prot.follow ? '' : '<button class="btn alt" id="plBack" style="' + st + '">กลับไปที่จุด A</button>') +
-      '<button class="btn alt" id="plRemove" style="' + st + '">เก็บแผ่น</button></div>' +
-      (prot.locked ? '' : '<div class="lbl">ลาก ✥ เพื่อเลื่อนแผ่น · ลาก ⟳ (มุมขวาบน) เพื่อหมุนแผ่น</div>');
+    if (!prot.placed) return '<button class="btn alt" id="plPlace" style="' + st + '">📐 วางแผ่น</button>';
+    return '<button class="btn' + (prot.locked ? '' : ' alt') + '" id="plLock" style="' + st + '">' + (prot.locked ? '🔒 ปลดล็อค📐' : '🔓 ล็อค📐') + '</button>' +
+      (prot.rot ? '<button class="btn alt" id="plNorth" style="' + st + '">📐↑เหนือ</button>' : '') +
+      (prot.follow ? '' : '<button class="btn alt" id="plBack" style="' + st + '">📐→A</button>') +
+      '<button class="btn alt" id="plRemove" style="' + st + '">เก็บ📐</button>';
   }
   function bindPlateButtons() {
     var b;
-    if ((b = $('plPlace'))) b.onclick = function () { prot.placed = true; prot.follow = true; prot.locked = false; refreshProt(); };
+    if ((b = $('plPlace'))) b.onclick = function () { prot.placed = true; prot.follow = true; prot.locked = false; refreshProt(); toast('ลาก ✥ เลื่อนแผ่น · ลาก ⟳ (มุมขวาบน) หมุน · 📐🔒 ล็อค'); };
     if ((b = $('plLock'))) b.onclick = function () { prot.locked = !prot.locked; if (prot.locked && prot.follow && prot.a) { prot.follow = false; prot.platePos = { lat: prot.a.lat, lng: prot.a.lng }; } refreshProt(); toast(prot.locked ? 'ล็อคแผ่นวัดมุมแล้ว เลื่อนไม่ได้จนกว่าจะปลดล็อค' : 'ปลดล็อคแล้ว ลาก ✥ เพื่อเลื่อนแผ่น'); };
     if ((b = $('plBack'))) b.onclick = function () { prot.follow = true; refreshProt(); };
     if ((b = $('plRemove'))) b.onclick = function () { prot.placed = false; refreshProt(); };
     if ((b = $('plNorth'))) b.onclick = function () { prot.rot = 0; refreshProt(); };
-    if ((b = $('lnPlace'))) b.onclick = placeLens;
+    if ((b = $('lnPlace'))) b.onclick = function () { placeLens(); toast('ลาก ✥ (ห่วงด้านหลัง) เลื่อน · ลาก ⟳ (ปลายฝา) หมุน · 🔒 ล็อค'); };
     if ((b = $('lnLock'))) b.onclick = function () { lens.locked = !lens.locked; refreshProt(); toast(lens.locked ? 'ล็อคเข็มทิศแล้ว' : 'ปลดล็อคแล้ว ลาก ✥ เลื่อน · ลาก ⟳ หมุน'); };
     if ((b = $('lnAim'))) b.onclick = function () { lens.th = Math.round(G.gridAzimuth(lens.c || prot.a, prot.b).az * 10) / 10; refreshProt(); };
     if ((b = $('lnToA'))) b.onclick = function () { lens.c = { lat: prot.a.lat, lng: prot.a.lng }; refreshProt(); };

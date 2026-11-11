@@ -84,7 +84,8 @@
       format: 'trail-project', version: 1, name: nameOf(id), exported: new Date().toISOString(),
       routes: clone(TrailNav.items().filter(inProj(id))),
       symbols: clone(TrailSym.items().filter(inProj(id))),
-      pins: clone(pins.filter(inProj(id)))
+      pins: clone(pins.filter(inProj(id))),
+      structs: clone(TrailStruct.items().filter(inProj(id)))
     };
   }
   function importData(d) {
@@ -97,6 +98,7 @@
     TrailNav.addRaw(fix(d.routes));
     TrailSym.addRaw(fix(d.symbols));
     fix(d.pins).forEach(function (p) { pins.push(p); });
+    TrailStruct.addRaw(fix(d.structs));
     openProj[id] = true;
     notify();
     return nm;
@@ -215,7 +217,7 @@
   }
 
   function projBlock(p) {
-    var rs = TrailNav.items().filter(inProj(p.id)), ss = TrailSym.items().filter(inProj(p.id)), ps = pins.filter(inProj(p.id));
+    var rs = TrailNav.items().filter(inProj(p.id)), ss = TrailSym.items().filter(inProj(p.id)), ps = pins.filter(inProj(p.id)), sts = TrailStruct.items().filter(inProj(p.id));
     var blk = el('div', 'border:2px solid ' + (p.id === active() ? '#2e6b3f' : '#e2e2e2') + ';border-radius:12px;padding:8px 10px;margin:8px 0');
     var r1 = el('div', 'display:flex;align-items:center;gap:8px');
     var cb = document.createElement('input');
@@ -228,7 +230,7 @@
     if (p.id === active()) r1.appendChild(el('span', 'font-size:12px;color:#2e6b3f;font-weight:700', '● ปัจจุบัน'));
     else r1.appendChild(btn('ใช้งานนี้', function () { st.active = p.id; save(); draw(); ctx.toast('ของใหม่ที่สร้างจะเก็บใน "' + p.name + '"'); }, false));
     blk.appendChild(r1);
-    blk.appendChild(el('div', 'font-size:12px;color:#777;margin:2px 0 6px 30px', 'เส้นทาง ' + rs.length + ' · สัญลักษณ์ ' + ss.length + ' · หมุด ' + ps.length));
+    blk.appendChild(el('div', 'font-size:12px;color:#777;margin:2px 0 6px 30px', 'เส้นทาง ' + rs.length + ' · สัญลักษณ์ ' + ss.length + ' · หมุด ' + ps.length + ' · สิ่งปลูกสร้าง ' + sts.length));
     var r2 = el('div', 'display:flex;gap:6px;flex-wrap:wrap');
     r2.appendChild(btn(openProj[p.id] ? '▲ ซ่อนรายการ' : '▼ รายการ', function () { openProj[p.id] = !openProj[p.id]; draw(); }, false));
     r2.appendChild(btn('ชื่อ', function () {
@@ -245,9 +247,9 @@
     r2.appendChild(btn('รวมเข้ากับ…', function () {
       var t = chooseProject(p.id, 'ย้ายข้อมูลทั้งหมดใน "' + p.name + '" ไปรวมกับงานหมายเลข:');
       if (!t) return;
-      [TrailNav.items(), TrailSym.items(), pins].forEach(function (arr) { arr.forEach(function (x) { if (projOf(x) === p.id) x.proj = t.id; }); });
+      [TrailNav.items(), TrailSym.items(), pins, TrailStruct.items()].forEach(function (arr) { arr.forEach(function (x) { if (projOf(x) === p.id) x.proj = t.id; }); });
       removeProject(p.id, true);
-      TrailNav.commit(); TrailSym.commit(); notify(); draw();
+      TrailNav.commit(); TrailSym.commit(); TrailStruct.commit(); notify(); draw();
       ctx.toast('รวมเข้ากับ "' + t.name + '" แล้ว');
     }, false));
     r2.appendChild(btn('ลบงาน', function () {
@@ -255,15 +257,17 @@
       rs.forEach(function (r) { TrailNav.removeRoute(r.id); });
       ss.forEach(function (s) { TrailSym.removeSym(s.id); });
       ps.forEach(function (x) { unmountPin(x.id); });
+      sts.forEach(function (x) { TrailStruct.removeStruct(x.id); });
       pins = pins.filter(function (x) { return projOf(x) !== p.id; });
       removeProject(p.id, false);
-      TrailNav.commit(); TrailSym.commit(); notify(); draw();
+      TrailNav.commit(); TrailSym.commit(); TrailStruct.commit(); notify(); draw();
     }, false));
     blk.appendChild(r2);
     if (openProj[p.id]) {
       itemGroup(blk, '⚑ เส้นทาง', rs, 'route');
       itemGroup(blk, '✚ สัญลักษณ์ทหาร', ss, 'sym');
       itemGroup(blk, '📍 หมุด', ps, 'pin');
+      itemGroup(blk, '🏛 สิ่งปลูกสร้าง', sts, 'struct');
     }
     return blk;
   }
@@ -286,7 +290,7 @@
     if (!arr.length) return;
     blk.appendChild(el('div', 'font-size:12px;color:#666;font-weight:700;margin:8px 0 2px', title));
     function commit() {
-      if (kind === 'route') TrailNav.commit(); else if (kind === 'sym') TrailSym.commit(); else { save(); refreshPins(); }
+      if (kind === 'route') TrailNav.commit(); else if (kind === 'sym') TrailSym.commit(); else if (kind === 'struct') TrailStruct.commit(); else { save(); refreshPins(); }
     }
     arr.forEach(function (x) {
       var row = el('div', 'display:flex;align-items:center;gap:6px;padding:4px 0;border-top:1px solid #f0f0f0');
@@ -295,6 +299,7 @@
       row.appendChild(btn('ดู', function () {
         x.show = true; reveal(projOf(x)); commit(); notify();
         if (kind === 'route') TrailNav.zoomRoute(x);
+        else if (kind === 'struct') ctx.map().easeTo({ center: x.pts[0], zoom: Math.max(ctx.map().getZoom(), 17), duration: 600 });
         else ctx.map().easeTo({ center: [x.lng, x.lat], zoom: Math.max(ctx.map().getZoom(), 14), duration: 600 });
       }, false));
       row.appendChild(btn('ชื่อ', function () {
@@ -314,6 +319,7 @@
         if (!confirm('ลบ "' + itemLabel(kind, x) + '" ?')) return;
         if (kind === 'route') TrailNav.removeRoute(x.id);
         else if (kind === 'sym') TrailSym.removeSym(x.id);
+        else if (kind === 'struct') TrailStruct.removeStruct(x.id);
         else { unmountPin(x.id); pins = pins.filter(function (y) { return y.id !== x.id; }); }
         commit(); notify(); draw();
       }, false));

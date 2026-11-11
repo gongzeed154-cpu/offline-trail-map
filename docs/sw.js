@@ -22,6 +22,7 @@ var SHELL_FILES = [
   './wind.js',
   './jump.js',
   './projects.js',
+  './structs.js',
   './symbols.js',
   './lock.js',
   './rec.js',

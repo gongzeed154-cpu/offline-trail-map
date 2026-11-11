@@ -16,7 +16,7 @@
   var firstFixDone = false;
 
   var BASE_NAMES = { trail: 'เดินป่า', sat: 'ดาวเทียม', topo: 'ภูมิประเทศ', paper: 'แผนที่กระดาษ' };
-  var NON_TRAIL = { background: 1, sat: 1, topo: 1, traffic: 1 };
+  var NON_TRAIL = { background: 1, sat: 1, topo: 1, traffic: 1, 'building-3d': 1 };
 
   var map = null;
   var geolocate = null;
@@ -26,6 +26,7 @@
 
   var prefs = {
     base: 'trail', // trail | sat | topo | paper
+    bld3d: false, // อาคาร 3 มิติ (จากข้อมูล OpenStreetMap)
     contour: false, // เส้นชั้นความสูง 20 ม. (สร้างบนเครื่อง)
     weather: 'off', // off | radar
     traffic: false,
@@ -304,6 +305,7 @@
     map.setLayoutProperty('topo', 'visibility', prefs.base === 'topo' ? 'visible' : 'none');
     TrailPaper.setSolo(prefs.base === 'paper');
     TrailContour.apply(!!prefs.contour);
+    applyBld3d();
     TrailSpots.setEnabled(!!prefs.contour);
     if (window.TrailView3D) TrailView3D.refreshBase();
   }
@@ -944,6 +946,12 @@
       (sub ? '<small>' + sub + '</small>' : '') + '</span></label>';
   }
 
+  // อาคาร 3 มิติ: เปิดแล้วเอียงแผนที่ให้เห็นทรง (ถ้ายังมองตรงจากด้านบน)
+  function applyBld3d(tilt) {
+    if (!map || !map.getLayer('building-3d')) return;
+    map.setLayoutProperty('building-3d', 'visibility', prefs.bld3d ? 'visible' : 'none');
+    if (prefs.bld3d && tilt && map.getPitch() < 30) map.easeTo({ pitch: 55, duration: 700 });
+  }
   function renderLayersSheet() {
     var h = '<h4>โหมดหน้าจอ</h4>' +
       Object.keys(DISPLAYS).map(function (k) { return radio('disp', k, DISPLAYS[k].icon + ' ' + DISPLAYS[k].name, DISPLAYS[k].sub, prefs.display === k); }).join('') +
@@ -957,6 +965,7 @@
       radio('base', 'topo', 'ภูมิประเทศ (เส้นชั้นความสูง)', 'แผนที่ตามแบบ topo · ดาวน์โหลดเก็บไว้ใช้ออฟไลน์ได้', prefs.base === 'topo') +
       radio('base', 'paper', 'แผนที่กระดาษ (ที่นำเข้า)', 'แสดงเฉพาะแผนที่กระดาษที่นำเข้าไว้ ใช้ออฟไลน์ได้ · นำเข้าที่ปุ่ม ★ พิเศษ', prefs.base === 'paper') +
       '<h4>เส้นชั้นความสูง</h4>' +
+      check('ovBld3d', 'อาคาร 3 มิติ', 'ยกตึก/บ้านขึ้นเป็นทรง 3 มิติ ซูม 14 ขึ้นไป (ใช้ได้ทับภาพดาวเทียม) · ความสูงมาจากข้อมูลที่คนเพิ่มใน OpenStreetMap ถ้าไม่มีจะสมมุติ 6 ม. · บริเวณที่ไม่มีข้อมูลอาคารจะไม่มีตึก', prefs.bld3d) +
       check('ovContour', 'เส้นชั้นความสูง 20 ม.', 'ซูม 13 ขึ้นไปเป็นเส้นละ 20 ม. เส้นหนาทุก 100 ม. มีตัวเลข · ซูมออกระยะห่างเพิ่มเองให้อ่านออก · ใช้ข้อมูลความสูงละเอียดราว 30-40 ม. ที่ราบจะไม่เนียน', prefs.contour) +
       '<h4>ซ้อนทับ (ต้องมีอินเทอร์เน็ต)</h4>' +
       check('ovWeather', 'สภาพอากาศ: เรดาร์ฝน', 'ข้อมูลล่าสุดจาก RainViewer', prefs.weather === 'radar') +
@@ -966,6 +975,7 @@
     Array.prototype.forEach.call(document.querySelectorAll('input[name=base]'), function (el) {
       el.onchange = function () { prefs.base = el.value; savePrefs(); applyBase(); setDownloadLabel(); };
     });
+    $('ovBld3d').onchange = function () { prefs.bld3d = this.checked; savePrefs(); applyBld3d(true); };
     $('ovContour').onchange = function () { prefs.contour = this.checked; savePrefs(); TrailContour.apply(prefs.contour); TrailSpots.setEnabled(prefs.contour); };
     $('ovWeather').onchange = function () { prefs.weather = this.checked ? 'radar' : 'off'; savePrefs(); applyWeather(); };
     $('ovTraffic').onchange = function () { prefs.traffic = this.checked; savePrefs(); applyTraffic(); };

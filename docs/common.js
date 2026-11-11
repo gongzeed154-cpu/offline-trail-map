@@ -193,6 +193,18 @@
           paint: { 'fill-color': '#e2d6c3', 'fill-outline-color': '#b9a98f' }
         },
         {
+          // อาคาร 3 มิติ: ยกรูปอาคารจาก OpenStreetMap ตามความสูงที่บันทึกไว้ (render_height) ถ้าไม่มีข้อมูลใช้ 6 ม. (ประมาณ 2 ชั้น)
+          id: 'building-3d', type: 'fill-extrusion', source: 'openmaptiles', 'source-layer': 'building',
+          minzoom: 14, layout: { visibility: 'none' },
+          paint: {
+            'fill-extrusion-color': ['interpolate', ['linear'], ['coalesce', ['get', 'render_height'], 6], 0, '#e9dfcf', 20, '#d8cdbb', 60, '#bfc3c9', 150, '#9aa3b0'],
+            'fill-extrusion-height': ['coalesce', ['get', 'render_height'], 6],
+            'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0],
+            'fill-extrusion-opacity': 0.92,
+            'fill-extrusion-vertical-gradient': true
+          }
+        },
+        {
           id: 'road_path', type: 'line', source: 'openmaptiles', 'source-layer': 'transportation',
           minzoom: 12,
           filter: ['in', ['get', 'class'], ['literal', ['path', 'track']]],
@@ -315,7 +327,7 @@
   }
 
   // เวอร์ชันของแอพ: แก้ที่นี่ที่เดียวทุกครั้งที่ปล่อยเวอร์ชันใหม่ (ชื่อแคชของ service worker ใช้ค่านี้ด้วย)
-  var APP_VERSION = 'v34';
+  var APP_VERSION = 'v35';
   var APP_DATE = '2026-11-09';
 
   root.TrailCommon = {

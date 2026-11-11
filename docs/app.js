@@ -221,6 +221,10 @@
       getPin: function () { return pinPos; },
       showSheet: function (k) { if (sheetKind !== k) openSheet(k); else TrailProj.renderSheet($('sheetBody')); }
     });
+    TrailStruct.init({
+      map: function () { return map; }, toast: toast, closeSheet: closeSheet,
+      openSheet: function (k) { if (sheetKind) closeSheet(); openSheet(k); }
+    });
     TrailNav.init({
       map: function () { return map; }, toast: toast, closeSheet: closeSheet, geolocate: geolocate,
       vectorTpl: function () { return vectorTpl; }, prefs: prefs,
@@ -378,6 +382,7 @@
     var tg = e.originalEvent && e.originalEvent.target;
     if (tg && tg.closest && tg.closest('.symmark')) return;
     if (TrailNav.handleClick(e)) return;
+    if (TrailStruct.handleClick(e)) return;
     if (prot.on) { protTap(e.lngLat); return; }
     if (pinMarker) {
       pinMarker.remove();
@@ -907,7 +912,7 @@
     sheetKind = kind;
     var sh = $('sheet');
     sh.hidden = false;
-    var title = kind === 'layers' ? 'ชั้นแผนที่และหน้าจอ' : kind === 'grid' ? 'พิกัดและตารางกริด' : kind === 'special' ? 'หมวดพิเศษ' : kind === 'route' ? 'เส้นทางและนำทาง' : kind === 'sky' ? 'ดวงดาวนำทาง' : kind === 'mil' ? 'สัญลักษณ์ทหารและพิมพ์แผนที่ฝึก' : kind === 'proj' ? 'งาน (เส้นทาง · สัญลักษณ์ · หมุด)' : kind === 'snd' ? 'ฟังเสียง (วิเคราะห์ชนิดและระยะ)' : kind === 'wind' ? 'ทิศทางและความเร็วลม' : kind === 'jump' ? 'โหมดโดดร่ม (วางแผน/ฝึก)' : kind === 'search' ? 'ค้นหา' : kind === 'v3d' ? 'มุมมอง 3D' : kind === 'rec' ? 'บันทึกการเดินทาง' : kind === 'team' ? 'ทีมเดินป่า' : 'วัดมุมด้วยแผ่นวัดมุม';
+    var title = kind === 'layers' ? 'ชั้นแผนที่และหน้าจอ' : kind === 'grid' ? 'พิกัดและตารางกริด' : kind === 'special' ? 'หมวดพิเศษ' : kind === 'route' ? 'เส้นทางและนำทาง' : kind === 'sky' ? 'ดวงดาวนำทาง' : kind === 'mil' ? 'สัญลักษณ์ทหารและพิมพ์แผนที่ฝึก' : kind === 'struct' ? 'สร้างตึก/สถานโบราณ 3 มิติ' : kind === 'proj' ? 'งาน (เส้นทาง · สัญลักษณ์ · หมุด · สิ่งปลูกสร้าง)' : kind === 'snd' ? 'ฟังเสียง (วิเคราะห์ชนิดและระยะ)' : kind === 'wind' ? 'ทิศทางและความเร็วลม' : kind === 'jump' ? 'โหมดโดดร่ม (วางแผน/ฝึก)' : kind === 'search' ? 'ค้นหา' : kind === 'v3d' ? 'มุมมอง 3D' : kind === 'rec' ? 'บันทึกการเดินทาง' : kind === 'team' ? 'ทีมเดินป่า' : 'วัดมุมด้วยแผ่นวัดมุม';
     sh.innerHTML = '<div class="shead"><h3></h3><button id="sheetClose">ปิด</button></div><div id="sheetBody"></div>';
     sh.querySelector('h3').textContent = title;
     $('sheetClose').onclick = closeSheet;
@@ -919,6 +924,7 @@
     else if (kind === 'sky') TrailSky.renderSheet($('sheetBody'));
     else if (kind === 'mil') TrailSym.renderSheet($('sheetBody'));
     else if (kind === 'proj') TrailProj.renderSheet($('sheetBody'));
+    else if (kind === 'struct') TrailStruct.renderSheet($('sheetBody'));
     else if (kind === 'snd') TrailSound.renderSheet($('sheetBody'));
     else if (kind === 'wind') TrailWind.renderSheet($('sheetBody'));
     else if (kind === 'jump') TrailJump.renderSheet($('sheetBody'));
@@ -1404,6 +1410,7 @@
     $('toolLayers').onclick = function () { openSheet('layers'); };
     $('toolGrid').onclick = function () { openSheet('grid'); };
     $('toolProt').onclick = function () { openSheet('prot'); };
+    $('toolStruct').onclick = function () { TrailStruct.resetEdit(); openSheet('struct'); };
     $('toolSpecial').onclick = function () { openSheet('special'); };
     $('toolRoute').onclick = function () { openSheet('route'); };
     $('searchBtn').onclick = function () { openSheet('search'); };

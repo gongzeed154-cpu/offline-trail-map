@@ -5,7 +5,7 @@
   var KEY = 'trail_structs_v1';
   var ctx = null, items = [], listeners = [];
   var draw = null; // { type, mode, pts, ghost } ระหว่างวาด
-  var editId = null, tmpType = 'house', tmpMode = 'poly';
+  var editId = null, tmpType = 'house', tmpMode = 'rect';
   var FLOOR_H = 3.2;
 
   // ชนิดสิ่งปลูกสร้าง: h ความสูงเริ่มต้น (ม.) mode วิธีวาดที่แนะนำ
@@ -173,7 +173,6 @@
     if (root.TrailProj) TrailProj.reveal(it.proj);
     if (draw.mv) ctx.map().off('mousemove', draw.mv);
     draw = null; drawDraft(); bar(); changed();
-    var m = ctx.map(); if (m.getPitch() < 30) m.easeTo({ pitch: 55, duration: 700 });
     editId = it.id; ctx.openSheet('struct'); // เปิดหน้าแก้ไขทันที
   }
   function handleClick(e) {
@@ -216,7 +215,7 @@
       var r = el('div', 'display:flex;align-items:center;gap:6px;padding:5px 0;border-top:1px solid #f0f0f0');
       var cb = el('input', 'width:22px;height:22px;flex:none;accent-color:#2e6b3f'); cb.type = 'checkbox'; cb.checked = x.show !== false; cb.onchange = function () { x.show = cb.checked; changed(); }; r.appendChild(cb);
       r.appendChild(el('div', 'flex:1;min-width:0;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap', (TYPES[x.type] || {}).name.split(' ')[0] + ' ' + (x.name || '(ไม่มีชื่อ)') + ' · ' + Math.round(heightOf(x)) + ' ม.'));
-      r.appendChild(button('ดู', function () { var c = x.type === 'wall' ? x.pts[0] : centroid(x.pts), m = ctx.map(); ctx.closeSheet(); m.easeTo({ center: c, zoom: Math.max(m.getZoom(), 17), pitch: 55, duration: 800 }); }));
+      r.appendChild(button('ดู', function () { var c = x.type === 'wall' ? x.pts[0] : centroid(x.pts), m = ctx.map(); ctx.closeSheet(); m.easeTo({ center: c, zoom: Math.max(m.getZoom(), 17), duration: 800 }); }));
       r.appendChild(button('แก้', function () { editId = x.id; renderSheet(body); }));
       body.appendChild(r);
     });
@@ -232,6 +231,10 @@
     if (it.type === 'wall') body.appendChild(field('หนา (เมตร)', numInput(it.w || 1.8, '0.1', function (v) { if (v > 0) { it.w = v; changed(); } })));
     var col = el('input', 'flex:1;height:40px;border:1px solid #ccc;border-radius:8px;padding:2px'); col.type = 'color'; col.value = it.color || T.color; col.onchange = function () { it.color = col.value; changed(); };
     body.appendChild(field('สีหลัก', col));
+    var v = el('div', 'display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 0');
+    v.appendChild(button('⬆ ดูจากด้านบน', function () { ctx.map().easeTo({ pitch: 0, bearing: 0, duration: 500 }); }));
+    v.appendChild(button('⛰ ดูแบบ 3 มิติ', function () { var m = ctx.map(); ctx.closeSheet(); m.easeTo({ center: it.type === 'wall' ? it.pts[0] : centroid(it.pts), pitch: 55, duration: 700 }); }));
+    body.appendChild(v);
     var r = el('div', 'display:flex;gap:8px;flex-wrap:wrap;margin:12px 0');
     r.appendChild(button('✓ เสร็จ', function () { editId = null; ctx.closeSheet(); }, true));
     r.appendChild(button('ย้ายตำแหน่ง', function () { moveMode(it); }));

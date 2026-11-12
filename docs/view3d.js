@@ -155,7 +155,7 @@
     hud.id = 'v3dHud';
     hud.style.cssText = 'position:fixed;left:10px;top:calc(env(safe-area-inset-top) + 10px);z-index:9;display:flex;flex-direction:column;align-items:flex-start;gap:6px;pointer-events:none;max-width:calc(100vw - 80px)';
     hud.innerHTML = '<div id="v3dInfo" style="background:rgba(0,0,0,.6);color:#fff;border-radius:16px;padding:6px 12px;font-size:13px"></div>' +
-      '<div style="display:flex;gap:6px;pointer-events:auto"><button class="v3b" id="v3Back">◀ ถอย</button><button class="v3b" id="v3Fwd">ก้าว ▶</button><button class="v3b" id="v3Set">⚙ ตั้งค่า</button><button class="v3b" id="v3Exit">✕ ออก</button></div>';
+      '<div style="display:flex;gap:6px;pointer-events:auto"><button class="v3b" id="v3Back">◀ ถอย</button><button class="v3b" id="v3Fwd">ก้าว ▶</button><button class="v3b" id="v3Set">⚙ ตั้งค่า</button><button class="v3b" id="v3Sight">🧭 เล็ง</button><button class="v3b" id="v3Exit">✕ ออก</button></div>';
     document.body.appendChild(hud);
     var css = document.createElement('style');
     css.textContent = '.v3b{border:0;background:rgba(255,255,255,.92);border-radius:16px;padding:7px 11px;font-size:13px;box-shadow:0 1px 4px rgba(0,0,0,.35);color:#222}';
@@ -164,8 +164,74 @@
     $('v3Fwd').onclick = function () { stepMove(100); };
     $('v3Set').onclick = function () { ctx.showSheet('v3d'); };
     $('v3Exit').onclick = exit;
+    $('v3Sight').onclick = function () { sightOn(!sight.on); };
   }
+  /* ---------- เล็งด้วยเข็มทิศเลนเซติก (มองผ่านช่องเล็ง อ่านหน้าปัดผ่านเลนส์) ---------- */
+  var sight = { on: false, el: null, km: 5 };
+  function curBearing() { var map = ctx.map(); return st.mode === 'ground' ? st.bearing : (map.getBearing() + 360) % 360; }
+  function curPos() { if (st.mode === 'ground') return { lat: st.lat, lng: st.lng }; var c = ctx.map().getCenter(); return { lat: c.lat, lng: c.lng }; }
+  function decl() { return ctx.getDecl ? +ctx.getDecl() || 0 : 0; }
+  function sightOn(on) {
+    sight.on = on;
+    var map = ctx.map();
+    if (!on) { if (sight.el) { sight.el.remove(); sight.el = null; } map.off('move', drawSight); if ($('v3Sight')) $('v3Sight').style.background = ''; return; }
+    var el = document.createElement('div'); el.id = 'v3dSight';
+    el.style.cssText = 'position:fixed;inset:0;z-index:8;pointer-events:none';
+    el.innerHTML = '<div style="position:absolute;left:50%;top:0;bottom:0;width:0;border-left:1.5px solid #000;box-shadow:0 0 0 1px rgba(255,255,255,.55)"></div>' +
+      '<div style="position:absolute;left:50%;top:38%;transform:translate(-50%,-50%);width:26px;height:26px;border:2px solid rgba(0,0,0,.8);border-radius:50%;box-shadow:0 0 0 1px rgba(255,255,255,.6)"></div>' +
+      '<div style="position:absolute;left:50%;bottom:calc(env(safe-area-inset-bottom) + 70px);transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:6px">' +
+      '<div id="v3sRead" style="background:rgba(0,0,0,.72);color:#fff;border-radius:12px;padding:4px 12px;font-size:15px;font-weight:700"></div>' +
+      '<canvas id="v3sCv" width="680" height="240" style="width:340px;height:120px;border-radius:60px / 60px;box-shadow:0 2px 12px rgba(0,0,0,.6)"></canvas>' +
+      '<div style="display:flex;gap:6px;pointer-events:auto"><select id="v3sKm" style="border:0;border-radius:14px;padding:6px 8px;font-size:13px"><option value="5">เส้นยาว 5 กม.</option><option value="10">10 กม.</option><option value="15">15 กม.</option><option value="20">20 กม.</option></select>' +
+      '<button class="v3b" id="v3sRec" style="background:#c8102e;color:#fff">📌 บันทึกมุมเล็ง</button><button class="v3b" id="v3sClr">ลบเส้นเล็ง</button></div></div>';
+    document.body.appendChild(el); sight.el = el;
+    $('v3sKm').value = String(sight.km);
+    $('v3sKm').onchange = function () { sight.km = +this.value; };
+    $('v3sRec').onclick = function () {
+      var p = curPos(), b = curBearing(), mag = (b - decl() + 360) % 360;
+      if (window.TrailProtAddSight) { var n = window.TrailProtAddSight(p.lat, p.lng, b, sight.km, mag.toFixed(1) + '°'); ctx.toast('บันทึกเส้นเล็ง ' + mag.toFixed(1) + '° (' + Math.round(mag * 6400 / 360) + ' มิล) ยาว ' + sight.km + ' กม. · รวม ' + n + ' เส้น (ดูบนแผนที่ได้)'); }
+    };
+    $('v3sClr').onclick = function () { if (window.TrailProtClearSights) window.TrailProtClearSights(); ctx.toast('ลบเส้นเล็งแล้ว'); };
+    if ($('v3Sight')) $('v3Sight').style.background = '#ffd54f';
+    map.on('move', drawSight);
+    drawSight();
+  }
+  // หน้าปัดที่เห็นผ่านเลนส์: แถบโค้งของจาน ตัวเลของศาสีแดง (ใน) สเกลมิลสีดำ (นอก) เลื่อนตามทิศที่หัน
+  function drawSight() {
+    if (!sight.on) return;
+    var cv = $('v3sCv'); if (!cv) return;
+    var c = cv.getContext('2d'), W = cv.width, H = cv.height, mag = (curBearing() - decl() + 360) % 360, ppd = 13, cx = W / 2;
+    c.clearRect(0, 0, W, H);
+    c.save(); c.beginPath(); c.ellipse(cx, H / 2, W / 2, H / 2, 0, 0, Math.PI * 2); c.clip();
+    var g = c.createRadialGradient(cx, H / 2, 20, cx, H / 2, W / 2); g.addColorStop(0, '#fbfbf6'); g.addColorStop(0.75, '#e9e8df'); g.addColorStop(1, '#9e9d93');
+    c.fillStyle = g; c.fillRect(0, 0, W, H);
+    function curveY(x, y0) { var u = (x - cx) / (W / 2); return y0 + u * u * 26; } // ความโค้งของจาน
+    c.textAlign = 'center'; c.textBaseline = 'middle';
+    for (var d = Math.floor(mag - 28); d <= Math.ceil(mag + 28); d++) {
+      var dd = ((d % 360) + 360) % 360, x = cx + (d - mag) * ppd;
+      // องศา (แดง)
+      var big = dd % 10 === 0, mid = dd % 5 === 0, y0 = curveY(x, 150);
+      c.strokeStyle = '#c8102e'; c.lineWidth = big ? 3 : 2;
+      c.beginPath(); c.moveTo(x, y0); c.lineTo(x, y0 + (big ? 26 : mid ? 18 : 10)); c.stroke();
+      if (big) { c.fillStyle = '#c8102e'; c.font = '700 30px -apple-system, Arial, sans-serif'; c.fillText(String(dd), x, curveY(x, 200)); }
+    }
+    // มิล (ดำ) ด้านบน: ขีดทุก 20 มิล ตัวเลขทุก 200 มิล (หลักร้อย)
+    var mil = mag * 6400 / 360, ppm = ppd * 360 / 6400;
+    for (var m = Math.floor((mil - 500) / 20) * 20; m <= mil + 500; m += 20) {
+      var mm = ((m % 6400) + 6400) % 6400, x2 = cx + (m - mil) * ppm, y1 = curveY(x2, 98), bg = mm % 200 === 0;
+      c.strokeStyle = '#111'; c.lineWidth = bg ? 3 : 1.6;
+      c.beginPath(); c.moveTo(x2, y1); c.lineTo(x2, y1 - (bg ? 24 : mm % 100 === 0 ? 16 : 9)); c.stroke();
+      if (bg) { c.fillStyle = '#111'; c.font = '700 26px -apple-system, Arial, sans-serif'; c.fillText(String(mm === 0 ? 64 : mm / 100), x2, curveY(x2, 50)); }
+    }
+    // เส้นอ่านค่า (index) กลางเลนส์
+    c.strokeStyle = '#000'; c.lineWidth = 3; c.beginPath(); c.moveTo(cx, 0); c.lineTo(cx, H); c.stroke();
+    c.restore();
+    c.strokeStyle = '#2b2d22'; c.lineWidth = 10; c.beginPath(); c.ellipse(cx, H / 2, W / 2 - 5, H / 2 - 5, 0, 0, Math.PI * 2); c.stroke();
+    var r = $('v3sRead'); if (r) r.innerHTML = '<span style="color:#ff6b6b">' + mag.toFixed(1) + '°</span> · ' + Math.round(mil) + ' มิล' + (decl() ? ' (แม่เหล็ก เบี่ยง ' + decl() + '°)' : '');
+  }
+
   function updateHud() {
+    drawSight();
     var i = $('v3dInfo');
     if (!i) return;
     var dirs = ['เหนือ', 'ตอ.เฉียงเหนือ', 'ตะวันออก', 'ตอ.เฉียงใต้', 'ใต้', 'ตต.เฉียงใต้', 'ตะวันตก', 'ตต.เฉียงเหนือ'];
@@ -241,6 +307,7 @@
     if (ctx.restoreOrient) ctx.restoreOrient();
     restoreView();
     if (hud) hud.hidden = true;
+    sightOn(false);
     setTop(true);
     var cross = $('cross'); if (cross) cross.style.display = '';
     if ($('v3Back')) { $('v3Back').hidden = false; $('v3Fwd').hidden = false; }
@@ -277,5 +344,5 @@
     if ($('v3Off')) $('v3Off').onclick = exit;
   }
 
-  root.TrailView3D = { init: init, renderSheet: renderSheet, enterGround: enterGround, enterTilt: enterTilt, exit: exit, active: active, refreshBase: function () { if (st.mode) ensureHillshade3d(); }, _state: st };
+  root.TrailView3D = { _st: st, _apply: function () { applyGround(); }, init: init, renderSheet: renderSheet, enterGround: enterGround, enterTilt: enterTilt, exit: exit, active: active, refreshBase: function () { if (st.mode) ensureHillshade3d(); }, _state: st };
 })(typeof self !== 'undefined' ? self : this);

@@ -213,7 +213,7 @@
       '<div style="position:absolute;left:50%;top:0;bottom:0;width:0;border-left:1px solid rgba(0,0,0,.55)"></div>' +
       '<div id="sgBody" style="position:absolute;left:50%;height:56vh;bottom:calc(env(safe-area-inset-bottom) + 150px);aspect-ratio:300/560;transform:translateX(-50%);opacity:.97">' + bodySvg() +
       '<canvas id="sgLens" width="480" height="480" style="position:absolute;left:50%;top:' + (415 / 560 * 100) + '%;width:' + (156 / 300 * 100) + '%;transform:translate(-50%,-50%);border-radius:50%"></canvas></div>' +
-      '<div style="position:absolute;left:0;right:0;bottom:0;background:linear-gradient(rgba(0,0,0,.55),rgba(0,0,0,.92) 25%);padding:10px 12px calc(env(safe-area-inset-bottom) + 8px);pointer-events:auto">' +
+      '<div style="position:absolute;left:0;right:0;bottom:0;background:rgba(12,12,12,.94);padding:10px 12px calc(env(safe-area-inset-bottom) + 8px);pointer-events:auto">' +
       '<div style="max-width:560px;margin:0 auto"><div id="sgInfo" style="color:#ffd54f;font-size:13px;min-height:16px"></div>' +
       '<div style="display:flex;align-items:flex-end;justify-content:space-between;gap:8px"><div><span style="color:#bbb;font-size:13px">ทิศที่เล็ง</span> <span id="sgDeg" style="font-size:38px;font-weight:800;color:#b9f26b;line-height:1"></span></div>' +
       '<div style="text-align:right"><span id="sgMil" style="font-size:20px;font-weight:700"></span> <span id="sgDir" style="color:#bbb;font-size:13px"></span></div></div>' +

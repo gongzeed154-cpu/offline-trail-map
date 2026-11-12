@@ -28,15 +28,18 @@
       '<radialGradient id="sgBlk" cx=".4" cy=".3" r=".8"><stop offset="0" stop-color="#2a2a2a"/><stop offset="1" stop-color="#050505"/></radialGradient></defs>' +
       // ไม้บรรทัดด้านซ้าย
       '<g transform="translate(6,60)"><rect x="0" y="0" width="30" height="430" rx="4" fill="url(#sgOl)" stroke="#20260f" stroke-width="2"/>' + tick +
-      '<text x="24" y="250" font-size="11" font-weight="700" fill="#e8e3c8" transform="rotate(-90 24 250)">4000</text></g>' +
+      '<text x="24" y="250" font-size="11" font-weight="700" fill="#e8e3c8" transform="rotate(-90 24 250)">4000</text><text x="24" y="70" font-size="11" font-weight="700" fill="#e8e3c8" transform="rotate(-90 24 70)">6000</text></g>' +
       // ฝาและลวดเล็ง
-      '<rect x="112" y="4" width="76" height="80" rx="8" fill="url(#sgOl)" stroke="#20260f" stroke-width="2"/>' +
-      '<rect x="126" y="12" width="48" height="38" rx="5" fill="#556532"/>' +
-      '<rect x="143" y="30" width="14" height="44" rx="7" fill="#0b0b0b" stroke="#333"/><rect x="148" y="36" width="4" height="30" rx="2" fill="#c8f56a"/>' +
-      '<path d="M40 210 a110 110 0 0 1 220 0 v40 h-220 z" fill="url(#sgOl)" stroke="#20260f" stroke-width="2"/>' +
+      // แถบปลายฝา (ศูนย์หน้า) มีร่องบาก ตัวนูน U.S. และห่วงยึดลวดเล็ง
+      '<path d="M112 12 q0-8 8-8 h18 l6 14 h12 l6-14 h18 q8 0 8 8 v72 h-76 z" fill="url(#sgOl)" stroke="#20260f" stroke-width="2"/>' +
+      '<text x="150" y="40" text-anchor="middle" font-size="15" font-weight="800" fill="#4a5729" stroke="#2f3a17" stroke-width=".6" letter-spacing="3">U.S.</text>' +
+      // ฝาวงกลม เจาะช่องเล็งโปร่ง (มองทะลุไปเห็นภูมิประเทศจริง)
+      '<path fill-rule="evenodd" d="M40 210 a110 110 0 0 1 220 0 v40 h-220 z M137 118 h26 v176 h-26 z" fill="url(#sgOl)" stroke="#20260f" stroke-width="2"/>' +
+      '<rect x="137" y="118" width="26" height="176" rx="13" fill="none" stroke="#c9cdbd" stroke-width="3"/>' +
+      '<path d="M105 182 q8-10 14 2 q-2 10-12 6 z" fill="#1d2b3a"/><path d="M195 182 q-8-10-14 2 q2 10 12 6 z" fill="#1d2b3a"/>' +
       '<circle cx="150" cy="210" r="96" fill="none" stroke="#2f3a17" stroke-width="3" opacity=".6"/>' +
-      '<rect x="134" y="120" width="32" height="170" rx="16" fill="#cfd3c9" stroke="#20260f" stroke-width="3" opacity=".85"/>' +
-      '<line x1="150" y1="82" x2="150" y2="290" stroke="#e53935" stroke-width="2.4"/>' +
+      '<circle cx="150" cy="70" r="5" fill="none" stroke="#111" stroke-width="1.6"/>' +
+      '<line x1="150" y1="75" x2="150" y2="292" stroke="#111" stroke-width="1.3"/>' +
       // ตัวฐานสีเขียวด้านล่าง
       '<rect x="30" y="300" width="240" height="250" rx="22" fill="url(#sgOl)" stroke="#20260f" stroke-width="2.5"/>' +
       '<circle cx="50" cy="528" r="7" fill="none" stroke="#20260f" stroke-width="2"/><circle cx="250" cy="528" r="7" fill="none" stroke="#20260f" stroke-width="2"/>' +
@@ -207,8 +210,8 @@
     ui.style.cssText = 'position:fixed;inset:0;z-index:8;color:#fff;pointer-events:none;font-family:inherit';
     var B = 'pointer-events:auto;border:1.5px solid rgba(255,255,255,.4);background:rgba(0,0,0,.5);color:#fff;border-radius:14px;padding:8px 4px;font-size:14px;font-weight:700;flex:1';
     ui.innerHTML =
-      '<div style="position:absolute;left:50%;top:0;bottom:0;width:0;border-left:1.5px solid #e53935;box-shadow:0 0 0 .5px rgba(255,255,255,.6)"></div>' +
-      '<div id="sgBody" style="position:absolute;left:50%;height:46vh;bottom:calc(env(safe-area-inset-bottom) + 150px);aspect-ratio:300/560;transform:translateX(-50%);opacity:.97">' + bodySvg() +
+      '<div style="position:absolute;left:50%;top:0;bottom:0;width:0;border-left:1px solid rgba(0,0,0,.55)"></div>' +
+      '<div id="sgBody" style="position:absolute;left:50%;height:56vh;bottom:calc(env(safe-area-inset-bottom) + 150px);aspect-ratio:300/560;transform:translateX(-50%);opacity:.97">' + bodySvg() +
       '<canvas id="sgLens" width="480" height="480" style="position:absolute;left:50%;top:' + (415 / 560 * 100) + '%;width:' + (156 / 300 * 100) + '%;transform:translate(-50%,-50%);border-radius:50%"></canvas></div>' +
       '<div style="position:absolute;left:0;right:0;bottom:0;background:linear-gradient(rgba(0,0,0,.55),rgba(0,0,0,.92) 25%);padding:10px 12px calc(env(safe-area-inset-bottom) + 8px);pointer-events:auto">' +
       '<div style="max-width:560px;margin:0 auto"><div id="sgInfo" style="color:#ffd54f;font-size:13px;min-height:16px"></div>' +

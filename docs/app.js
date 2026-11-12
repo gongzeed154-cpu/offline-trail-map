@@ -264,6 +264,7 @@
       map: function () { return map; }, toast: toast, closeSheet: closeSheet,
       showSheet: function (k) { if (sheetKind !== k) openSheet(k); else TrailView3D.renderSheet($('sheetBody')); },
       getFix: function () { var f = TrailSensors.state.fix; return f && isFinite(f.lat) ? { lat: f.lat, lng: f.lng } : null; },
+      getDecl: function () { return prefs.decl || 0; },
       getBase: function () { return prefs.base; },
       setBase: function (b) { prefs.base = b; savePrefs(); applyBase(); setDownloadLabel(); },
       restoreOrient: function () { applyOrient(); }
@@ -613,7 +614,7 @@
 
   /* ---------- แผ่นวัดมุม (ฝึกใช้แผนที่) ---------- */
   // placed = วางแผ่นแล้ว, follow = แผ่นตามจุด A, platePos = ตำแหน่งจุดอ้างอิงของแผ่นเมื่อย้ายเอง, locked = ล็อคไม่ให้ย้ายแผ่น
-  var prot = { on: false, a: null, b: null, markA: null, markB: null, hide: false, revealed: false, placed: false, follow: true, platePos: null, locked: false, handle: null };
+  var prot = { n: 2, ex: {}, exm: {}, lines: [], sights: [], under: false, cardTop: false, on: false, a: null, b: null, markA: null, markB: null, hide: false, revealed: false, placed: false, follow: true, platePos: null, locked: false, handle: null };
 
   // วางแผ่นวัดมุมสี่เหลี่ยม 1:50,000 บนแผนที่ โดยให้จุดอ้างอิงที่เลือกตรงกับหมุด A และหันเหนือกริด
   function updatePlate() {
@@ -729,11 +730,26 @@
   function protTap(ll) {
     var p = { lat: ll.lat, lng: ll.lng };
     if (!prot.a) { setProtPoint('a', p); toast('แตะแผนที่อีกครั้งเพื่อวางจุด B (ลากหมุดเพื่อปรับได้)'); }
+    else if (prot.b && nextLetter()) { var L = nextLetter(); setProtPoint(L.toLowerCase(), p); if (nextLetter()) toast('แตะวางจุด ' + nextLetter() + ' ต่อได้'); }
     else if (prot.b && ((prot.placed && !prot.locked) || (lens.placed && !lens.locked))) return; // วางแผ่นแล้ว: แตะแผนที่ไม่ย้ายจุด B (กันพลาดระหว่างลากแผ่น) ลากหมุดแทน
     else setProtPoint('b', p);
   }
 
+  var LETTERS = 'ABCDEFGH', PCOL = { c: '#2e7d32', d: '#6a1b9a', e: '#00838f', f: '#ad1457', g: '#5d4037', h: '#37474f' };
+  function ptOf(L) { L = L.toLowerCase(); return L === 'a' ? prot.a : L === 'b' ? prot.b : prot.ex[L] || null; }
+  function nextLetter() { for (var i = 2; i < prot.n; i++) if (!prot.ex[LETTERS[i].toLowerCase()]) return LETTERS[i]; return null; }
+  function placedLetters() { return LETTERS.split('').filter(function (L) { return !!ptOf(L); }); }
   function setProtPoint(which, p) {
+    if (which !== 'a' && which !== 'b') {
+      prot.ex[which] = { lat: p.lat, lng: p.lng };
+      if (!prot.exm[which]) {
+        var el = document.createElement('div'); el.className = 'pmark'; el.style.background = PCOL[which] || '#444'; el.textContent = which.toUpperCase();
+        var m = new maplibregl.Marker({ element: el, draggable: true }).setLngLat([p.lng, p.lat]).addTo(map);
+        m.on('drag', function () { var l = m.getLngLat(); prot.ex[which] = { lat: l.lat, lng: l.lng }; refreshProt(); });
+        prot.exm[which] = m;
+      }
+      prot.exm[which].setLngLat([p.lng, p.lat]); applyProtLayerOrder(); refreshProt(); return;
+    }
     prot[which] = { lat: p.lat, lng: p.lng };
     var key = which === 'a' ? 'markA' : 'markB';
     if (!prot[key]) makeProtMarker(which);
@@ -769,6 +785,57 @@
     };
   }
 
+  // เส้นระหว่างจุด / เส้นยืดยาว: { a:'A', b:'C', km:0 } = A→C · { a:'A', b:'C', km:10 } = จาก A ผ่าน C ยาว 10 กม. · { p0, az, km } = เส้นเล็งจากมุมมอง 3D
+  function lineEnds(l) {
+    var s0 = l.p0 || ptOf(l.a); if (!s0) return null;
+    if (!l.km) { var e = ptOf(l.b); return e ? [s0, e] : null; }
+    var az = l.p0 ? l.az : (ptOf(l.b) ? G.gridAzimuth(s0, ptOf(l.b)).az : null);
+    if (az === null) return null;
+    return [s0, G.pointFromGrid(s0, az, l.km * 1000)];
+  }
+  function lineInfo(l) {
+    var e = lineEnds(l); if (!e) return null;
+    var az = G.gridAzimuth(e[0], e[1]).az;
+    return { az: az, dist: G.haversine(e[0], e[1]), ends: e };
+  }
+  function drawProtLines() {
+    if (!map.getSource('plines')) {
+      map.addSource('plines', { type: 'geojson', data: emptyFC() });
+      map.addLayer({ id: 'plines', type: 'line', source: 'plines', layout: { 'line-cap': 'round' }, paint: { 'line-color': ['get', 'c'], 'line-width': 2.6, 'line-dasharray': ['case', ['get', 'ext'], ['literal', [4, 2]], ['literal', [1, 0]]] } });
+      map.addLayer({ id: 'plines-lbl', type: 'symbol', source: 'plines', layout: { 'symbol-placement': 'line-center', 'text-field': ['get', 't'], 'text-font': ['Noto Sans Bold'], 'text-size': 12, 'text-offset': [0, -0.8], 'text-allow-overlap': false }, paint: { 'text-color': ['get', 'c'], 'text-halo-color': '#fff', 'text-halo-width': 2 } });
+      applyProtLayerOrder();
+    }
+    var fc = emptyFC(), hidden = prot.hide && !prot.revealed;
+    function add(l, col, label) {
+      var inf = lineInfo(l); if (!inf) return;
+      fc.features.push({ type: 'Feature', properties: { c: col, ext: !!l.km, t: label + ' ' + (hidden ? '???' : inf.az.toFixed(1) + '°') + ' · ' + (inf.dist >= 1000 ? (inf.dist / 1000).toFixed(2) + ' กม.' : Math.round(inf.dist) + ' ม.') }, geometry: { type: 'LineString', coordinates: inf.ends.map(function (q) { return [q.lng, q.lat]; }) } });
+    }
+    if (prot.on) prot.lines.forEach(function (l) { add(l, PCOL[(l.b || 'c').toLowerCase()] || '#1a6ad6', l.a + '→' + l.b + (l.km ? ' (' + l.km + ' กม.)' : '')); });
+    prot.sights.forEach(function (l) { add(l, '#c8102e', '🧭 ' + l.label); });
+    map.getSource('plines').setData(fc);
+  }
+  // ลำดับชั้น: จุด/เส้นอยู่บนสุด หรืออยู่ใต้แผ่นวัดมุม/เข็มทิศ
+  function applyProtLayerOrder() {
+    if (!map) return;
+    var below = prot.under ? (map.getLayer('plate') ? 'plate' : map.getLayer('lens-card') ? 'lens-card' : null) : null;
+    ['az-line', 'plines', 'plines-lbl'].forEach(function (id) { if (!map.getLayer(id)) return; if (below) map.moveLayer(id, below); else map.moveLayer(id); });
+    var all = [prot.markA, prot.markB].concat(Object.keys(prot.exm).map(function (k) { return prot.exm[k]; }));
+    all.forEach(function (m) { if (m) { var el = m.getElement(); el.style.opacity = prot.under && (prot.placed || lens.placed) ? '0.35' : ''; el.style.zIndex = prot.under ? '0' : '3'; } });
+  }
+  function applyCardPos() {
+    var c = $('azcard'); if (!c) return;
+    if (prot.cardTop) { c.style.top = 'calc(env(safe-area-inset-top) + 10px)'; c.style.bottom = 'auto'; c.style.zIndex = '11'; }
+    else { c.style.top = ''; c.style.bottom = ''; c.style.zIndex = ''; }
+  }
+  // เส้นเล็งจากมุมมอง 3D (มุมจริง) → แปลงเป็นมุมกริดแล้ววาดบนแผนที่
+  window.TrailProtAddSight = function (lat, lng, trueAz, km, label) {
+    var p0 = { lat: lat, lng: lng }, gN = G.gridAzimuth(p0, { lat: lat + 0.01, lng: lng }).az;
+    if (gN > 180) gN -= 360;
+    prot.sights.push({ p0: p0, az: G.norm360(trueAz + gN), km: km || 5, label: label || '' });
+    refreshProt(); return prot.sights.length;
+  };
+  window.TrailProtClearSights = function () { prot.sights = []; refreshProt(); };
+
   function fmtDist(m) {
     return m >= 1000 ? (m / 1000).toFixed(2) + ' กม. (' + Math.round(m).toLocaleString() + ' ม.)' : Math.round(m) + ' ม.';
   }
@@ -780,6 +847,7 @@
       fc.features.push({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: [[prot.a.lng, prot.a.lat], [prot.b.lng, prot.b.lat]] } });
     }
     map.getSource('az').setData(fc);
+    drawProtLines();
 
     var r = protReadout();
     updatePlate();
@@ -790,6 +858,7 @@
     if (!$('navcard').hidden || !$('routecard').hidden) { card.hidden = true; return; }
     if (!prot.on) { card.hidden = true; return; }
     card.hidden = false;
+    applyCardPos();
     if (!r) {
       card.innerHTML = '<div>' + (prot.a ? 'แตะแผนที่เพื่อวางจุด B' : 'แตะแผนที่เพื่อวางจุด A') + '</div>' + lensLine() + plateButtons();
       bindPlateButtons();
@@ -801,7 +870,7 @@
     card.innerHTML =
       '<div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap"><span class="lbl">A→B</span><span class="big" style="font-size:18px"></span>' +
       '<span id="azDist" style="color:#333"></span><button id="azMini" class="btn alt" style="margin-left:auto;flex:none;padding:2px 10px;font-size:13px">' + (prot.mini ? '▴ ขยาย' : '▾ ย่อ') + '</button></div>' +
-      (prot.mini ? lensLine() : '<div style="font-size:12.5px;color:#444"><span id="azBack"></span> · <span id="azTrue"></span> · <span id="azMag"></span></div>' + lensLine() +
+      (prot.mini ? lensLine() : '<div style="font-size:12.5px;color:#444"><span id="azBack"></span> · <span id="azTrue"></span> · <span id="azMag"></span></div>' + linesBlock() + lensLine() +
         (prot.hide ? '<div class="btnrow" style="margin-top:4px"><button class="btn alt" id="azReveal" style="flex:none;padding:4px 10px;font-size:13px">' + (prot.revealed ? 'ซ่อนค่า' : 'เฉลย') + '</button></div>' : '') +
         plateButtons());
     bindPlateButtons();
@@ -815,6 +884,11 @@
     $('azMini').onclick = function () { prot.mini = !prot.mini; refreshProt(); };
     var rev = $('azReveal');
     if (rev) rev.onclick = function () { prot.revealed = !prot.revealed; refreshProt(); };
+  }
+  function linesBlock() {
+    if (!prot.lines.length) return '';
+    var hidden = prot.hide && !prot.revealed;
+    return '<div style="font-size:12.5px;color:#333;margin-top:2px">' + prot.lines.map(function (l) { var i = lineInfo(l); return i ? '<span style="color:' + (PCOL[(l.b || 'c').toLowerCase()] || '#1a6ad6') + ';font-weight:700">' + l.a + '→' + l.b + (l.km ? '⟶' : '') + '</span> ' + (hidden ? '???' : i.az.toFixed(1) + '°') + ' ' + (i.dist / 1000).toFixed(2) + ' กม.' : ''; }).join(' · ') + '</div>';
   }
   function lensLine() {
     if (!lens.placed) return '';
@@ -859,6 +933,7 @@
     $('toolProt').classList.toggle('on', on);
     if (prot.markA) prot.markA.getElement().style.display = on ? '' : 'none';
     if (prot.markB) prot.markB.getElement().style.display = on ? '' : 'none';
+    Object.keys(prot.exm).forEach(function (k) { prot.exm[k].getElement().style.display = on ? '' : 'none'; });
     if (!on && prot.handle) { prot.handle.remove(); prot.handle = null; }
     if (!on) { syncRotHandle(null); lensHandles(false); }
     if (on && pinMarker) { pinMarker.remove(); pinMarker = null; pinPos = null; updateCoord(); }
@@ -869,6 +944,7 @@
     if (prot.markA) prot.markA.remove();
     if (prot.markB) prot.markB.remove();
     prot.a = prot.b = prot.markA = prot.markB = null;
+    Object.keys(prot.exm).forEach(function (k) { prot.exm[k].remove(); }); prot.exm = {}; prot.ex = {}; prot.lines = [];
     prot.placed = false; prot.follow = true; prot.platePos = null; prot.locked = false; prot.rot = 0;
     prot.revealed = false;
     refreshProt();
@@ -1040,6 +1116,17 @@
     var h = '<div class="btnrow"><button class="btn" id="protToggle">' + (prot.on ? 'ปิดแผ่นวัดมุม' : 'เปิดแผ่นวัดมุม') + '</button>' +
       '<button class="btn alt" id="protClear">ล้างจุด</button></div>' +
       '<p class="note">วิธีใช้: แตะแผนที่วางจุด A แล้วแตะวางจุด B ลากหมุดเพื่อปรับ จากนั้นกด "📐 วางแผ่นวัดมุม" ในการ์ดด้านล่าง (ลาก ✥ เพื่อเลื่อนแผ่น กดล็อคเพื่อไม่ให้เลื่อน) แผ่นวัดมุมสี่เหลี่ยม 1:50,000 (5 กม. × 5 กม.) จะวางทับตามขนาดจริงของมาตราส่วน หันเหนือกริดเสมอ ซูมเข้าให้เห็นสเกลแล้วอ่านมุมที่เส้นประส้มตัดขอบแผ่น เทียบกับค่าที่แอพคำนวณ</p>' +
+      '<h4>จำนวนจุด และการแสดง</h4>' +
+      '<div class="field"><label for="protN">จำนวนจุด</label><select id="protN" style="flex:1;font-size:16px;padding:8px;border:1px solid #ccc;border-radius:8px;background:#fff">' + [2, 3, 4, 5, 6, 7, 8].map(function (n) { return '<option value="' + n + '"' + (prot.n === n ? ' selected' : '') + '>' + n + ' จุด (A–' + LETTERS[n - 1] + ')</option>'; }).join('') + '</select></div>' +
+      radio('player', 'top', 'จุดและเส้น อยู่บนสุด', 'เห็นชัด ทับแผ่นวัดมุม/เข็มทิศ', !prot.under) +
+      radio('player', 'under', 'จุดและเส้น อยู่ใต้แผ่นวัดมุม/เข็มทิศ', 'อ่านสเกลบนแผ่นได้ไม่ถูกบัง (หมุดจางลงขณะวางแผ่น)', prot.under) +
+      radio('pcard', 'bottom', 'การ์ดค่ามุม อยู่ด้านล่างจอ', '', !prot.cardTop) +
+      radio('pcard', 'top', 'การ์ดค่ามุม อยู่ด้านบนจอ', 'เมื่อแผ่นหรือเข็มทิศอยู่ครึ่งล่างของจอ', prot.cardTop) +
+      '<h4>ลากเส้นระหว่างจุด</h4>' +
+      '<div class="field" style="gap:6px"><select id="plA" style="flex:1;font-size:16px;padding:8px;border:1px solid #ccc;border-radius:8px;background:#fff">' + LETTERS.slice(0, prot.n).split('').map(function (L) { return '<option>' + L + '</option>'; }).join('') + '</select><span>→</span><select id="plB" style="flex:1;font-size:16px;padding:8px;border:1px solid #ccc;border-radius:8px;background:#fff">' + LETTERS.slice(0, prot.n).split('').map(function (L, i) { return '<option' + (i === 1 ? ' selected' : '') + '>' + L + '</option>'; }).join('') + '</select></div>' +
+      '<div class="field"><label for="plKm">แบบเส้น</label><select id="plKm" style="flex:1;font-size:16px;padding:8px;border:1px solid #ccc;border-radius:8px;background:#fff"><option value="0">จากจุดถึงจุด</option><option value="5">ลากเลยจุด ยาว 5 กม.</option><option value="10">ลากเลยจุด ยาว 10 กม.</option><option value="15">ลากเลยจุด ยาว 15 กม.</option><option value="20">ลากเลยจุด ยาว 20 กม.</option></select></div>' +
+      '<div class="btnrow"><button class="btn" id="plAdd">＋ เพิ่มเส้น</button><button class="btn alt" id="plClr">ลบเส้นทั้งหมด</button>' + (prot.sights.length ? '<button class="btn alt" id="plSClr">ลบเส้นเล็ง 3D (' + prot.sights.length + ')</button>' : '') + '</div>' +
+      '<div id="plList"></div>' +
       '<h4>จุดของแผ่นที่ตรงกับหมุด A</h4>' +
       radio('anchor', 'center', 'ศูนย์กลางแผ่น', 'วัดมุม A→B ด้วยสเกลองศา', prefs.anchor === 'center') +
       radio('anchor', 'romer', 'มุมสเกล 1000 ม. (จุดแดง)', 'อ่านพิกัดกริดด้วยสเกลโรเมอร์', prefs.anchor === 'romer') +
@@ -1059,6 +1146,38 @@
       closeSheet();
     };
     $('protClear').onclick = function () { clearProt(); };
+    $('protN').onchange = function () {
+      prot.n = +this.value;
+      LETTERS.slice(prot.n).toLowerCase().split('').forEach(function (k) { if (prot.exm[k]) { prot.exm[k].remove(); delete prot.exm[k]; delete prot.ex[k]; } });
+      prot.lines = prot.lines.filter(function (l) { return LETTERS.indexOf(l.a) < prot.n && LETTERS.indexOf(l.b) < prot.n; });
+      refreshProt(); renderProtSheet();
+      if (nextLetter() && prot.b) toast('แตะแผนที่วางจุด ' + nextLetter());
+    };
+    Array.prototype.forEach.call(document.querySelectorAll('input[name=player]'), function (el) { el.onchange = function () { prot.under = el.value === 'under'; applyProtLayerOrder(); }; });
+    Array.prototype.forEach.call(document.querySelectorAll('input[name=pcard]'), function (el) { el.onchange = function () { prot.cardTop = el.value === 'top'; applyCardPos(); }; });
+    function renderLineList() {
+      var box = $('plList'); if (!box) return;
+      box.innerHTML = '';
+      prot.lines.forEach(function (l, i) {
+        var inf = lineInfo(l), row = document.createElement('div');
+        row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:5px 0;border-top:1px solid #eee;font-size:14px';
+        row.innerHTML = '<span style="flex:1"><b style="color:' + (PCOL[l.b.toLowerCase()] || '#1a6ad6') + '">' + l.a + '→' + l.b + '</b> ' + (l.km ? 'ยืด ' + l.km + ' กม.' : '') + (inf ? ' · ' + (prot.hide && !prot.revealed ? '???' : inf.az.toFixed(1) + '° (' + Math.round(inf.az * 6400 / 360) + ' มิล)') + ' · ' + fmtDist(inf.dist) : ' · (ยังไม่ได้วางจุด)') + '</span>';
+        var del = document.createElement('button'); del.className = 'btn alt'; del.style.cssText = 'flex:none;padding:4px 10px;font-size:13px'; del.textContent = 'ลบ';
+        del.onclick = function () { prot.lines.splice(i, 1); refreshProt(); renderLineList(); };
+        row.appendChild(del); box.appendChild(row);
+      });
+    }
+    renderLineList();
+    $('plAdd').onclick = function () {
+      var a = $('plA').value, b = $('plB').value, km = +$('plKm').value;
+      if (a === b) { toast('เลือกจุดปลายคนละจุด'); return; }
+      prot.lines.push({ a: a, b: b, km: km });
+      if (!prot.on) setProtOn(true);
+      refreshProt(); renderLineList();
+      if (!ptOf(a) || !ptOf(b)) toast('เส้นจะขึ้นเมื่อวางจุด ' + a + ' และ ' + b + ' แล้ว');
+    };
+    $('plClr').onclick = function () { prot.lines = []; refreshProt(); renderLineList(); };
+    if ($('plSClr')) $('plSClr').onclick = function () { prot.sights = []; refreshProt(); renderProtSheet(); };
     Array.prototype.forEach.call(document.querySelectorAll('input[name=anchor]'), function (el) {
       el.onchange = function () { prefs.anchor = el.value; savePrefs(); updatePlate(); };
     });

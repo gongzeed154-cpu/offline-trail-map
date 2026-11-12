@@ -1,8 +1,8 @@
 // เข็มทิศเล็ง (แบบเลนเซติก) ผ่านกล้อง: ถือเครื่องตั้งขึ้น เล็งผ่านช่องเล็งและลวดเล็งไปที่เป้า อ่านหน้าปัดผ่านเลนส์
 // ทิศมาจากเข็มทิศของเครื่อง (TrailSensors.state.head = ทิศแม่เหล็กของแกนกล้องหลัง) · ใช้ได้ออฟไลน์
 (function (root) {
-  var ctx = null, ui = null, raf = 0, stream = null;
-  var st = { lock: null, target: null, practice: null, night: false, ref: 'mag', log: [] };
+  var ctx = null, ui = null, raf = 0, stream = null, emb = null; // emb = ฝังในมุมมอง 3D { getTrue, getPos, onClose }
+  var st = { km: 5, lock: null, target: null, practice: null, night: false, ref: 'mag', log: [] };
   var DIRS = ['เหนือ', 'เหนือค่อนตะวันออก', 'ตะวันออกเฉียงเหนือ', 'ตะวันออกค่อนเหนือ', 'ตะวันออก', 'ตะวันออกค่อนใต้', 'ตะวันออกเฉียงใต้', 'ใต้ค่อนตะวันออก', 'ใต้', 'ใต้ค่อนตะวันตก', 'ตะวันตกเฉียงใต้', 'ตะวันตกค่อนใต้', 'ตะวันตก', 'ตะวันตกค่อนเหนือ', 'ตะวันตกเฉียงเหนือ', 'เหนือค่อนตะวันตก'];
 
   function $(id) { return document.getElementById(id); }
@@ -11,6 +11,7 @@
   function decl() { return ctx && ctx.getDecl ? +ctx.getDecl() || 0 : 0; }
   // มุมที่แสดง: แม่เหล็ก (ตรงกับเข็มทิศจริง) หรือเหนือจริง
   function reading() {
+    if (emb) { var t = emb.getTrue(); if (t === null || isNaN(t)) return null; return st.ref === 'true' ? n360(t) : n360(t - decl()); }
     var S = root.TrailSensors && TrailSensors.state;
     if (!S || S.head === null) return null;
     var off = S.offset ? +S.offset() || 0 : 0, mag = n360(S.head + off);
@@ -91,7 +92,7 @@
     var live = reading(), v = st.lock !== null ? st.lock : live;
     drawLens(v);
     var S = root.TrailSensors && TrailSensors.state;
-    $('sgStat').innerHTML = '<span style="color:' + (live === null ? '#ffb300' : '#7CFC00') + '">●</span> ' + (live === null ? 'แตะ "เริ่มเซนเซอร์"' : 'เซนเซอร์พร้อม' + (S && S.headAcc ? ' ±' + Math.round(S.headAcc) + '°' : ''));
+    if ($('sgStat')) $('sgStat').innerHTML = '<span style="color:' + (live === null ? '#ffb300' : '#7CFC00') + '">●</span> ' + (live === null ? 'แตะ "เริ่มเซนเซอร์"' : 'เซนเซอร์พร้อม' + (S && S.headAcc ? ' ±' + Math.round(S.headAcc) + '°' : ''));
     var hide = st.practice && !st.practice.shown;
     $('sgDeg').textContent = v === null ? '—' : hide ? '???' : Math.round(v) + '°';
     $('sgMil').textContent = v === null || hide ? '' : Math.round(v * 6400 / 360) + ' มิล';
@@ -135,14 +136,14 @@
   }
   function record() {
     var r = st.lock !== null ? st.lock : reading(); if (r === null) { ctx.toast('ยังไม่มีค่าเข็มทิศ'); return; }
-    var f = root.TrailSensors && TrailSensors.state.fix, t = new Date();
+    var f = emb ? emb.getPos() : root.TrailSensors && TrailSensors.state.fix, t = new Date();
     st.log.unshift({ az: r, t: t, lat: f && f.lat, lng: f && f.lng });
     ctx.toast('บันทึก ' + Math.round(r) + '° (' + Math.round(r * 6400 / 360) + ' มิล) เวลา ' + t.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
-    if (f && f.lat && window.TrailProtAddSight) { var trueAz = st.ref === 'true' ? r : n360(r + decl()); window.TrailProtAddSight(f.lat, f.lng, trueAz, 5, Math.round(r) + '°'); }
+    if (f && f.lat && window.TrailProtAddSight) { var trueAz = st.ref === 'true' ? r : n360(r + decl()); window.TrailProtAddSight(f.lat, f.lng, trueAz, st.km || 5, Math.round(r) + '°'); }
     renderLog();
   }
   function renderLog() {
-    var b = $('sgLog'); if (!b) return;
+    var b = $('sgLog'); if (!b || !$('sgSet')) return;
     b.innerHTML = st.log.slice(0, 6).map(function (x) { return '<div>' + x.t.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' · <b>' + Math.round(x.az) + '°</b> ' + Math.round(x.az * 6400 / 360) + ' มิล</div>'; }).join('');
     b.style.display = st.log.length && $('sgSet').dataset.open ? '' : 'none';
   }
@@ -154,8 +155,10 @@
   }
 
   // ---------- เปิด/ปิด ----------
-  function open() {
+  function open(opts) {
     if (ui) return;
+    emb = opts && opts.embedded ? opts : null;
+    if (emb) return openEmbedded();
     ui = document.createElement('div'); ui.id = 'sightUi';
     ui.style.cssText = 'position:fixed;inset:0;z-index:60;background:#111;color:#fff;overflow:hidden;font-family:inherit';
     var B = 'border:1.5px solid rgba(255,255,255,.35);background:rgba(0,0,0,.45);color:#fff;border-radius:16px;padding:12px 6px;font-size:16px;font-weight:700;flex:1';
@@ -198,11 +201,37 @@
     if (root.TrailSensors && TrailSensors.isStarted()) startAll(); else { $('sgStart').style.display = ''; $('sgStart').onclick = startAll; }
     loop();
   }
+  // ฝังในมุมมอง 3D: โปร่ง ลากจอหมุนได้ เข็มทิศอยู่ครึ่งล่าง ลวดเล็งตรงกลางจอ
+  function openEmbedded() {
+    ui = document.createElement('div'); ui.id = 'sightUi';
+    ui.style.cssText = 'position:fixed;inset:0;z-index:8;color:#fff;pointer-events:none;font-family:inherit';
+    var B = 'pointer-events:auto;border:1.5px solid rgba(255,255,255,.4);background:rgba(0,0,0,.5);color:#fff;border-radius:14px;padding:8px 4px;font-size:14px;font-weight:700;flex:1';
+    ui.innerHTML =
+      '<div style="position:absolute;left:50%;top:0;bottom:0;width:0;border-left:1.5px solid #e53935;box-shadow:0 0 0 .5px rgba(255,255,255,.6)"></div>' +
+      '<div id="sgBody" style="position:absolute;left:50%;height:46vh;bottom:calc(env(safe-area-inset-bottom) + 150px);aspect-ratio:300/560;transform:translateX(-50%);opacity:.97">' + bodySvg() +
+      '<canvas id="sgLens" width="480" height="480" style="position:absolute;left:50%;top:' + (415 / 560 * 100) + '%;width:' + (156 / 300 * 100) + '%;transform:translate(-50%,-50%);border-radius:50%"></canvas></div>' +
+      '<div style="position:absolute;left:0;right:0;bottom:0;background:linear-gradient(transparent,rgba(0,0,0,.8) 30%);padding:12px 12px calc(env(safe-area-inset-bottom) + 8px)">' +
+      '<div style="max-width:560px;margin:0 auto"><div id="sgInfo" style="color:#ffd54f;font-size:13px;min-height:16px"></div>' +
+      '<div style="display:flex;align-items:flex-end;justify-content:space-between;gap:8px"><div><span style="color:#bbb;font-size:13px">ทิศที่เล็ง</span> <span id="sgDeg" style="font-size:38px;font-weight:800;color:#b9f26b;line-height:1"></span></div>' +
+      '<div style="text-align:right"><span id="sgMil" style="font-size:20px;font-weight:700"></span> <span id="sgDir" style="color:#bbb;font-size:13px"></span></div></div>' +
+      '<div style="display:flex;gap:6px;margin-top:8px"><button id="sgLock" style="' + B + ';background:#b9f26b;color:#111;border-color:#b9f26b">ล็อคทิศ</button><button id="sgTgt" style="' + B + '">เป้าหมาย</button><button id="sgPrac" style="' + B + '">ฝึก</button><button id="sgRec" style="' + B + '">📌 บันทึก</button></div>' +
+      '<div style="display:flex;gap:6px;margin-top:6px"><button id="sgRefB" style="' + B + '"></button><select id="sgKm" style="pointer-events:auto;flex:1;border-radius:14px;font-size:13px;padding:6px"><option value="5">เส้นเล็ง 5 กม.</option><option value="10">10 กม.</option><option value="15">15 กม.</option><option value="20">20 กม.</option></select><button id="sgClr" style="' + B + '">ลบเส้นเล็ง</button></div></div></div>' +
+      '<div id="sgStat" style="display:none"></div>';
+    document.body.appendChild(ui);
+    $('sgLock').onclick = lock; $('sgTgt').onclick = target; $('sgPrac').onclick = practice; $('sgRec').onclick = record;
+    function refB() { $('sgRefB').textContent = st.ref === 'mag' ? 'อ่าน: แม่เหล็ก' : 'อ่าน: เหนือจริง'; }
+    $('sgRefB').onclick = function () { st.ref = st.ref === 'mag' ? 'true' : 'mag'; refB(); }; refB();
+    $('sgKm').value = String(st.km); $('sgKm').onchange = function () { st.km = +this.value; };
+    $('sgClr').onclick = function () { if (window.TrailProtClearSights) window.TrailProtClearSights(); ctx.toast('ลบเส้นเล็งแล้ว'); };
+    loop();
+  }
   function close() {
+    var e = emb; emb = null;
     cancelAnimationFrame(raf);
     if (stream) { stream.getTracks().forEach(function (t) { t.stop(); }); stream = null; }
     if (ui) { ui.remove(); ui = null; }
     st.practice = null;
+    if (e && e.onClose) e.onClose();
   }
 
   root.TrailSight = { init: init, open: open, close: close, _st: st, _draw: drawLens };

@@ -327,7 +327,7 @@
   }
 
   // เวอร์ชันของแอพ: แก้ที่นี่ที่เดียวทุกครั้งที่ปล่อยเวอร์ชันใหม่ (ชื่อแคชของ service worker ใช้ค่านี้ด้วย)
-  var APP_VERSION = 'v40';
+  var APP_VERSION = 'v41';
   var APP_DATE = '2026-11-09';
 
   root.TrailCommon = {

@@ -260,6 +260,7 @@
     TrailTerrain.init({ map: function () { return map; }, toast: toast });
     TrailSpots.init({ map: function () { return map; } });
     TrailSearch.init({ map: function () { return map; }, toast: toast, closeSheet: closeSheet });
+    TrailSight.init({ toast: toast, getDecl: function () { return prefs.decl || 0; } });
     TrailView3D.init({
       map: function () { return map; }, toast: toast, closeSheet: closeSheet,
       showSheet: function (k) { if (sheetKind !== k) openSheet(k); else TrailView3D.renderSheet($('sheetBody')); },
@@ -1539,6 +1540,7 @@
     $('toolLayers').onclick = function () { openSheet('layers'); };
     $('toolGrid').onclick = function () { openSheet('grid'); };
     $('toolProt').onclick = function () { openSheet('prot'); };
+    $('toolSight').onclick = function () { closeSheet(); TrailSight.open(); };
     $('toolStruct').onclick = function () { TrailStruct.resetEdit(); openSheet('struct'); };
     $('toolSpecial').onclick = function () { openSheet('special'); };
     $('toolRoute').onclick = function () { openSheet('route'); };

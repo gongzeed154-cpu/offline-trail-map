@@ -46,6 +46,8 @@
       // ขาเลนส์สีดำ (ครอบเลนส์อ่านหน้าปัด) มีร่องกลางให้มองลวดเล็ง
       '<path d="M18 330 q0-58 70-58 h48 v32 q0 14 14 14 q14 0 14-14 v-32 h48 q70 0 70 58 v100 q0 70-70 70 h-124 q-70 0-70-70 z" fill="url(#sgBlk)" stroke="#000" stroke-width="2"/>' +
       '<path d="M50 300 q20-14 60-14" stroke="rgba(255,255,255,.25)" stroke-width="6" fill="none" stroke-linecap="round"/>' +
+      // ศูนย์หลัง: แผ่นดำยกขึ้นจากขาเลนส์ มีร่องเล็งแคบ ก้นร่องอยู่กึ่งกลางช่องเล็งหน้า ตรงแนวลวดเล็ง
+      '<path fill-rule="evenodd" d="M126 300 v-96 q0-10 10-10 h28 q10 0 10 10 v96 z M146 196 h8 v62 q0 6 -4 6 q-4 0 -4 -6 z" fill="url(#sgBlk)" stroke="#000" stroke-width="1.5"/>' +
       '<circle cx="150" cy="415" r="84" fill="#111" stroke="#2b2b2b" stroke-width="6"/>' +
       '</svg>';
   }
@@ -99,6 +101,7 @@
     var hide = st.practice && !st.practice.shown;
     $('sgDeg').textContent = v === null ? '—' : hide ? '???' : Math.round(v) + '°';
     $('sgMil').textContent = v === null || hide ? '' : Math.round(v * 6400 / 360) + ' มิล';
+    if ($('sgEl')) { var el = emb && emb.getPitch ? emb.getPitch() : null; $('sgEl').textContent = el === null || el === undefined || hide ? '' : 'มุมเงย ' + (el >= 0 ? '+' : '−') + Math.abs(el).toFixed(1) + '° (' + (el >= 0 ? '+' : '−') + Math.round(Math.abs(el) * 6400 / 360) + ' มิล)'; }
     $('sgDir').textContent = v === null || hide ? '' : dirName(v) + (st.lock !== null ? ' · ล็อคอยู่' : '');
     var info = '';
     if (st.target !== null && v !== null) {
@@ -141,7 +144,8 @@
     var r = st.lock !== null ? st.lock : reading(); if (r === null) { ctx.toast('ยังไม่มีค่าเข็มทิศ'); return; }
     var f = emb ? emb.getPos() : root.TrailSensors && TrailSensors.state.fix, t = new Date();
     st.log.unshift({ az: r, t: t, lat: f && f.lat, lng: f && f.lng });
-    ctx.toast('บันทึก ' + Math.round(r) + '° (' + Math.round(r * 6400 / 360) + ' มิล) เวลา ' + t.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+    var elv = emb && emb.getPitch ? emb.getPitch() : null;
+    ctx.toast('บันทึก ' + Math.round(r) + '° (' + Math.round(r * 6400 / 360) + ' มิล)' + (elv !== null && elv !== undefined ? ' มุมเงย ' + elv.toFixed(1) + '°' : '') + ' เวลา ' + t.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
     if (f && f.lat && window.TrailProtAddSight) { var trueAz = st.ref === 'true' ? r : n360(r + decl()); window.TrailProtAddSight(f.lat, f.lng, trueAz, st.km || 5, Math.round(r) + '°'); }
     renderLog();
   }
@@ -216,7 +220,7 @@
       '<div style="position:absolute;left:0;right:0;bottom:0;background:rgba(12,12,12,.94);padding:10px 12px calc(env(safe-area-inset-bottom) + 8px);pointer-events:auto">' +
       '<div style="max-width:560px;margin:0 auto"><div id="sgInfo" style="color:#ffd54f;font-size:13px;min-height:16px"></div>' +
       '<div style="display:flex;align-items:flex-end;justify-content:space-between;gap:8px"><div><span style="color:#bbb;font-size:13px">ทิศที่เล็ง</span> <span id="sgDeg" style="font-size:38px;font-weight:800;color:#b9f26b;line-height:1"></span></div>' +
-      '<div style="text-align:right"><span id="sgMil" style="font-size:20px;font-weight:700"></span> <span id="sgDir" style="color:#bbb;font-size:13px"></span></div></div>' +
+      '<div style="text-align:right"><span id="sgMil" style="font-size:20px;font-weight:700"></span> <span id="sgEl" style="color:#9fd3ff;font-size:13px"></span> <span id="sgDir" style="color:#bbb;font-size:13px"></span></div></div>' +
       '<div style="display:flex;gap:6px;margin-top:8px"><button id="sgLock" style="' + B + ';background:#b9f26b;color:#111;border-color:#b9f26b">ล็อคทิศ</button><button id="sgTgt" style="' + B + '">เป้าหมาย</button><button id="sgPrac" style="' + B + '">ฝึก</button><button id="sgRec" style="' + B + '">📌 บันทึก</button></div>' +
       '<div style="display:flex;gap:6px;margin-top:6px"><button id="sgRefB" style="' + B + '"></button><select id="sgKm" style="pointer-events:auto;flex:1;border-radius:14px;font-size:13px;padding:6px"><option value="5">เส้นเล็ง 5 กม.</option><option value="10">10 กม.</option><option value="15">15 กม.</option><option value="20">20 กม.</option></select><button id="sgClr" style="' + B + '">ลบเส้นเล็ง</button></div></div></div>' +
       '<div id="sgStat" style="display:none"></div>';

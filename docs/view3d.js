@@ -175,7 +175,7 @@
     sight.on = on;
     if (!root.TrailSight) return;
     if (!on) { TrailSight.close(); if ($('v3Sight')) $('v3Sight').style.background = ''; return; }
-    TrailSight.open({ embedded: true, getTrue: curBearing, getPos: curPos, onClose: function () { sight.on = false; if ($('v3Sight')) $('v3Sight').style.background = ''; } });
+    TrailSight.open({ embedded: true, getTrue: curBearing, getPos: curPos, getPitch: function () { return st.mode === 'ground' ? st.look : null; }, onClose: function () { sight.on = false; if ($('v3Sight')) $('v3Sight').style.background = ''; } });
     if ($('v3Sight')) $('v3Sight').style.background = '#ffd54f';
   }
   function drawSight() { /* วาดโดย TrailSight ทุกเฟรม */ }

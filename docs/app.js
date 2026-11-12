@@ -1540,7 +1540,6 @@
     $('toolLayers').onclick = function () { openSheet('layers'); };
     $('toolGrid').onclick = function () { openSheet('grid'); };
     $('toolProt').onclick = function () { openSheet('prot'); };
-    $('toolSight').onclick = function () { closeSheet(); TrailSight.open(); };
     $('toolStruct').onclick = function () { TrailStruct.resetEdit(); openSheet('struct'); };
     $('toolSpecial').onclick = function () { openSheet('special'); };
     $('toolRoute').onclick = function () { openSheet('route'); };

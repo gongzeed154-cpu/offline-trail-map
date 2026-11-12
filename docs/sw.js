@@ -17,6 +17,7 @@ var SHELL_FILES = [
   './nav.js',
   './sensors.js',
   './cam.js',
+  './sight.js',
   './stars.js',
   './sound.js',
   './wind.js',

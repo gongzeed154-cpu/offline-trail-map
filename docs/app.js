@@ -36,6 +36,7 @@
     coordDigits: 5, // จำนวนหลักพิกัด MGRS กลางจอ/หมุด
     utmStep: 'auto', // ระยะตาราง UTM/MGRS (เมตร) 10000=1 หลัก 1000=2 หลัก 100=3 หลัก 10=4 หลัก
     fmt: 'dms', // mgrs | utm | dms | dm | dd
+    pmSize: 30, // ขนาดหมุดจุด A–H (พิกเซล)
     anchor: 'center', // จุดของแผ่นวัดมุมที่ตรงกับหมุด A: center | romer | sixty
     camOffset: 0, // ค่าปรับแก้ทิศของกล้องเล็ง (องศา)
     orient: 'north', // north = ล็อกทิศเหนือ, free = หมุนตามทิศที่เดิน
@@ -924,7 +925,7 @@
     card.hidden = false;
     applyCardPos();
     if (!r) {
-      card.innerHTML = '<div>' + (prot.a ? 'แตะแผนที่เพื่อวางจุด B' : 'แตะแผนที่เพื่อวางจุด A') + '</div>' + lensLine() + plateButtons();
+      card.innerHTML = '<div>' + (prot.a ? 'แตะแผนที่เพื่อวางจุด B' : 'แตะแผนที่เพื่อวางจุด A หรือวางแผ่น/เข็มทิศได้เลย') + '</div>' + lensLine() + plateButtons();
       bindPlateButtons();
       return;
     }
@@ -962,7 +963,7 @@
 
   function plateButtons() {
     var st = 'flex:none;padding:4px 9px;font-size:12.5px';
-    return '<div class="btnrow" style="margin-top:4px;flex-wrap:wrap;gap:5px">' + lensSection(st) + (prot.a ? plateSection(st) : '') + '</div>';
+    return '<div class="btnrow" style="margin-top:4px;flex-wrap:wrap;gap:5px">' + lensSection(st) + plateSection(st) + '</div>';
   }
   function lensSection(st) {
     if (!lens.placed) return '<button class="btn alt" id="lnPlace" style="' + st + '">🧭 วางเข็มทิศ</button>';
@@ -975,12 +976,12 @@
     if (!prot.placed) return '<button class="btn alt" id="plPlace" style="' + st + '">📐 วางแผ่น</button>';
     return '<button class="btn' + (prot.locked ? '' : ' alt') + '" id="plLock" style="' + st + '">' + (prot.locked ? '🔒 ปลดล็อค📐' : '🔓 ล็อค📐') + '</button>' +
       (prot.rot ? '<button class="btn alt" id="plNorth" style="' + st + '">📐↑เหนือ</button>' : '') +
-      (prot.follow ? '' : '<button class="btn alt" id="plBack" style="' + st + '">📐→A</button>') +
+      (prot.follow || !prot.a ? '' : '<button class="btn alt" id="plBack" style="' + st + '">📐→A</button>') +
       '<button class="btn alt" id="plRemove" style="' + st + '">เก็บ📐</button>';
   }
   function bindPlateButtons() {
     var b;
-    if ((b = $('plPlace'))) b.onclick = function () { prot.placed = true; prot.follow = true; prot.locked = false; refreshProt(); toast('ลาก ✥ เลื่อนแผ่น · ลาก ⟳ (มุมขวาบน) หมุน · 📐🔒 ล็อค'); };
+    if ((b = $('plPlace'))) b.onclick = function () { prot.placed = true; prot.locked = false; prot.follow = !!prot.a; if (!prot.a) { var mc = map.getCenter(); prot.platePos = { lat: mc.lat, lng: mc.lng }; } refreshProt(); toast('ลาก ✥ เลื่อนแผ่น · ลาก ⟳ (มุมขวาบน) หมุน · 📐🔒 ล็อค'); };
     if ((b = $('plLock'))) b.onclick = function () { prot.locked = !prot.locked; if (prot.locked && prot.follow && prot.a) { prot.follow = false; prot.platePos = { lat: prot.a.lat, lng: prot.a.lng }; } refreshProt(); toast(prot.locked ? 'ล็อคแผ่นวัดมุมแล้ว เลื่อนไม่ได้จนกว่าจะปลดล็อค' : 'ปลดล็อคแล้ว ลาก ✥ เพื่อเลื่อนแผ่น'); };
     if ((b = $('plBack'))) b.onclick = function () { prot.follow = true; refreshProt(); };
     if ((b = $('plRemove'))) b.onclick = function () { prot.placed = false; refreshProt(); };
@@ -991,6 +992,12 @@
     if ((b = $('lnToA'))) b.onclick = function () { lens.c = { lat: prot.a.lat, lng: prot.a.lng }; refreshProt(); };
     if ((b = $('lnRemove'))) b.onclick = function () { lens.placed = false; refreshProt(); };
   }
+
+  function applyPmSize() {
+    var v = Math.max(14, Math.min(60, +prefs.pmSize || 30));
+    document.documentElement.style.setProperty('--pm', v + 'px');
+  }
+  applyPmSize();
 
   function setProtOn(on) {
     prot.on = on;
@@ -1192,9 +1199,10 @@
   function renderProtSheet() {
     var h = '<div class="btnrow"><button class="btn" id="protToggle">' + (prot.on ? 'ปิดแผ่นวัดมุม' : 'เปิดแผ่นวัดมุม') + '</button>' +
       '<button class="btn alt" id="protClear">ล้างจุด</button></div>' +
-      '<p class="note">วิธีใช้: แตะแผนที่วางจุด A แล้วแตะวางจุด B ลากหมุดเพื่อปรับ จากนั้นกด "📐 วางแผ่นวัดมุม" ในการ์ดด้านล่าง (ลาก ✥ เพื่อเลื่อนแผ่น กดล็อคเพื่อไม่ให้เลื่อน) แผ่นวัดมุมสี่เหลี่ยม 1:50,000 (5 กม. × 5 กม.) จะวางทับตามขนาดจริงของมาตราส่วน หันเหนือกริดเสมอ ซูมเข้าให้เห็นสเกลแล้วอ่านมุมที่เส้นประส้มตัดขอบแผ่น เทียบกับค่าที่แอพคำนวณ</p>' +
+      '<p class="note">วิธีใช้: กด "📐 วางแผ่น" หรือ "🧭 วางเข็มทิศ" ในการ์ดด้านล่างได้ทันที (วางกลางจอ ไม่ต้องวางจุดก่อน) หรือแตะแผนที่วางจุด A แล้วแตะวางจุด B ลากหมุดเพื่อปรับ (ลาก ✥ เพื่อเลื่อนแผ่น กดล็อคเพื่อไม่ให้เลื่อน) แผ่นวัดมุมสี่เหลี่ยม 1:50,000 (5 กม. × 5 กม.) จะวางทับตามขนาดจริงของมาตราส่วน หันเหนือกริดเสมอ ซูมเข้าให้เห็นสเกลแล้วอ่านมุมที่เส้นประส้มตัดขอบแผ่น เทียบกับค่าที่แอพคำนวณ</p>' +
       '<h4>จำนวนจุด และการแสดง</h4>' +
       '<div class="field"><label for="protN">จำนวนจุด</label><select id="protN" style="flex:1;font-size:16px;padding:8px;border:1px solid #ccc;border-radius:8px;background:#fff">' + [2, 3, 4, 5, 6, 7, 8].map(function (n) { return '<option value="' + n + '"' + (prot.n === n ? ' selected' : '') + '>' + n + ' จุด (A–' + LETTERS[n - 1] + ')</option>'; }).join('') + '</select></div>' +
+      '<div class="field"><label for="pmSize">ขนาดจุด A B C…</label><input type="range" id="pmSize" min="14" max="60" step="2" value="' + (prefs.pmSize || 30) + '" style="flex:1"><span id="pmSizeV" style="min-width:48px;text-align:right">' + (prefs.pmSize || 30) + ' px</span></div>' +
       radio('player', 'top', 'จุดและเส้น อยู่บนสุด', 'เห็นชัด ทับแผ่นวัดมุม/เข็มทิศ', !prot.under) +
       radio('player', 'under', 'จุดและเส้น อยู่ใต้แผ่นวัดมุม/เข็มทิศ', 'อ่านสเกลบนแผ่นได้ไม่ถูกบัง (หมุดจางลงขณะวางแผ่น)', prot.under) +
       radio('pcard', 'bottom', 'การ์ดค่ามุม อยู่ด้านล่างจอ', '', !prot.cardTop) +
@@ -1230,6 +1238,7 @@
       refreshProt(); renderProtSheet();
       if (nextLetter() && prot.b) toast('แตะแผนที่วางจุด ' + nextLetter());
     };
+    $('pmSize').oninput = function () { prefs.pmSize = +this.value; $('pmSizeV').textContent = this.value + ' px'; applyPmSize(); savePrefs(); };
     Array.prototype.forEach.call(document.querySelectorAll('input[name=player]'), function (el) { el.onchange = function () { prot.under = el.value === 'under'; applyProtLayerOrder(); }; });
     Array.prototype.forEach.call(document.querySelectorAll('input[name=pcard]'), function (el) { el.onchange = function () { prot.cardTop = el.value === 'top'; applyCardPos(); }; });
     function renderLineList() {

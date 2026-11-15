@@ -18,7 +18,7 @@
     cv.width = cv.height = size;
     var c = cv.getContext('2d');
     var s = size / (2 * H); // พิกเซลต่อเมตร
-    var k = s / 0.16; // ตัวคูณความหนาเส้น
+    var k = s / 0.16 * 1.7; // ตัวคูณความหนาเส้น (หนาขึ้นให้เห็นชัดบนแผนที่)
     var MONO = 'ui-monospace, Menlo, monospace';
     var SANS = '-apple-system, "Sarabun", "Noto Sans Thai", sans-serif';
 
@@ -36,26 +36,30 @@
       c.save();
       c.translate(X(dx), Y(dy));
       if (o.rot) c.rotate(o.rot);
-      c.font = (o.w || '600') + ' ' + (sz * s).toFixed(1) + 'px ' + (o.f || SANS);
+      c.font = (o.w === '700' ? '800' : '700') + ' ' + (sz * s).toFixed(1) + 'px ' + (o.f || SANS);
       c.textAlign = o.al || 'center';
       c.textBaseline = 'middle';
-      c.fillStyle = '#0d0d0d';
+      c.lineJoin = 'round';
+      c.lineWidth = Math.max(2, sz * s * 0.16);
+      c.strokeStyle = 'rgba(255,255,255,0.9)';
+      c.strokeText(t, 0, 0); // ขอบขาวให้ตัวอักษรอ่านชัดบนแผนที่
+      c.fillStyle = '#000';
       c.fillText(t, 0, 0);
       c.restore();
     }
     function dot(x, y, color) {
       c.fillStyle = color;
       c.beginPath();
-      c.arc(X(x), Y(y), 2.5 * k, 0, 7);
+      c.arc(X(x), Y(y), 2 * k, 0, 7);
       c.fill();
     }
 
-    c.fillStyle = 'rgba(255,255,255,0.40)';
+    c.fillStyle = 'rgba(255,255,255,0.50)';
     c.fillRect(0, 0, size, size);
-    c.strokeStyle = 'rgba(0,0,0,0.85)';
+    c.strokeStyle = '#000';
     c.lineWidth = 1.3 * k;
     c.strokeRect(0, 0, size, size);
-    c.strokeStyle = '#0d0d0d';
+    c.strokeStyle = '#000';
 
     // สเกลองศารอบขอบ (ทุก 1°, ตัวเลขทุก 5°)
     for (var d = 0; d < 360; d++) {

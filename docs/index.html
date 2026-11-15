@@ -101,6 +101,11 @@
   .seg button { flex: 1; border: 1px solid #2e6b3f; background: #fff; color: #2e6b3f; border-radius: 10px; padding: 8px 4px; font-size: 14px; }
   .seg button[aria-pressed=true] { background: #2e6b3f; color: #fff; }
   .wpmark { width: 26px; height: 26px; border-radius: 50%; background: #0a84ff; border: 2px solid #fff; color: #fff; font-weight: 700; font-size: 13px; display: flex; align-items: center; justify-content: center; box-shadow: 0 1px 4px rgba(0,0,0,.5); touch-action: none; }
+  /* โหมดแผนที่เต็มจอ: ซ่อนเครื่องมือ แถบ ปุ่ม และการ์ดทั้งหมด เหลือปุ่ม ☰ มุมขวาล่างไว้เปิดกลับ */
+  body.clean #top, body.clean #tools, body.clean #bottom, body.clean #statusbar, body.clean #cross, body.clean #azcard, body.clean #routecard, body.clean #navcard,
+  body.clean .maplibregl-ctrl-bottom-right, body.clean .maplibregl-ctrl-bottom-left, body.clean .maplibregl-ctrl-top-right, body.clean .maplibregl-ctrl-top-left, body.clean #v3dHud { display: none !important; }
+  #cleanOff { display: none; position: fixed; right: 12px; bottom: calc(env(safe-area-inset-bottom) + 12px); z-index: 40; width: 46px; height: 46px; border-radius: 50%; border: 0; background: rgba(0,0,0,.45); color: #fff; font-size: 22px; box-shadow: 0 1px 6px rgba(0,0,0,.4); }
+  body.clean #cleanOff { display: block; }
   #statusbar { position: fixed; left: 0; right: 0; bottom: 0; background: rgba(255,255,255,.96); padding: 6px 12px calc(env(safe-area-inset-bottom) + 6px); font-size: 12px; line-height: 1.4; z-index: 6; box-shadow: 0 -1px 6px rgba(0,0,0,.2); font-variant-numeric: tabular-nums; }
   #statusbar .sb1 { color: #333; }
   #statusbar .sb2 { font-weight: 600; }
@@ -188,6 +193,7 @@
   <button id="dispBtn" class="rb" aria-label="โหมดหน้าจอ">☀</button>
   <button id="muteBtn" class="rb" aria-label="เสียง">🔊</button>
   <button id="lockBtn" class="rb" aria-label="ล็อคหมุดและสัญลักษณ์">🔒</button>
+  <button id="cleanBtn" class="rb" aria-label="ซ่อนเครื่องมือทั้งหมด" title="ซ่อนเครื่องมือและแถบทั้งหมด">⛶</button>
 </div>
 
 <div id="panel" hidden>
@@ -199,6 +205,7 @@
 <div id="statusbar"><div class="sb1" id="sb1">GPS: แตะปุ่มตำแหน่ง (◎) เพื่อเริ่ม</div><div class="sb2" id="sb2"></div><div class="sb3" id="sbVer"></div></div>
 
 <div id="toast" hidden></div>
+<button id="cleanOff" aria-label="แสดงเครื่องมือ">☰</button>
 
 <div id="fatal" hidden>
   <h2>เปิดแผนที่ไม่ได้</h2>

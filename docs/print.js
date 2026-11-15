@@ -8,7 +8,7 @@
   var FONT = '"Sarabun","Noto Sans Thai",-apple-system,sans-serif';
   var BARS = [[100, 25], [200, 50], [500, 100], [1000, 250], [2000, 500], [2500, 500], [4000, 1000], [5000, 1000], [8000, 2000], [10000, 2000], [20000, 5000], [25000, 5000], [40000, 10000], [50000, 10000]];
 
-  var cfg = { title: 'แบบฝึกอ่านพิกัดกริด', paper: 'A4', land: false, scale: 50000, grid: 'auto', style: 'lines', center: '', cfmt: 'mgrs', base: 'none', fade: 55, sym: true, routes: true, dpi: 150, cw: 210, ch: 297, scaleCustom: 0, foot: {}, syn: null, color: 'color' };
+  var cfg = { title: 'แบบฝึกอ่านพิกัดกริด', paper: 'A4', land: false, scale: 50000, grid: 'auto', style: 'lines', center: '', cfmt: 'mgrs', base: 'none', fade: 55, sym: true, routes: true, dpi: 150, cw: 210, ch: 297, scaleCustom: 0, foot: {}, syn: null, color: 'color', gridColor: '', labelColor: '', marks: [], marksName: true };
   var ctx = null;
   var last = null;
   var busy = false;
@@ -17,6 +17,64 @@
   function init(c) {
     ctx = c;
     try { var s = JSON.parse(localStorage.getItem(KEY) || '{}'); for (var k in cfg) if (s[k] !== undefined) cfg[k] = s[k]; } catch (e) { /* ค่าเริ่มต้น */ }
+  }
+  var MARK_SHAPES = [['circle', '● วงกลม'], ['square', '■ สี่เหลี่ยม'], ['triangle', '▲ สามเหลี่ยม'], ['diamond', '◆ ข้าวหลามตัด'], ['star', '★ ดาว'], ['cross', '✕ กากบาท'], ['plus', '✚ บวก'], ['flag', '⚑ ธง'], ['target', '◎ เป้า']];
+  function drawMark(c, shape, x, y, r, col, lw) {
+    c.save(); c.lineJoin = 'round'; c.lineCap = 'round'; c.fillStyle = col; c.strokeStyle = '#fff'; c.lineWidth = lw * 2;
+    c.beginPath();
+    if (shape === 'square') c.rect(x - r * 0.85, y - r * 0.85, r * 1.7, r * 1.7);
+    else if (shape === 'triangle') { c.moveTo(x, y - r); c.lineTo(x + r * 0.95, y + r * 0.75); c.lineTo(x - r * 0.95, y + r * 0.75); c.closePath(); }
+    else if (shape === 'diamond') { c.moveTo(x, y - r); c.lineTo(x + r, y); c.lineTo(x, y + r); c.lineTo(x - r, y); c.closePath(); }
+    else if (shape === 'star') { for (var k = 0; k < 10; k++) { var a = -Math.PI / 2 + k * Math.PI / 5, rr = k % 2 ? r * 0.45 : r; if (k) c.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr); else c.moveTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr); } c.closePath(); }
+    else if (shape === 'flag') { c.moveTo(x - r * 0.5, y - r); c.lineTo(x + r, y - r * 0.55); c.lineTo(x - r * 0.5, y - r * 0.1); c.closePath(); c.stroke(); c.fill(); c.beginPath(); c.moveTo(x - r * 0.5, y + r); c.lineTo(x - r * 0.5, y - r); c.lineWidth = r * 0.22 + lw * 2; c.stroke(); c.strokeStyle = col; c.lineWidth = r * 0.22; c.stroke(); c.restore(); return; }
+    else if (shape === 'cross' || shape === 'plus') {
+      var t = shape === 'cross' ? Math.PI / 4 : 0;
+      c.translate(x, y); c.rotate(t); c.moveTo(-r, 0); c.lineTo(r, 0); c.moveTo(0, -r); c.lineTo(0, r);
+      c.lineWidth = r * 0.55 + lw * 2; c.stroke(); c.strokeStyle = col; c.lineWidth = r * 0.55; c.stroke(); c.restore(); return;
+    } else if (shape === 'target') { c.arc(x, y, r, 0, 7); c.stroke(); c.lineWidth = r * 0.28; c.strokeStyle = col; c.stroke(); c.beginPath(); c.arc(x, y, r * 0.3, 0, 7); c.fill(); c.restore(); return; }
+    else c.arc(x, y, r, 0, 7);
+    c.stroke(); c.fill();
+    c.restore();
+  }
+  var lastFrame = null;
+  // ขนาดกรอบแผนที่บนกระดาษ (มม.) ใช้ค่าจากการสร้างครั้งล่าสุดถ้ากระดาษเดียวกัน ไม่งั้นประมาณ (ขอบ 12 มม. หัว 21 มม. รายละเอียดด้านล่าง ~30 มม.)
+  function frameMM(o) {
+    if (lastFrame && lastFrame.paper === o.paper && lastFrame.land === o.land && (o.paper !== 'custom' || (lastFrame.cw === o.cw && lastFrame.ch === o.ch))) return [lastFrame.wmm, lastFrame.hmm];
+    var P = paperMM(o); return [P[0] - 24, P[1] - 21 - 40];
+  }
+  // เลือกพื้นที่บนแผนที่: กรอบสี่เหลี่ยมขนาดเท่าพื้นที่จริงที่จะพิมพ์ (ตามกระดาษและมาตราส่วน) อยู่กลางจอ ลากแผนที่ให้กรอบครอบพื้นที่ แล้วกดใช้
+  function pickArea(o, onDone) {
+    var map = ctx.map(), sh = document.getElementById('sheet'), fm = frameMM(o), wM = fm[0] * o.scale / 1000, hM = fm[1] * o.scale / 1000;
+    sh.style.display = 'none';
+    var EMPTY = { type: 'FeatureCollection', features: [] };
+    if (!map.getSource('print-frame')) {
+      map.addSource('print-frame', { type: 'geojson', data: EMPTY });
+      map.addLayer({ id: 'print-frame-fill', type: 'fill', source: 'print-frame', paint: { 'fill-color': '#1565c0', 'fill-opacity': 0.08 } });
+      map.addLayer({ id: 'print-frame-line', type: 'line', source: 'print-frame', paint: { 'line-color': '#1565c0', 'line-width': 3, 'line-dasharray': [3, 1.5] } });
+    }
+    function ring(lat, lng) {
+      var z = G.zoneOf(lng), u = G.toUTM(lat, lng, z), out = [];
+      [[-1, 1], [1, 1], [1, -1], [-1, -1], [-1, 1]].forEach(function (k) { var q = G.fromUTM(z, u.north, u.e + k[0] * wM / 2, u.n + k[1] * hM / 2); out.push([q.lng, q.lat]); });
+      return out;
+    }
+    function upd() { var c = map.getCenter(); map.getSource('print-frame').setData({ type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [ring(c.lat, c.lng)] } }] }); }
+    var start = o.center ? G.parsePoint(o.center) : null;
+    if (start) map.jumpTo({ center: [start.lng, start.lat] });
+    upd();
+    var r0 = ring(map.getCenter().lat, map.getCenter().lng), lons = r0.map(function (q) { return q[0]; }), lats = r0.map(function (q) { return q[1]; });
+    map.fitBounds([[Math.min.apply(null, lons), Math.min.apply(null, lats)], [Math.max.apply(null, lons), Math.max.apply(null, lats)]], { padding: { top: 90, bottom: 140, left: 30, right: 70 }, duration: 0 });
+    map.on('move', upd);
+    var bar = document.createElement('div'); bar.id = 'pickBar';
+    bar.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom) + 132px);width:min(460px,calc(100vw - 20px));box-sizing:border-box;background:rgba(255,255,255,.97);border-radius:14px;box-shadow:0 2px 10px rgba(0,0,0,.35);padding:8px 12px;z-index:13;font-size:14px';
+    bar.innerHTML = '<div style="font-weight:700">เลื่อน/ซูมแผนที่ให้กรอบสีน้ำเงินครอบพื้นที่ที่ต้องการ</div><div style="color:#555;font-size:13px">' + (o.paper === 'custom' ? o.cw + '×' + o.ch + ' มม.' : o.paper) + (o.land ? ' แนวนอน' : ' แนวตั้ง') + ' · 1:' + o.scale.toLocaleString('en-US') + ' · พื้นที่จริง ' + (wM / 1000).toFixed(2) + ' × ' + (hM / 1000).toFixed(2) + ' กม.' + (lastFrame ? '' : ' (ขนาดกรอบโดยประมาณ กด "สร้าง" หนึ่งครั้งแล้วจะตรงเป๊ะ)') + '</div>' +
+      '<div style="display:flex;gap:8px;margin-top:6px"><button class="btn" id="pickOk" style="flex:1">✓ ใช้พื้นที่นี้</button><button class="btn alt" id="pickNo" style="flex:none">✕ ยกเลิก</button></div>';
+    document.body.appendChild(bar);
+    function end(ok) {
+      map.off('move', upd); bar.remove(); map.getSource('print-frame').setData(EMPTY); sh.style.display = '';
+      if (ok) { var c = map.getCenter(); onDone(G.formatPoint(c.lat, c.lng, o.cfmt || 'mgrs')); }
+    }
+    document.getElementById('pickOk').onclick = function () { end(true); };
+    document.getElementById('pickNo').onclick = function () { end(false); };
   }
   function saveCfg() { try { localStorage.setItem(KEY, JSON.stringify(cfg)); } catch (e) { /* ไม่เป็นไร */ } }
   function autoGrid(scale) { return scale <= 1000 ? 20 : scale <= 2500 ? 50 : scale <= 10000 ? 100 : scale <= 12500 ? 250 : scale <= 100000 ? 1000 : 10000; }
@@ -322,6 +380,7 @@
 
     var fx = Math.round(mm(M + L)), fy = Math.round(mm(M + HD + L));
     var fw = Math.round(W - 2 * mm(M + L)), fh = Math.round(H - mm(M + HD + L) - mm(L + 4 + footH + M));
+    lastFrame = { wmm: fw / pxmm, hmm: fh / pxmm, paper: o.paper, land: o.land, cw: o.cw, ch: o.ch };
     if (fw < 100 || fh < 100) throw new Error('กระดาษเล็กเกินไปสำหรับรายละเอียดด้านล่างที่เลือก ลดตัวเลือกด้านล่างหรือเลือกกระดาษใหญ่ขึ้น');
     var mpp = (o.scale / 1000) / pxmm; // เมตรต่อพิกเซล
     var cl = o.center ? G.parsePoint(o.center) : null;
@@ -455,13 +514,13 @@
     }
     function drawGeoLabels() {
       gs.labels.forEach(function (lb) {
-        if (lb.side === 'T') text(lb.str, lb.pos, fy - mm(1.6), 2.6, false, 'center');
-        else if (lb.side === 'B') text(lb.str, lb.pos, fy + fh + mm(4.2), 2.6, false, 'center');
+        if (lb.side === 'T') text(lb.str, lb.pos, fy - mm(1.6), 2.6, false, 'center', o.labelColor);
+        else if (lb.side === 'B') text(lb.str, lb.pos, fy + fh + mm(4.2), 2.6, false, 'center', o.labelColor);
         else {
           c.save();
           c.translate(lb.side === 'L' ? fx - mm(1.2) : fx + fw + mm(1.2), lb.pos);
           c.rotate(lb.side === 'L' ? -Math.PI / 2 : Math.PI / 2);
-          text(lb.str, 0, 0, 2.6, false, 'center');
+          text(lb.str, 0, 0, 2.6, false, 'center', o.labelColor);
           c.restore();
         }
       });
@@ -469,7 +528,7 @@
 
     c.save();
     c.beginPath(); c.rect(fx, fy, fw, fh); c.clip();
-    c.strokeStyle = syn ? 'rgba(25,40,80,0.85)' : 'rgba(20,20,20,0.9)';
+    c.strokeStyle = o.gridColor || (syn ? 'rgba(25,40,80,0.85)' : 'rgba(20,20,20,0.9)');
     c.lineWidth = Math.max(1, mm(syn ? 0.13 : (o.style === 'lines' ? 0.25 : 0.2)));
     var k, kk;
     if (geo) {
@@ -546,6 +605,18 @@
         c.fillStyle = '#000'; c.fillText(p.name, q[0] + mm(2.4), q[1] + mm(1));
       });
     }
+    // จุด/สัญลักษณ์ที่ใส่พิกัดเอง
+    (o.marks || []).forEach(function (mk) {
+      if (!(mk.lat >= -90)) return;
+      var q = P2(mk.lat, mk.lng), r = mm((+mk.size || 4) / 2);
+      if (q[0] < fx - r || q[0] > fx + fw + r || q[1] < fy - r || q[1] > fy + fh + r) return;
+      drawMark(c, mk.shape, q[0], q[1], r, mk.color || '#d62020', mm(0.3));
+      if (o.marksName !== false && mk.showName !== false && mk.name) {
+        c.font = '700 ' + mm(Math.max(2.4, (+mk.size || 4) * 0.55)).toFixed(1) + 'px ' + FONT; c.textAlign = 'left'; c.textBaseline = 'middle';
+        c.lineJoin = 'round'; c.lineWidth = mm(0.9); c.strokeStyle = '#fff'; c.strokeText(mk.name, q[0] + r + mm(1), q[1]);
+        c.fillStyle = mk.color || '#000'; c.fillText(mk.name, q[0] + r + mm(1), q[1]);
+      }
+    });
     c.restore();
 
     // กรอบและตัวเลขกริด
@@ -555,14 +626,14 @@
     else for (k = kE0; k <= kE1; k++) {
       var first = k === kE0;
       var lt = gridLabel(k * I, I, first), xx = xOf(k * I);
-      text(lt, xx, fy - mm(1.6), first ? 3 : 2.6, first, 'center');
-      text(lt, xx, fy + fh + mm(4.2), first ? 3 : 2.6, first, 'center');
+      text(lt, xx, fy - mm(1.6), first ? 3 : 2.6, first, 'center', o.labelColor);
+      text(lt, xx, fy + fh + mm(4.2), first ? 3 : 2.6, first, 'center', o.labelColor);
     }
     if (!geo) for (kk = kN0; kk <= kN1; kk++) {
       var firstN = kk === kN0;
       var ln = gridLabel(kk * I, I, firstN), yy = yOf(kk * I);
-      text(ln, fx - mm(1), yy + mm(0.9), firstN ? 3 : 2.6, firstN, 'right');
-      text(ln, fx + fw + mm(1), yy + mm(0.9), firstN ? 3 : 2.6, firstN, 'left');
+      text(ln, fx - mm(1), yy + mm(0.9), firstN ? 3 : 2.6, firstN, 'right', o.labelColor);
+      text(ln, fx + fw + mm(1), yy + mm(0.9), firstN ? 3 : 2.6, firstN, 'left', o.labelColor);
     }
 
     // หัวกระดาษ
@@ -886,15 +957,25 @@
       fld('มาตราส่วน', opts('pScale', SCALES.map(function (s) { return [s, '1 : ' + s.toLocaleString('en-US')]; }).concat([['custom', 'กำหนดเอง 1 : …']]), scaleSel)) +
       '<div class="field" id="pCustomScale"><label style="flex:0 0 96px">1 : (ตัวเลข)</label><input type="number" id="pSC" min="500" max="5000000" step="1" style="' + INP + '"></div>' +
       fld('ช่วงกริด', opts('pGrid', [['auto', 'อัตโนมัติตามสเกล'], [10, '10 ม.'], [20, '20 ม.'], [50, '50 ม.'], [100, '100 ม.'], [250, '250 ม.'], [500, '500 ม.'], [1000, '1 กม.'], [2000, '2 กม.'], [5000, '5 กม.'], [10000, '10 กม.']], cfg.grid)) +
+      fld('สีเส้นกริด', '<input type="color" id="pGridC" style="width:54px;height:36px;border:1px solid #ccc;border-radius:8px"><label style="flex:none;font-size:14px">ตัวเลขพิกัด</label><input type="color" id="pLabC" style="width:54px;height:36px;border:1px solid #ccc;border-radius:8px"><button type="button" class="btn alt" id="pColReset" style="flex:none;padding:6px 10px">ค่าเดิม</button>') +
       fld('แบบเส้นกริด', opts('pStyle', [['lines', 'เส้นเต็ม'], ['cross', 'กากบาทที่จุดตัด']], cfg.style)) +
       fld('รูปแบบพิกัด', '<select id="pFmt" style="' + INP + ';background:#fff">' +
         G.FORMATS.map(function (fm) { return '<option value="' + fm + '"' + (fm === cfg.cfmt ? ' selected' : '') + '>' + G.FORMAT_NAMES[fm] + '</option>'; }).join('') + '</select>') +
       fld('ศูนย์กลางแผ่น', '<input type="text" id="pCenter" style="' + INP + '"><button type="button" class="btn alt" id="pCur" style="flex:none;padding:8px 10px">กลางจอ</button>') +
+      '<div class="btnrow"><button type="button" class="btn" id="pPick">🗺 เลือกพื้นที่บนแผนที่ (กรอบตามกระดาษและมาตราส่วน)</button></div>' +
       fld('พื้นหลัง', opts('pBase', baseList, cfg.base)) +
       synBox +
       '<div id="pRealOpts">' + fld('ความเข้มภาพ', '<input type="range" id="pFade" min="20" max="100" step="5" style="flex:1"><span id="pFadeV" style="flex:0 0 40px;text-align:right"></span>') +
       '<label class="opt"><input type="checkbox" id="pSym"><span>วางสัญลักษณ์ทหารและหมุดที่ปักไว้<small>เฉพาะงานที่ติ๊กแสดงอยู่</small></span></label>' +
       '<label class="opt"><input type="checkbox" id="pRoutes"><span>วาดเส้นทางที่แสดงอยู่</span></label></div>' +
+      '<details id="pMarksBox" style="margin:8px 0"><summary style="font-weight:600;padding:6px 0">จุดและสัญลักษณ์ที่ใส่เอง (กรอกพิกัด)</summary>' +
+      fld('พิกัด', '<input type="text" id="mkPt" placeholder="MGRS / UTM / องศา เช่น 47P PR 005 570" style="' + INP + '"><button type="button" class="btn alt" id="mkCur" style="flex:none;padding:8px 10px">กลางจอ</button>') +
+      fld('ชื่อ', '<input type="text" id="mkName" placeholder="เช่น จุดนัดพบ, เป้า 1" style="' + INP + '">') +
+      fld('รูปทรง', opts('mkShape', MARK_SHAPES, 'circle') + '<input type="color" id="mkColor" value="#d62020" style="width:54px;height:36px;border:1px solid #ccc;border-radius:8px;flex:none">') +
+      fld('ขนาด (มม.)', '<input type="range" id="mkSize" min="2" max="16" step="0.5" value="4" style="flex:1"><span id="mkSizeV" style="flex:0 0 44px;text-align:right">4</span>') +
+      '<div class="btnrow"><button type="button" class="btn" id="mkAdd">＋ เพิ่มจุด</button><button type="button" class="btn alt" id="mkClr">ลบทั้งหมด</button></div>' +
+      '<label class="opt"><input type="checkbox" id="mkNames"><span>แสดงชื่อจุดบนแผนที่</span></label>' +
+      '<div id="mkList"></div></details>' +
       footBox +
       fld('สีที่พิมพ์', opts('pColor', [['color', 'สี'], ['gray', 'ขาว-ดำ แบบมีเฉดเทา'], ['bw', 'ขาว-ดำล้วน (เส้นดำ พื้นขาว)']], cfg.color || 'color')) +
       fld('ความละเอียด', opts('pDpi', [[100, '100 dpi (เร็ว ไฟล์เล็ก)'], [150, '150 dpi (แนะนำ)'], [200, '200 dpi (คมที่สุด)'], [300, '300 dpi (กระดาษเล็ก)']], cfg.dpi)) +
@@ -911,6 +992,46 @@
     $('pCW').value = cfg.cw; $('pCH').value = cfg.ch; $('pSC').value = cfg.scale;
     $('fQ').value = f('questions', '');
     G.bindCoord($('pCenter'), $('pFmt'), $('pCur'), function () { return ctx.map().getCenter(); }, function (fm) { cfg.cfmt = fm; saveCfg(); });
+    $('pPick').onclick = function () {
+      var sc = $('pScale').value === 'custom' ? parseInt($('pSC').value, 10) : parseInt($('pScale').value, 10);
+      if (!(sc >= 500)) { ctx.toast('เลือกมาตราส่วนก่อน'); return; }
+      var o = { paper: $('pPaper').value, land: $('pLand').value === '1', cw: parseFloat($('pCW').value) || 210, ch: parseFloat($('pCH').value) || 297, scale: sc, center: $('pCenter').value.trim(), cfmt: $('pFmt').value };
+      pickArea(o, function (txt) { $('pCenter').value = txt; cfg.center = txt; saveCfg(); ctx.toast('ตั้งศูนย์กลางแผ่นแล้ว · กด "สร้าง"'); });
+    };
+    // สีกริด
+    $('pGridC').value = cfg.gridColor || '#141414'; $('pLabC').value = cfg.labelColor || '#000000';
+    $('pGridC').oninput = function () { cfg.gridColor = this.value; saveCfg(); };
+    $('pLabC').oninput = function () { cfg.labelColor = this.value; saveCfg(); };
+    $('pColReset').onclick = function () { cfg.gridColor = ''; cfg.labelColor = ''; $('pGridC').value = '#141414'; $('pLabC').value = '#000000'; saveCfg(); };
+    // จุดที่ใส่เอง
+    if (!Array.isArray(cfg.marks)) cfg.marks = [];
+    $('mkNames').checked = cfg.marksName !== false;
+    $('mkNames').onchange = function () { cfg.marksName = this.checked; saveCfg(); };
+    $('mkSize').oninput = function () { $('mkSizeV').textContent = this.value; };
+    $('mkCur').onclick = function () { var c0 = ctx.map().getCenter(); $('mkPt').value = G.formatPoint(c0.lat, c0.lng, cfg.cfmt || 'mgrs'); };
+    function shapeName(k) { var f = MARK_SHAPES.filter(function (x) { return x[0] === k; })[0]; return f ? f[1] : k; }
+    function renderMarks() {
+      var box = $('mkList'); box.innerHTML = '';
+      cfg.marks.forEach(function (mk, i) {
+        var row = document.createElement('div'); row.style.cssText = 'display:flex;align-items:center;gap:6px;padding:5px 0;border-top:1px solid #eee;font-size:14px';
+        row.innerHTML = '<span style="width:14px;height:14px;border-radius:3px;background:' + mk.color + ';flex:none"></span><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + shapeName(mk.shape) + ' · ' + (mk.name || '(ไม่มีชื่อ)') + ' · ' + mk.size + ' มม.<br><small style="color:#777">' + G.formatPoint(mk.lat, mk.lng, cfg.cfmt || 'mgrs') + '</small></span>';
+        var nb = document.createElement('label'); nb.style.cssText = 'flex:none;font-size:12px;display:flex;align-items:center;gap:3px'; nb.innerHTML = '<input type="checkbox"' + (mk.showName !== false ? ' checked' : '') + '>ชื่อ';
+        nb.firstChild.onchange = function () { mk.showName = this.checked; saveCfg(); };
+        var del = document.createElement('button'); del.type = 'button'; del.className = 'btn alt'; del.style.cssText = 'flex:none;padding:4px 10px;font-size:13px'; del.textContent = 'ลบ';
+        del.onclick = function () { cfg.marks.splice(i, 1); saveCfg(); renderMarks(); };
+        row.appendChild(nb); row.appendChild(del); box.appendChild(row);
+      });
+      $('pMarksBox').querySelector('summary').textContent = 'จุดและสัญลักษณ์ที่ใส่เอง (กรอกพิกัด)' + (cfg.marks.length ? ' · ' + cfg.marks.length + ' จุด' : '');
+    }
+    renderMarks();
+    $('mkAdd').onclick = function () {
+      var p = G.parsePoint($('mkPt').value);
+      if (!p) { ctx.toast('อ่านพิกัดไม่ได้ ลองรูปแบบ MGRS / UTM / องศา'); return; }
+      cfg.marks.push({ lat: p.lat, lng: p.lng, name: $('mkName').value.trim(), shape: $('mkShape').value, color: $('mkColor').value, size: +$('mkSize').value, showName: true });
+      saveCfg(); renderMarks(); $('mkName').value = ''; $('mkPt').value = '';
+      ctx.toast('เพิ่มจุดแล้ว · กด "สร้าง" เพื่อดูบนแผ่น');
+    };
+    $('mkClr').onclick = function () { if (cfg.marks.length && confirm('ลบจุดทั้งหมด ' + cfg.marks.length + ' จุด?')) { cfg.marks = []; saveCfg(); renderMarks(); } };
     $('pFade').value = cfg.fade; $('pFadeV').textContent = cfg.fade + '%';
     $('pSym').checked = cfg.sym; $('pRoutes').checked = cfg.routes;
     $('pFade').oninput = function () { $('pFadeV').textContent = this.value + '%'; };

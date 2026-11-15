@@ -31,6 +31,7 @@
     weather: 'off', // off | radar
     traffic: false,
     grid: false,
+    gridLine: '#d62020', gridText: '#a00000', gridW: 1, // สีเส้นกริด สีตัวเลข ความหนา (เท่า)
     llStep: 'auto',
     coordDigits: 5, // จำนวนหลักพิกัด MGRS กลางจอ/หมุด
     utmStep: 'auto', // ระยะตาราง UTM/MGRS (เมตร) 10000=1 หลัก 1000=2 หลัก 100=3 หลัก 10=4 หลัก
@@ -196,6 +197,7 @@
       },
       paint: { 'text-color': '#a00000', 'text-halo-color': '#ffffff', 'text-halo-width': 1.6 }
     });
+    applyGridStyle();
     map.addLayer({
       id: 'az-line', type: 'line', source: 'az',
       layout: { 'line-cap': 'round' },
@@ -419,6 +421,17 @@
     return { type: 'Feature', properties: { t: text, a: anchor, k: kind || 'l' }, geometry: { type: 'Point', coordinates: [lng, lat] } };
   }
 
+  // สีและความหนาของเส้นกริด/ตัวเลข (ตั้งในเมนูพิกัด)
+  function lumOf(hex) { var n = parseInt(String(hex).replace('#', ''), 16); return (0.299 * (n >> 16 & 255) + 0.587 * (n >> 8 & 255) + 0.114 * (n & 255)) / 255; }
+  function applyGridStyle() {
+    if (!map || !map.getLayer('grid-lines')) return;
+    var lc = prefs.gridLine || '#d62020', tc = prefs.gridText || '#a00000', w = +prefs.gridW || 1, n = parseInt(tc.replace('#', ''), 16);
+    map.setPaintProperty('grid-lines', 'line-color', lc);
+    map.setPaintProperty('grid-lines', 'line-width', ['case', ['get', 'major'], 1.6 * w, 0.8 * w]);
+    map.setPaintProperty('grid-labels', 'text-color', tc);
+    map.setPaintProperty('grid-labels', 'text-halo-color', lumOf(tc) > 0.6 ? 'rgba(0,0,0,.85)' : '#ffffff');
+    map.setPaintProperty('grid-squares', 'text-color', 'rgba(' + (n >> 16 & 255) + ',' + (n >> 8 & 255) + ',' + (n & 255) + ',0.35)');
+  }
   var lastGridNote = '';
   // พิกัดกลางจอ/หมุด: ถ้าเลือกจำนวนหลัก MGRS ไว้ แสดงตามนั้น (เช่น 3 หลัก = 47P QA 123 678 ความละเอียด 100 ม.)
   function fmtCoord(lat, lng) {
@@ -1092,8 +1105,20 @@
     h += '<div id="llBox"' + (isUTM ? ' hidden' : '') + '><h4>ระยะห่างเส้นละติจูด/ลองจิจูด</h4><div class="field"><select id="llStep" style="flex:1;font-size:16px;padding:8px;border:1px solid #ccc;border-radius:8px;background:#fff">' +
       stepOpts.map(function (o) { return '<option value="' + o[0] + '"' + (String(prefs.llStep || 'auto') === String(o[0]) ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') +
       '</select></div><p class="note" style="margin-top:2px">ใช้กับรูปแบบ องศา-ลิปดา-ฟิลิปดา / องศา-ลิปดา / องศาทศนิยม (UTM/MGRS ใช้ระยะเป็นเมตรอัตโนมัติ) · ถ้าซูมออกจนเส้นถี่เกินไป จะแสดงทุก ๆ 2, 5, 10 เส้นของระยะที่เลือก</p></div>';
+    var SW = [['#d62020', 'แดง'], ['#111111', 'ดำ'], ['#1565c0', 'น้ำเงิน'], ['#00a0e0', 'ฟ้า'], ['#2e7d32', 'เขียว'], ['#ff8f00', 'ส้ม'], ['#ffd600', 'เหลือง'], ['#ffffff', 'ขาว'], ['#8e24aa', 'ม่วง']];
+    function swRow(id, cur) { return '<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:4px 0 8px">' + SW.map(function (c) { return '<button type="button" class="gsw" data-k="' + id + '" data-c="' + c[0] + '" title="' + c[1] + '" style="width:30px;height:30px;border-radius:50%;background:' + c[0] + ';border:' + (cur.toLowerCase() === c[0] ? '3px solid #2e6b3f' : '1px solid #999') + ';padding:0"></button>'; }).join('') + '<input type="color" id="' + id + 'C" value="' + cur + '" title="เลือกสีเอง" style="width:40px;height:32px;border:1px solid #ccc;border-radius:8px;padding:0 2px"></div>'; }
+    h += '<h4>สีเส้นกริด</h4>' + swRow('gridLine', prefs.gridLine || '#d62020') +
+      '<h4>สีตัวเลข/ตัวอักษรบนกริด</h4>' + swRow('gridText', prefs.gridText || '#a00000') +
+      '<div class="field"><label for="gridW">ความหนาเส้น</label><select id="gridW" style="flex:1;font-size:16px;padding:8px;border:1px solid #ccc;border-radius:8px;background:#fff">' + [[0.6, 'บาง'], [1, 'ปกติ'], [1.6, 'หนา'], [2.4, 'หนามาก']].map(function (o) { return '<option value="' + o[0] + '"' + ((+prefs.gridW || 1) === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></div>' +
+      '<div class="btnrow"><button class="btn alt" id="gridReset">คืนค่าสีเดิม (แดง)</button></div>';
     h += '<p class="note">แตะแผนที่เพื่อปักหมุดดูพิกัดของจุดนั้น แตะที่เดิมอีกครั้งเพื่อลบ · จุดกึ่งกลางจอ (กากบาทแดง) แสดงพิกัดที่มุมซ้ายบนตลอดเวลา · UTM/MGRS ใช้ datum WGS84</p>';
     $('sheetBody').innerHTML = h;
+    function setGC(k, c) { prefs[k] = c; savePrefs(); applyGridStyle(); renderGridSheet(); }
+    Array.prototype.forEach.call(document.querySelectorAll('.gsw'), function (b) { b.onclick = function () { setGC(b.getAttribute('data-k'), b.getAttribute('data-c')); }; });
+    $('gridLineC').onchange = function () { setGC('gridLine', this.value); };
+    $('gridTextC').onchange = function () { setGC('gridText', this.value); };
+    $('gridW').onchange = function () { prefs.gridW = +this.value; savePrefs(); applyGridStyle(); };
+    $('gridReset').onclick = function () { prefs.gridLine = '#d62020'; prefs.gridText = '#a00000'; prefs.gridW = 1; savePrefs(); applyGridStyle(); renderGridSheet(); };
     $('gridOn').onchange = function () {
       prefs.grid = this.checked; savePrefs(); updateGrid();
     };

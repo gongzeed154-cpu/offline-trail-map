@@ -85,7 +85,7 @@
   #azcard .big { font-size: 20px; font-weight: 700; color: #c4501b; }
   #azcard .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
   #azcard .lbl { color: #666; font-size: 12px; }
-  .pmark { width: 30px; height: 30px; border-radius: 50%; border: 3px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.5); color: #fff; font-weight: 700; display: flex; align-items: center; justify-content: center; font-size: 14px; touch-action: none; }
+  .pmark { width: var(--pm, 30px); height: var(--pm, 30px); border-radius: 50%; border: calc(var(--pm, 30px) / 10) solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.5); color: #fff; font-weight: 700; display: flex; align-items: center; justify-content: center; font-size: calc(var(--pm, 30px) * 0.47); touch-action: none; }
   .pmark.a { background: #1a6ad6; }
   .pmark.b { background: #c4501b; }
   .prot { position: absolute; left: 50%; top: 50%; pointer-events: none; overflow: visible; }

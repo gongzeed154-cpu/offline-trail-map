@@ -294,7 +294,7 @@
     applyTraffic();
     applyWeather();
     updateGrid();
-    updateCoord();
+    updateCoord(); updateScale();
     refreshProt();
   }
 
@@ -362,6 +362,55 @@
     }, 400);
   }
 
+  /* ---------- การซูมและมาตราส่วน ---------- */
+  // ขนาดจริงของ 1 พิกเซลบนจอ (มม.) ค่าเริ่มต้นตามชนิดเครื่อง ปรับเทียบด้วยไม้บรรทัดได้
+  function mmPerPx() {
+    if (+prefs.mmpx > 0) return +prefs.mmpx;
+    var ua = navigator.userAgent || '';
+    if (/iPhone|iPod/.test(ua)) return 0.165; // ~153 พิกเซล CSS ต่อนิ้ว
+    if (/iPad/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) return 0.192;
+    if (/Android/.test(ua) && window.innerWidth < 600) return 0.17;
+    return 0.2646; // คอมพิวเตอร์ (96 พิกเซลต่อนิ้ว)
+  }
+  function metersPerPx() {
+    var c = map.getCenter();
+    return 78271.517 * Math.cos(c.lat * Math.PI / 180) / Math.pow(2, map.getZoom());
+  }
+  function currentScale() { return metersPerPx() * 1000 / mmPerPx(); }
+  var zoomTarget = 0;
+  function niceScale(n) { if (zoomTarget && Math.abs(n - zoomTarget) / zoomTarget < 0.005) return zoomTarget; var p = Math.pow(10, Math.floor(Math.log(n) / Math.LN10) - 2); return Math.round(n / p) * p; }
+  function zoomForScale(N) { var c = map.getCenter(), mpp = N * mmPerPx() / 1000; return Math.log(78271.517 * Math.cos(c.lat * Math.PI / 180) / mpp) / Math.LN2; }
+  function updateScale() {
+    var el = $('scaleChip'); if (!el || !map) return;
+    var txt = 'มาตราส่วนบนจอ ≈ 1:' + niceScale(currentScale()).toLocaleString('en-US') + ' · ซูม ' + map.getZoom().toFixed(1);
+    // แถบมาตราส่วน: ระยะจริงบนพื้นที่ยาวราว 90 พิกเซล ปัดเป็นเลขกลม
+    var mpp = metersPerPx(), raw = mpp * 90, p10 = Math.pow(10, Math.floor(Math.log(raw) / Math.LN10)), nice = [1, 2, 5, 10].map(function (k) { return k * p10; }).filter(function (v) { return v <= raw; }).pop() || p10, w = Math.round(nice / mpp);
+    el.innerHTML = '<div>' + txt + '</div><div style="display:flex;align-items:center;gap:6px;margin-top:3px"><span style="display:inline-block;width:' + w + 'px;height:7px;border:2px solid #222;border-top:0;box-sizing:border-box"></span><span style="font-size:12px">' + (nice >= 1000 ? (nice / 1000) + ' กม.' : nice + ' ม.') + '</span></div>';
+    if (sheetKind === 'zoom') { var z = $('zmNow'); if (z) z.textContent = txt; }
+  }
+  function renderZoomSheet() {
+    var S = [2500, 5000, 10000, 12500, 25000, 50000, 100000, 250000, 500000];
+    var h = '<div id="zmNow" style="font-size:16px;font-weight:700;margin:6px 0"></div>' +
+      '<div class="btnrow"><button class="btn alt" id="zmOut">− ซูมออก</button><button class="btn alt" id="zmIn">+ ซูมเข้า</button></div>' +
+      '<h4>เลือกมาตราส่วนที่แสดง</h4><div style="display:flex;flex-wrap:wrap;gap:6px">' + S.map(function (n) { return '<button class="btn alt zmS" data-n="' + n + '" style="flex:none;padding:6px 10px;font-size:14px">1:' + n.toLocaleString('en-US') + '</button>'; }).join('') + '</div>' +
+      '<div class="field" style="margin-top:8px"><label for="zmN">1 : (ตัวเลข)</label><input type="number" id="zmN" min="500" step="1" inputmode="numeric" placeholder="เช่น 11250"><button class="btn" id="zmGo" style="flex:none">ไป</button></div>' +
+      '<h4>ระดับซูม</h4><div class="field"><input type="range" id="zmZ" min="3" max="20" step="0.1" value="' + map.getZoom().toFixed(1) + '" style="flex:1"><span id="zmZv" style="flex:0 0 46px;text-align:right">' + map.getZoom().toFixed(1) + '</span></div>' +
+      '<h4>ปรับเทียบหน้าจอ (ให้มาตราส่วนตรงกับไม้บรรทัด)</h4>' +
+      '<div style="width:' + Math.round(50 / mmPerPx()) + 'px;height:14px;border:2px solid #111;border-top:0;margin:6px 0"></div>' +
+      '<p class="note" style="margin:0">เส้นด้านบนควรยาว 50 มม. เอาไม้บรรทัดวัดบนจอ แล้วใส่ความยาวที่วัดได้</p>' +
+      '<div class="field"><label for="zmCal">วัดได้ (มม.)</label><input type="number" id="zmCal" step="0.5" inputmode="decimal" placeholder="50"><button class="btn" id="zmCalGo" style="flex:none">ปรับ</button><button class="btn alt" id="zmCalReset" style="flex:none">ค่าเดิม</button></div>' +
+      '<p class="note">มาตราส่วนบนจอเป็นค่าประมาณ ขึ้นกับขนาดจริงของจอแต่ละเครื่อง (ตอนนี้ใช้ 1 พิกเซล = ' + mmPerPx().toFixed(3) + ' มม.) · แถบมาตราส่วนใต้ค่ามาตราส่วน (มุมซ้ายบน) บอกระยะจริงบนพื้นเสมอ ไม่ขึ้นกับจอ · เมื่อจะพิมพ์ให้ตรงมาตราส่วน ใช้เมนูพิมพ์</p>';
+    $('sheetBody').innerHTML = h;
+    updateScale();
+    $('zmIn').onclick = function () { map.zoomIn(); };
+    $('zmOut').onclick = function () { map.zoomOut(); };
+    Array.prototype.forEach.call(document.querySelectorAll('.zmS'), function (b) { b.onclick = function () { zoomTarget = +b.getAttribute('data-n'); map.easeTo({ zoom: zoomForScale(zoomTarget), duration: 600 }); }; });
+    $('zmGo').onclick = function () { var n = parseFloat($('zmN').value); if (n >= 100) { zoomTarget = n; map.easeTo({ zoom: zoomForScale(n), duration: 600 }); } else toast('ใส่ตัวเลขมาตราส่วน เช่น 25000'); };
+    $('zmZ').oninput = function () { $('zmZv').textContent = (+this.value).toFixed(1); map.jumpTo({ zoom: +this.value }); };
+    $('zmCalGo').onclick = function () { var v = parseFloat($('zmCal').value); if (v > 5 && v < 200) { prefs.mmpx = mmPerPx() * v / 50; savePrefs(); renderZoomSheet(); toast('ปรับเทียบแล้ว: 1 พิกเซล = ' + prefs.mmpx.toFixed(3) + ' มม.'); } };
+    $('zmCalReset').onclick = function () { prefs.mmpx = 0; savePrefs(); renderZoomSheet(); };
+  }
+
   function updateCoord() {
     if (!map) return;
     var c = map.getCenter();
@@ -379,6 +428,7 @@
 
   function onMove() {
     updateCoord();
+    updateScale();
     scheduleElev();
     scheduleGrid();
     refreshProt();
@@ -1004,7 +1054,7 @@
     sheetKind = kind;
     var sh = $('sheet');
     sh.hidden = false;
-    var title = kind === 'layers' ? 'ชั้นแผนที่และหน้าจอ' : kind === 'grid' ? 'พิกัดและตารางกริด' : kind === 'special' ? 'หมวดพิเศษ' : kind === 'route' ? 'เส้นทางและนำทาง' : kind === 'sky' ? 'ดวงดาวนำทาง' : kind === 'mil' ? 'สัญลักษณ์ทหารและพิมพ์แผนที่ฝึก' : kind === 'struct' ? 'สร้างตึก/สถานโบราณ 3 มิติ' : kind === 'proj' ? 'งาน (เส้นทาง · สัญลักษณ์ · หมุด · สิ่งปลูกสร้าง)' : kind === 'snd' ? 'ฟังเสียง (วิเคราะห์ชนิดและระยะ)' : kind === 'wind' ? 'ทิศทางและความเร็วลม' : kind === 'jump' ? 'โหมดโดดร่ม (วางแผน/ฝึก)' : kind === 'search' ? 'ค้นหา' : kind === 'v3d' ? 'มุมมอง 3D' : kind === 'rec' ? 'บันทึกการเดินทาง' : kind === 'team' ? 'ทีมเดินป่า' : 'วัดมุมด้วยแผ่นวัดมุม';
+    var title = kind === 'layers' ? 'ชั้นแผนที่และหน้าจอ' : kind === 'grid' ? 'พิกัดและตารางกริด' : kind === 'special' ? 'หมวดพิเศษ' : kind === 'route' ? 'เส้นทางและนำทาง' : kind === 'sky' ? 'ดวงดาวนำทาง' : kind === 'mil' ? 'สัญลักษณ์ทหารและพิมพ์แผนที่ฝึก' : kind === 'zoom' ? 'การซูมและมาตราส่วน' : kind === 'struct' ? 'สร้างตึก/สถานโบราณ 3 มิติ' : kind === 'proj' ? 'งาน (เส้นทาง · สัญลักษณ์ · หมุด · สิ่งปลูกสร้าง)' : kind === 'snd' ? 'ฟังเสียง (วิเคราะห์ชนิดและระยะ)' : kind === 'wind' ? 'ทิศทางและความเร็วลม' : kind === 'jump' ? 'โหมดโดดร่ม (วางแผน/ฝึก)' : kind === 'search' ? 'ค้นหา' : kind === 'v3d' ? 'มุมมอง 3D' : kind === 'rec' ? 'บันทึกการเดินทาง' : kind === 'team' ? 'ทีมเดินป่า' : 'วัดมุมด้วยแผ่นวัดมุม';
     sh.innerHTML = '<div class="shead"><h3></h3><button id="sheetClose">ปิด</button></div><div id="sheetBody"></div>';
     sh.querySelector('h3').textContent = title;
     $('sheetClose').onclick = closeSheet;
@@ -1017,6 +1067,7 @@
     else if (kind === 'mil') TrailSym.renderSheet($('sheetBody'));
     else if (kind === 'proj') TrailProj.renderSheet($('sheetBody'));
     else if (kind === 'struct') TrailStruct.renderSheet($('sheetBody'));
+    else if (kind === 'zoom') renderZoomSheet();
     else if (kind === 'snd') TrailSound.renderSheet($('sheetBody'));
     else if (kind === 'wind') TrailWind.renderSheet($('sheetBody'));
     else if (kind === 'jump') TrailJump.renderSheet($('sheetBody'));
@@ -1615,6 +1666,7 @@
       var diff = Math.abs(((h - map.getBearing() + 540) % 360) - 180);
       if (diff > 4) map.rotateTo(h, { duration: 400 });
     }, 600);
+    $('scaleChip').onclick = function () { openSheet('zoom'); };
     $('coord').onclick = function () {
       var i = G.FORMATS.indexOf(prefs.fmt);
       prefs.fmt = G.FORMATS[(i + 1) % G.FORMATS.length];

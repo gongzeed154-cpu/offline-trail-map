@@ -1560,6 +1560,9 @@
       b.setAttribute('aria-pressed', l ? 'true' : 'false');
       b.title = l ? 'ล็อคอยู่: หมุดและสัญลักษณ์ลากไม่ได้' : 'ปลดล็อค: ลากหมุดและสัญลักษณ์ได้';
     }
+    // ซ่อน/แสดงเครื่องมือทั้งหมด (แผนที่เต็มหน้าจอ)
+    $('cleanBtn').onclick = function () { closeSheet(); document.body.classList.add('clean'); toast('แตะ ☰ มุมขวาล่างเพื่อแสดงเครื่องมือกลับ'); setTimeout(function () { if (map) map.resize(); }, 50); };
+    $('cleanOff').onclick = function () { document.body.classList.remove('clean'); setTimeout(function () { if (map) map.resize(); }, 50); };
     $('lockBtn').onclick = function () {
       TrailLock.set(!TrailLock.locked());
       applyLockBtn();

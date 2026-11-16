@@ -34,6 +34,9 @@
   #hdialWrap.full #hdial { width: 740px; height: 740px; }
   #hdialWrap.corner { right: 16px; bottom: 16px; background: rgba(15,29,20,.82); border-radius: 20px; padding: 8px; }
   #hdialWrap.corner #hdial { width: 380px; height: 380px; }
+  #numWrap { position: absolute; inset: 0; z-index: 3; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; background: radial-gradient(circle at 50% 45%, #1d4d2b, #0f1d14 80%); }
+  #numBig { font-size: 260px; font-weight: 800; color: var(--gold); line-height: 1.1; }
+  #numSub { font-size: 40px; opacity: .85; margin-top: 10px; max-width: 900px; }
   #answered { position: absolute; z-index: 4; left: 20px; bottom: 20px; right: 20px; background: rgba(15,29,20,.9); border-radius: 18px; padding: 14px 24px; font-size: 30px; }
   #hdialWrap.corner ~ #answered { right: 430px; }
   #aBar { height: 14px; background: var(--line); border-radius: 7px; margin-top: 8px; overflow: hidden; }
@@ -62,12 +65,31 @@
   #ctrl button.off { opacity: .45; text-decoration: line-through; }
 
   .overlay { position: absolute; inset: 0; z-index: 20; background: radial-gradient(circle at 30% 20%, #1f4d2c, #0f1d14 70%); display: flex; align-items: center; justify-content: center; padding: 30px; }
-  #lobby { gap: 80px; }
-  #qrBox { background: #fff; padding: 24px; border-radius: 30px; text-align: center; color: #1b1b1b; flex: none; }
-  #qrBox img { width: 470px; height: 470px; image-rendering: pixelated; display: block; }
-  #qrBox div { margin-top: 10px; font-size: 24px; font-weight: 600; word-break: break-all; max-width: 470px; }
+  #lobby { gap: 60px; }
+  #leftCol { display: flex; flex-direction: column; gap: 14px; width: 540px; flex: none; }
+  #setup { background: rgba(255,255,255,.08); border-radius: 22px; padding: 12px 16px 14px; }
+  #setup .sh { font-size: 28px; font-weight: 800; margin-bottom: 4px; }
+  #setup .sl { font-size: 20px; opacity: .8; margin: 8px 0 4px; }
+  .topic { display: flex; align-items: center; gap: 10px; font-size: 21px; padding: 4px 10px; border-radius: 12px; cursor: pointer; margin: 3px 0; background: rgba(255,255,255,.06); user-select: none; }
+  .topic .ck { width: 26px; height: 26px; border: 3px solid #8aa; border-radius: 7px; display: flex; align-items: center; justify-content: center; font-size: 19px; color: transparent; flex: none; }
+  .topic.on { background: rgba(245,179,1,.22); }
+  .topic.on .ck { background: var(--gold); border-color: var(--gold); color: #3a2a00; font-weight: 800; }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; }
+  .chip { padding: 5px 16px; border-radius: 20px; background: rgba(255,255,255,.12); font-size: 21px; font-weight: 700; cursor: pointer; user-select: none; }
+  .chip.on { background: var(--gold); color: #3a2a00; }
+  #choiceList { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; width: 1150px; margin: 10px 0; }
+  .opt { position: relative; background: #22382a; border-radius: 20px; padding: 22px 26px; font-size: 40px; font-weight: 700; display: flex; align-items: center; gap: 18px; overflow: hidden; min-height: 120px; text-align: left; }
+  .opt .ol { width: 62px; height: 62px; border-radius: 31px; background: var(--gold); color: #3a2a00; display: flex; align-items: center; justify-content: center; font-size: 36px; flex: none; }
+  .opt .ot { flex: 1; line-height: 1.2; }
+  .opt .oc { font-size: 30px; color: var(--gold); }
+  .opt .ob { position: absolute; left: 0; bottom: 0; height: 10px; background: var(--gold); width: 0; transition: width .8s; }
+  .opt.ok { background: #1f7a3a; outline: 5px solid #5fd07a; }
+  .opt.no { opacity: .5; }
+  #qrBox { background: #fff; padding: 18px; border-radius: 30px; text-align: center; color: #1b1b1b; flex: none; }
+  #qrBox img { width: 380px; height: 380px; image-rendering: pixelated; display: block; }
+  #qrBox div { margin-top: 8px; font-size: 22px; font-weight: 600; word-break: break-all; max-width: 380px; }
   #lobbyInfo { flex: 1; max-width: 1000px; display: flex; flex-direction: column; height: 960px; }
-  #lobbyInfo h1 { font-size: 76px; margin: 0 0 2px; }
+  #lobbyInfo h1 { font-size: 70px; margin: 0 0 2px; }
   #lobbyInfo p { font-size: 30px; margin: 2px 0 8px; opacity: .9; }
   #cntRow { display: flex; align-items: baseline; gap: 18px; }
   #cnt { font-size: 130px; font-weight: 800; color: var(--gold); line-height: 1; }
@@ -122,6 +144,7 @@
     <div id="mapWrap">
       <div id="map"></div>
       <div id="hdialWrap" hidden><div id="hdial"></div></div>
+      <div id="numWrap" hidden><div id="numBig"></div><div id="choiceList" hidden></div><div id="numSub"></div></div>
       <div id="answered"><span id="aTxt"></span><div id="aBar"><div id="aIn"></div></div></div>
       <div id="revealBox" hidden></div>
       <div id="caption" hidden></div>
@@ -135,7 +158,15 @@
 </div>
 
 <div id="lobby" class="overlay">
-  <div id="qrBox"><img id="qrImg" alt="QR"><div id="url"></div><div id="urlNote" style="font-size:15px;font-weight:400;margin-top:4px"></div></div>
+  <div id="leftCol">
+    <div id="qrBox"><img id="qrImg" alt="QR"><div id="url"></div><div id="urlNote" style="font-size:15px;font-weight:400;margin-top:4px"></div></div>
+    <div id="setup">
+      <div class="sh">⚙️ ตั้งค่าเกม — ติ๊กหัวข้อที่จะใช้</div>
+      <div id="topicList"></div>
+      <div class="sl">จำนวนข้อ</div><div id="countRow" class="chips"></div>
+      <div class="sl">มาตราส่วนแผนที่ (ใช้กับข้อที่มีแผนที่/วัดระยะ)</div><div id="scaleRow" class="chips"></div>
+    </div>
+  </div>
   <div id="lobbyInfo">
     <h1 id="gTitle">🗺️ เกมแผนที่</h1>
     <p>สแกน QR → เลือกตัวละคร → ตั้งชื่อ เข้าร่วมได้เลย!</p>
@@ -166,6 +197,8 @@
 
 <script src="lib/maplibre-gl.js"></script>
 <script src="qrcode.min.js"></script>
+<script src="lib/maplibre-contour.min.js"></script>
+<script src="geo.js"></script>
 <script src="qmap.js"></script>
 <script src="dial.js"></script>
 <script src="audio.js"></script>
@@ -231,8 +264,29 @@
   }
   loadInfo();
 
+  // ---------- ตั้งค่าเกมก่อนเริ่ม: หัวข้อ / จำนวนข้อ / มาตราส่วน ----------
+  var curCfg = null;
+  function postCfg() { fetch('api/host', { method: 'POST', body: JSON.stringify({ cmd: 'config', cfg: curCfg }) }); }
+  function paintCfg() {
+    if (!curCfg) return;
+    [].forEach.call(document.querySelectorAll('.topic'), function (el) { el.classList.toggle('on', curCfg.topics.indexOf(+el.dataset.t) >= 0); });
+    [].forEach.call(document.querySelectorAll('#countRow .chip'), function (el) { el.classList.toggle('on', +el.dataset.n === curCfg.count); });
+    [].forEach.call(document.querySelectorAll('#scaleRow .chip'), function (el) { el.classList.toggle('on', curCfg.scales.indexOf(+el.dataset.s) >= 0); });
+  }
+  fetch('api/config').then(function (r) { return r.json(); }).then(function (j) {
+    curCfg = j.cfg;
+    $('topicList').innerHTML = j.topics.map(function (t) { return '<div class="topic" data-t="' + t.id + '"><span class="ck">✓</span><span>' + t.icon + ' ' + t.id + '. ' + esc(t.name) + '</span></div>'; }).join('');
+    $('countRow').innerHTML = [5, 10, 15, 20].map(function (n) { return '<span class="chip" data-n="' + n + '">' + n + ' ข้อ</span>'; }).join('');
+    $('scaleRow').innerHTML = j.scales.map(function (x) { return '<span class="chip" data-s="' + x + '">1:' + x.toLocaleString('en-US') + '</span>'; }).join('');
+    paintCfg();
+  });
+  function toggleIn(arr, v) { var i = arr.indexOf(v); if (i >= 0) { if (arr.length > 1) arr.splice(i, 1); } else arr.push(v); return arr.sort(function (a, b) { return a - b; }); }
+  $('topicList').onclick = function (e) { var el = e.target.closest('.topic'); if (!el || !curCfg) return; curCfg.topics = toggleIn(curCfg.topics.slice(), +el.dataset.t); paintCfg(); postCfg(); A.sfx('pop'); };
+  $('countRow').onclick = function (e) { var el = e.target.closest('.chip'); if (!el || !curCfg) return; curCfg.count = +el.dataset.n; paintCfg(); postCfg(); A.sfx('pop'); };
+  $('scaleRow').onclick = function (e) { var el = e.target.closest('.chip'); if (!el || !curCfg) return; curCfg.scales = toggleIn(curCfg.scales.slice(), +el.dataset.s); paintCfg(); postCfg(); A.sfx('pop'); };
+
   // ---------- แผนที่ ----------
-  var qm = QMap.create({ container: 'map', pad: { top: 30, bottom: 90, left: 30, right: 30 }, maxZoom: 15 });
+  var qm = QMap.create({ container: 'map', pad: { top: 30, bottom: 90, left: 30, right: 30 }, maxZoom: 19 });
   var map = qm.map, empty = { type: 'FeatureCollection', features: [] };
   qm.whenReady(function () {
     map.addSource('pins', { type: 'geojson', data: empty });
@@ -270,6 +324,8 @@
   // ---------- ห้องรอ: บัตรตัวละครเด้งเข้ามา ----------
   function drawLobby(s) {
     $('cnt').textContent = s.players; $('startBtn').disabled = s.players === 0;
+    $('startBtn').textContent = '▶ เริ่มเกม (' + s.total + ' ข้อ)';
+    if (s.cfg) { curCfg = s.cfg; paintCfg(); }
     var box = $('names'), keep = {};
     (s.names || []).forEach(function (n) {
       keep[n.k] = 1;
@@ -318,6 +374,16 @@
     $('map').style.visibility = mode === 'full' ? 'hidden' : 'visible';
   }
 
+  function fillPanel(q) {
+    var ch = q.type === 'choice';
+    $('numBig').hidden = ch; $('choiceList').hidden = !ch;
+    if (ch) {
+      $('choiceList').innerHTML = q.options.map(function (o, i) { return '<div class="opt"><span class="ol">' + 'กขคง'.charAt(i) + '</span><span class="ot">' + esc(o) + '</span><span class="oc"></span><div class="ob"></div></div>'; }).join('');
+      $('numSub').textContent = 'เลือกคำตอบบนมือถือ';
+    } else { $('numBig').textContent = '✏️ ?'; $('numSub').textContent = 'ตอบเป็นตัวเลข' + (q.numUnit ? ' (หน่วย: ' + q.numUnit + ')' : ''); }
+  }
+  function showNum(on) { $('numWrap').hidden = !on; if (on) { $('hdialWrap').hidden = true; $('map').style.visibility = 'hidden'; } }
+
   function render(s) {
     var phaseChanged = s.phase !== prev.phase, qChanged = s.qi !== prev.qi;
     var inGame = s.phase === 'question' || s.phase === 'reveal';
@@ -333,7 +399,8 @@
       if (phaseChanged) say('ศึก' + (s.title.replace('ศึก', '') || 'อ่านแผนที่') + ' กำลังจะเริ่ม! ผู้เล่น ' + s.players + ' คน เตรียมตัวให้พร้อม');
     }
     if (inGame) {
-      var q = s.q, isCompass = q.type === 'compass', hasMarkers = q.markers && q.markers.length > 1;
+      var q = s.q, isCompass = q.type === 'compass', isNum = q.type === 'num', isChoice = q.type === 'choice', hasMarkers = q.markers && q.markers.length > 1,
+        numOnMap = isNum && !!(q.frame || (q.markers && q.markers.length)), panelMode = isChoice || (isNum && !numOnMap);
       $('qno').textContent = 'ข้อ ' + (s.qi + 1) + ' / ' + s.total;
       $('prompt').textContent = q.prompt; $('hint').textContent = q.hint || '';
       $('avg').innerHTML = 'ค่าเฉลี่ยทั้งห้อง <b>' + s.avg.toFixed(1) + '%</b> · ผู้เล่น ' + s.players + ' คน';
@@ -351,7 +418,9 @@
           $('revealBox').hidden = true;
           qm.whenReady(function () { map.getSource('pins').setData(empty); map.getSource('ans').setData(empty); });
           qm.pad = { top: 30, bottom: 90, left: 30, right: 30 };
-          if (isCompass) {
+          showNum(false);
+          if (panelMode) { showDial(null); showNum(true); fillPanel(q); }
+          else if (isCompass) {
             dial.setTarget(null); dial.setHist(null); dial.setAngle(null);
             if (hasMarkers) { showDial('corner'); qm.pad = { top: 30, bottom: 90, left: 30, right: 600 }; qm.setQuestion(q); }
             else showDial('full');
@@ -359,15 +428,27 @@
         } else { // reveal
           A.sfx('reveal'); A.music.setRate(1);
           var t = s.reveal, lead = s.top[0];
-          var msg = isCompass ? 'เฉลย ' + Math.round(t.angle) + ' องศา ' : 'เฉลย ' + t.name + ' ';
+          var msg = isCompass ? 'เฉลย ' + Math.round(t.angle) + ' องศา ' : isChoice ? 'เฉลย ' + t.options[t.correct] + ' ' : isNum ? 'เฉลย ' + t.value + ' ' + (t.numUnit || '') + ' ' : 'เฉลย ' + t.name + ' ';
           say(msg + 'ค่าเฉลี่ยข้อนี้ ' + Math.round(s.qAvg) + ' เปอร์เซ็นต์' + (lead ? ' ผู้นำตอนนี้คือ ' + lead.name : ''));
           $('revealBox').hidden = false;
-          if (isCompass) {
-            $('revealBox').innerHTML = '✅ เฉลย: <b>' + Math.round(t.angle) + '°</b> — ' + esc(t.name) + '<br><small>คะแนนเฉลี่ยข้อนี้ ' + s.qAvg.toFixed(1) + '% · แท่งสีเหลือง = จำนวนคนที่ตอบในมุมนั้น (วงนอก)</small>';
+          if (isChoice) {
+            var cnt = [0, 0, 0, 0], tot = Math.max(1, (s.pins || []).length);
+            (s.pins || []).forEach(function (p) { if (p.c != null) cnt[p.c]++; });
+            [].forEach.call(document.querySelectorAll('#choiceList .opt'), function (el, i) { el.className = 'opt ' + (i === t.correct ? 'ok' : 'no'); el.querySelector('.oc').textContent = cnt[i] + ' คน'; el.querySelector('.ob').style.width = (cnt[i] / tot * 100) + '%'; });
+            $('numSub').textContent = '';
+            $('revealBox').innerHTML = '✅ เฉลย: <b>' + esc(t.options[t.correct]) + '</b><br><small>ตอบถูก ' + cnt[t.correct] + ' จาก ' + tot + ' คน · คะแนนเฉลี่ยข้อนี้ ' + s.qAvg.toFixed(1) + '%</small>';
+          } else if (isNum && numOnMap) {
+            $('revealBox').innerHTML = '✅ เฉลย: <b>' + t.value + ' ' + esc(t.numUnit || '') + '</b><br>' + esc(t.name) + '<br><small>คะแนนเฉลี่ยข้อนี้ ' + s.qAvg.toFixed(1) + '%</small>';
+          } else if (isNum) {
+            var exact = (s.pins || []).filter(function (p) { return p.v === t.value; }).length, near = (s.pins || []).filter(function (p) { return p.pct >= 50; }).length;
+            $('numBig').textContent = t.value; $('numSub').innerHTML = esc(t.numUnit || '') + '<br>' + esc(t.name) + '<br><span style="font-size:32px;color:#f5b301">ตอบตรงเป๊ะ ' + exact + ' คน · ใกล้เคียง (≥50%) ' + near + ' คน</span>';
+            $('revealBox').innerHTML = '✅ เฉลย: <b>' + t.value + ' ' + esc(t.numUnit || '') + '</b><br><small>คะแนนเฉลี่ยข้อนี้ ' + s.qAvg.toFixed(1) + '%</small>';
+          } else if (isCompass) {
+            $('revealBox').innerHTML = '✅ เฉลย: <b>' + Math.round(t.angle) + '°</b> (' + Math.round(t.angle * 6400 / 360) + ' มิลเลียม) — ' + esc(t.name) + '<br><small>คะแนนเฉลี่ยข้อนี้ ' + s.qAvg.toFixed(1) + '% · แท่งสีเหลือง = จำนวนคนที่ตอบในมุมนั้น (วงนอก)</small>';
             dial.setTarget(t.angle); dial.setHist(s.pins);
             if (hasMarkers) qm.setAux([[q.markers[0].lng, q.markers[0].lat], [q.markers[1].lng, q.markers[1].lat]]);
           } else {
-            var extra = t.type === 'dms' && t.dmsText ? '<br><b>' + esc(t.dmsText) + '</b>' : '';
+            var extra = (t.type === 'dms' || t.type === 'grid') && t.dmsText ? '<br><b>' + esc(t.dmsText) + '</b>' : '';
             $('revealBox').innerHTML = '✅ คำตอบ: <b>' + esc(t.name) + '</b>' + extra + '<br><small>คะแนนเฉลี่ยข้อนี้ ' + s.qAvg.toFixed(1) + '% · เต็ม 100% = ตรงจุด, 0% = ห่างเกิน ' + t.maxKm + ' กม.</small>';
             qm.whenReady(function () {
               qm.setLabels(true);
@@ -379,7 +460,7 @@
               (s.pins || []).forEach(function (p) { if (p.pct > 5) pts.push([p.lng, p.lat]); });
               qm.pad = { top: 120, bottom: 70, left: 70, right: 70 };
               map.setMaxBounds(null);
-              qm.fitPoints(pts, { maxZoom: q.frame ? 14 : 9, pad: qm.pad });
+              qm.fitPoints(pts, { maxZoom: q.frame ? 18 : 9, pad: qm.pad });
             });
           }
         }

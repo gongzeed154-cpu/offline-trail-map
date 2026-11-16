@@ -23,13 +23,30 @@
   function gridData(frame, stepMin) {
     var w = frame[0], s = frame[1], e = frame[2], n = frame[3], st = stepMin / 60, f = [];
     var padX = (e - w) * 0.6, padY = (n - s) * 0.6;
-    function lab(v, isLat) { var a = dms(v); return a[0] + '°' + p2(a[1]) + '′' + (isLat ? 'N' : 'E'); }
+    function lab(v, isLat) { var a = dms(v); return a[0] + '°' + p2(a[1]) + '′' + (stepMin < 1 ? p2(a[2]) + '″' : '') + (isLat ? 'N' : 'E'); }
     for (var la = Math.floor((s - padY) / st) * st; la <= n + padY; la += st)
       f.push({ type: 'Feature', properties: { label: lab(la + 1e-9, true) }, geometry: { type: 'LineString', coordinates: [[w - padX, la], [e + padX, la]] } });
     for (var lo = Math.floor((w - padX) / st) * st; lo <= e + padX; lo += st)
       f.push({ type: 'Feature', properties: { label: lab(lo + 1e-9, false) }, geometry: { type: 'LineString', coordinates: [[lo, s - padY], [lo, n + padY]] } });
     return { type: 'FeatureCollection', features: f };
   }
+
+  // เส้นกริด UTM แบบแผนที่กระดาษ (ทุก stepM เมตร) ป้ายเป็นเลข กม. 2 หลัก เช่น 62 = E 662 กม.  (ใช้โค้ดพิกัดเดียวกับแอปฝึกแผนที่)
+  function utmGridData(frame, stepM) {
+    var G = root.TrailGeo, Z = 47;
+    var cs = [[frame[0], frame[1]], [frame[2], frame[1]], [frame[2], frame[3]], [frame[0], frame[3]]].map(function (p) { return G.toUTM(p[1], p[0], Z); });
+    var es = cs.map(function (c) { return c.e; }), ns = cs.map(function (c) { return c.n; });
+    var minE = Math.min.apply(null, es), maxE = Math.max.apply(null, es), minN = Math.min.apply(null, ns), maxN = Math.max.apply(null, ns);
+    var padE = (maxE - minE) * 0.6, padN = (maxN - minN) * 0.6, f = [];
+    function pt(e, n) { var p = G.fromUTM(Z, true, e, n); return [p.lng, p.lat]; }
+    function lab(v) { return stepM < 1000 ? String(Math.floor(v / 100) % 1000).padStart(3, '0') : p2(Math.floor(v / 1000) % 100); }
+    for (var e = Math.floor((minE - padE) / stepM) * stepM; e <= maxE + padE; e += stepM)
+      f.push({ type: 'Feature', properties: { label: lab(e) }, geometry: { type: 'LineString', coordinates: [pt(e, minN - padN), pt(e, (minN + maxN) / 2), pt(e, maxN + padN)] } });
+    for (var n = Math.floor((minN - padN) / stepM) * stepM; n <= maxN + padN; n += stepM)
+      f.push({ type: 'Feature', properties: { label: lab(n) }, geometry: { type: 'LineString', coordinates: [pt(minE - padE, n), pt((minE + maxE) / 2, n), pt(maxE + padE, n)] } });
+    return { type: 'FeatureCollection', features: f };
+  }
+  function mgrs6(lat, lng, digits) { var G = root.TrailGeo, u = G.toUTM(lat, lng, 47); return G.mgrsFromUTM(u, lat, digits || 3); } // เช่น 47PPR 623 213
 
   function pinEl(color, star) {
     var d = document.createElement('div'); d.className = 'pin';
@@ -73,6 +90,17 @@
           0, '#9fd3a0', 150, '#bfe0a0', 400, '#e6eb9f', 800, '#e8cf86', 1200, '#d49f66', 1700, '#b0703f', 2200, '#8d5a3d', 2600, '#f4f0ea'] } }, firstSym);
       map.addLayer({ id: 'hill', type: 'hillshade', source: 'dem', layout: { visibility: 'none' }, paint: {
         'hillshade-exaggeration': 0.7, 'hillshade-shadow-color': '#2a2a20', 'hillshade-highlight-color': '#ffffff', 'hillshade-accent-color': '#4a4a38' } }, firstSym);
+      if (root.mlcontour) {
+        m.dem = new root.mlcontour.DemSource({ url: DEM, encoding: 'terrarium', maxzoom: 12, worker: true, cacheSize: 100, timeoutMs: 15000 });
+        m.dem.setupMaplibre(root.maplibregl);
+        map.addSource('contours', { type: 'vector', minzoom: 9, maxzoom: 15, tiles: [m.dem.contourProtocolUrl({
+          thresholds: { 9: [200, 1000], 10: [100, 500], 11: [50, 250], 12: [20, 100], 13: [10, 50] }, contourLayer: 'contours', elevationKey: 'ele', levelKey: 'level', extent: 4096, buffer: 1 })] });
+        map.addLayer({ id: 'contour-lines', type: 'line', source: 'contours', 'source-layer': 'contours', layout: { visibility: 'none', 'line-join': 'round' },
+          paint: { 'line-color': '#8a4b1c', 'line-opacity': 0.9, 'line-width': ['match', ['get', 'level'], 1, 1.7, 0.7] } }, firstSym);
+        map.addLayer({ id: 'contour-labels', type: 'symbol', source: 'contours', 'source-layer': 'contours', filter: ['>', ['get', 'level'], 0],
+          layout: { visibility: 'none', 'symbol-placement': 'line', 'text-size': 12, 'text-font': ['Noto Sans Bold'], 'text-field': ['number-format', ['get', 'ele'], {}], 'symbol-spacing': 300 },
+          paint: { 'text-color': '#5b2e0c', 'text-halo-color': 'rgba(255,255,255,.9)', 'text-halo-width': 1.5 } });
+      }
       map.addSource('grid', { type: 'geojson', data: EMPTY });
       map.addSource('frame', { type: 'geojson', data: EMPTY });
       map.addSource('aux', { type: 'geojson', data: EMPTY });
@@ -110,8 +138,9 @@
         m.setLabels(!!q.labels);
         map.setLayoutProperty('relief', 'visibility', q.terrain ? 'visible' : 'none');
         map.setLayoutProperty('hill', 'visibility', q.terrain ? 'visible' : 'none');
+        ['contour-lines', 'contour-labels'].forEach(function (id) { if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', (q.terrain || q.contours) ? 'visible' : 'none'); });
         var f = q.frame;
-        map.getSource('grid').setData(f && q.grid ? gridData(f, q.grid) : EMPTY);
+        map.getSource('grid').setData(f && q.grid ? (q.gridType === 'utm' ? utmGridData(f, q.grid) : gridData(f, q.grid)) : EMPTY);
         map.getSource('frame').setData(f ? { type: 'Feature', geometry: { type: 'LineString', coordinates: [[f[0], f[1]], [f[2], f[1]], [f[2], f[3]], [f[0], f[3]], [f[0], f[1]]] } } : EMPTY);
         (q.markers || []).forEach(function (mk) {
           var el = mk.label ? badgeEl(mk.label, mk.name, mk.label === 'A' ? '#1565c0' : '#c62828') : pinEl('#6a1b9a');
@@ -132,11 +161,11 @@
     };
     m.reset = function () { m.whenReady(function () {
       m.clearMarkers(); m.setAux(null); m.setLabels(true);
-      ['relief', 'hill'].forEach(function (l) { map.setLayoutProperty(l, 'visibility', 'none'); });
+      ['relief', 'hill', 'contour-lines', 'contour-labels'].forEach(function (l) { if (map.getLayer(l)) map.setLayoutProperty(l, 'visibility', 'none'); });
       map.getSource('grid').setData(EMPTY); map.getSource('frame').setData(EMPTY); m.fitTH(false);
     }); };
     return m;
   }
 
-  root.QMap = { create: create, fmtDMS: fmtDMS, fmtLL: fmtLL, fmtDec: fmtDec, dms: dms, pointName: pointName, pinEl: pinEl, TH: TH };
+  root.QMap = { mgrs6: mgrs6, create: create, fmtDMS: fmtDMS, fmtLL: fmtLL, fmtDec: fmtDec, dms: dms, pointName: pointName, pinEl: pinEl, TH: TH };
 })(window);

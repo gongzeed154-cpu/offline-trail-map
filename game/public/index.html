@@ -68,6 +68,26 @@
   .spin { width: 30px; height: 30px; border: 4px solid rgba(255,255,255,.3); border-top-color: #fff; border-radius: 50%; animation: sp 1s linear infinite; }
   @keyframes sp { to { transform: rotate(360deg); } }
   .pin { width: 30px; height: 40px; }
+  #myScore { font-weight: 800; color: var(--green); font-size: 14px; }
+  #pChoice { padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+  #pChoice button { border: 3px solid #cfd8d2; background: #f7faf8; border-radius: 14px; padding: 10px 12px; font-size: 17px; font-weight: 700; text-align: left; display: flex; align-items: center; gap: 10px; color: #222; }
+  #pChoice button .l { width: 30px; height: 30px; border-radius: 15px; background: var(--green); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 16px; flex: none; }
+  #pChoice button.sel { border-color: var(--green); background: #e6f3ea; box-shadow: 0 0 0 3px rgba(46,107,63,.2); }
+  #pChoice button.ok { border-color: #2e9d4f; background: #d5f2dc; }
+  #pChoice button.bad { border-color: #d93025; background: #fde4e1; }
+  #pDial.night { background: #0a120b; }
+  #pDial.night #dRead { color: #b6ffb6; } #pDial.night #dRead small { color: #8fd18f; }
+  #screen.gold { background: linear-gradient(160deg, #7a5a00, #d4a017 55%, #ffe98a); color: #2a1d00; }
+  #screen.silver { background: linear-gradient(160deg, #424c57, #aab4bf 55%, #f1f4f7); color: #1b232b; }
+  #screen.bronze { background: linear-gradient(160deg, #54300f, #b8732e 55%, #f2cfa6); color: #2a1604; }
+  #screen.top10 { background: linear-gradient(160deg, #123a63, #1e6fb3 55%, #7cc4ff); }
+  .medal { font-size: 120px; line-height: 1; animation: medal 1.5s cubic-bezier(.2,1.5,.4,1); filter: drop-shadow(0 6px 10px rgba(0,0,0,.35)); }
+  @keyframes medal { from { transform: scale(0) rotate(-180deg); opacity: 0; } }
+  .me.shine { animation: bob 1.6s ease-in-out infinite, ring 1.6s ease-in-out infinite; }
+  @keyframes ring { 50% { box-shadow: 0 0 0 14px rgba(255,255,255,.45), 0 0 40px 10px rgba(255,235,120,.9); } }
+  .cheer { max-width: 330px; font-size: 18px; line-height: 1.5; padding: 10px 14px; background: rgba(255,255,255,.14); border-radius: 16px; }
+  .fxc { position: fixed; inset: 0; z-index: 30; pointer-events: none; }
+  #screen .pct.dark { color: inherit; }
 
   /* เลือกตัวละคร */
   #picker { width: 100%; max-width: 340px; }
@@ -92,7 +112,7 @@
 
 <div id="top" hidden>
   <div class="card">
-    <div id="qn"><span id="qno"></span><span><span id="tleft"></span></span></div>
+    <div id="qn"><span id="qno"></span><span><span id="myScore"></span> <span id="tleft"></span></span></div>
     <div id="prompt"></div>
     <div id="hint"></div>
     <div id="bar"><div id="barIn"></div></div>
@@ -105,15 +125,16 @@
     <div id="dialHost"></div>
     <div id="dRead">แตะ/ลากบนหน้าปัดเพื่อตั้งเข็ม</div>
   </div>
+  <div id="pChoice" class="card" hidden></div>
   <div id="pDms" class="card" hidden>
-    <div class="dline"><span class="h">N</span><div class="df" data-i="0"></div><span class="du">°</span><div class="df" data-i="1"></div><span class="du">′</span><div class="df" data-i="2"></div><span class="du">″</span></div>
-    <div class="dline"><span class="h">E</span><div class="df" data-i="3"></div><span class="du">°</span><div class="df" data-i="4"></div><span class="du">′</span><div class="df" data-i="5"></div><span class="du">″</span></div>
+    <div id="flds"></div>
     <div id="keys"></div>
   </div>
   <button id="confirm" class="btn" disabled>แตะแผนที่เพื่อปักหมุด</button>
   <div id="result" class="card" hidden></div>
 </div>
 
+<canvas id="fx" class="fxc" hidden></canvas>
 <div id="screen">
   <h1 id="sTitle">🗺️ เกมแผนที่</h1>
   <p id="sText">เลือกตัวละคร แล้วตั้งชื่อ</p>
@@ -128,6 +149,8 @@
 </div>
 
 <script src="lib/maplibre-gl.js"></script>
+<script src="lib/maplibre-contour.min.js"></script>
+<script src="geo.js"></script>
 <script src="qmap.js"></script>
 <script src="dial.js"></script>
 <script>
@@ -164,7 +187,7 @@
   drawPicker();
 
   // ---------- แผนที่ ----------
-  var qm = QMap.create({ container: 'map', pad: { top: 150, bottom: 110, left: 14, right: 14 }, maxZoom: 15 });
+  var qm = QMap.create({ container: 'map', pad: { top: 150, bottom: 110, left: 14, right: 14 }, maxZoom: 19 });
   var map = qm.map;
   var myMarker = null, ansMarker = null;
   function clearMarkers() {
@@ -173,19 +196,22 @@
     qm.setAux(null);
   }
   function fmtKm(km) { return km < 1 ? Math.round(km * 1000) + ' ม.' : (km < 10 ? km.toFixed(1) : Math.round(km)) + ' กม.'; }
-  var kindOf = function (q) { return q.type === 'compass' ? 'dial' : q.type === 'dms' ? 'dms' : 'pin'; };
+  var kindOf = function (q) { return q.type === 'compass' ? 'dial' : (q.type === 'dms' || q.type === 'grid' || q.type === 'num' || q.type === 'choice') ? q.type : 'pin'; };
+  var TYPED = { dms: 1, grid: 1, num: 1 };
 
   // ---------- สถานะ ----------
   var S = null, offset = 0, myId = store.get('mapgame_id'), submitted = false, curQ = -2, curPhase = '', es = null, qMs = 25000, lastSec = -1;
   var dial = Dial.create($('dialHost'), { interactive: true, onChange: function (a) { dialChanged(a); } });
-  var dmsVals = ['', '', '', '', '', ''], dmsIdx = 0, DMS_MAX = [2, 2, 2, 3, 2, 2];
+  var choiceIdx = null, lastTotal = 0;
+  function newDial(night) { dial = Dial.create($('dialHost'), { interactive: true, night: night, onChange: function (a) { dialChanged(a); } }); $('pDial').classList.toggle('night', !!night); }
+  var fvals = [], fmax = [], flim = [], fidx = 0, fkind = 'dms';
 
   // ปักหมุด
   function updateReadout() {
     var q = S && S.q;
     if (!myMarker || !q || q.readout === 'none') { $('readout').hidden = true; return; }
     var ll = myMarker.getLngLat();
-    $('readout').hidden = false; $('readout').textContent = q.readout === 'dms' ? QMap.fmtLL(ll.lat, ll.lng) : QMap.fmtDec(ll.lat, ll.lng);
+    $('readout').hidden = false; $('readout').textContent = q.readout === 'dms' ? QMap.fmtLL(ll.lat, ll.lng) : (q.readout === 'mgrs6' || q.readout === 'mgrs') ? 'MGRS ' + QMap.mgrs6(ll.lat, ll.lng, q.digits) : QMap.fmtDec(ll.lat, ll.lng);
   }
   map.on('click', function (e) {
     if (submitted || !S || S.phase !== 'question' || kindOf(S.q) !== 'pin') return;
@@ -197,69 +223,141 @@
     $('confirm').disabled = false; $('confirm').textContent = '✔ ยืนยันคำตอบ';
   });
 
-  // กรอกพิกัด
-  (function buildKeys() {
+  // กรอกตัวเลข: องศา ลิปดา ฟิลิปดา | พิกัดกริด 6 หลัก | ตัวเลข (มิลเลียม/องศา)
+  function buildKeys(dec) {
     var h = '';
-    [1, 2, 3, 4, 5, 6, 7, 8, 9, '⌫', 0, '➜'].forEach(function (k) { h += '<button data-k="' + k + '"' + (k === '➜' ? ' class="nx"' : '') + '>' + k + '</button>'; });
+    [1, 2, 3, 4, 5, 6, 7, 8, 9, '⌫', 0, dec ? '.' : '➜'].forEach(function (k) { h += '<button data-k="' + k + '"' + (k === '➜' ? ' class="nx"' : '') + '>' + k + '</button>'; });
     $('keys').innerHTML = h;
-  })();
-  function drawDms() {
-    [].forEach.call(document.querySelectorAll('.df'), function (d) {
-      var i = +d.dataset.i; d.textContent = dmsVals[i]; d.className = 'df' + (i === dmsIdx && !submitted ? ' act' : '');
-    });
-    var ok = dmsVals.every(function (v) { return v !== ''; });
-    if (!submitted) { $('confirm').disabled = !ok; $('confirm').textContent = ok ? '✔ ยืนยันคำตอบ' : 'กรอกพิกัดให้ครบ'; }
   }
-  document.querySelectorAll('.df').forEach(function (d) { d.onclick = function () { if (!submitted) { dmsIdx = +d.dataset.i; drawDms(); A.sfx('tickLow'); } }; });
+  buildKeys(false);
+  function fld(i) { return '<div class="df" data-i="' + i + '"></div>'; }
+  function buildFields(q) {
+    fkind = q.type; fidx = 0; buildKeys(!!q.decimal && q.type === 'num');
+    if (fkind === 'dms') {
+      fmax = [2, 2, 2, 3, 2, 2]; flim = [0, 59, 59, 0, 59, 59];
+      $('flds').innerHTML = '<div class="dline"><span class="h">N</span>' + fld(0) + '<span class="du">°</span>' + fld(1) + '<span class="du">′</span>' + fld(2) + '<span class="du">″</span></div>' +
+        '<div class="dline"><span class="h">E</span>' + fld(3) + '<span class="du">°</span>' + fld(4) + '<span class="du">′</span>' + fld(5) + '<span class="du">″</span></div>';
+    } else if (fkind === 'grid') {
+      var dg = q.digits || 3; fmax = [dg, dg]; flim = [0, 0];
+      $('flds').innerHTML = '<div class="dline"><span class="h" style="width:auto">E</span>' + fld(0) + '<span class="h" style="width:auto;margin-left:14px">N</span>' + fld(1) + '</div>' +
+        '<div style="text-align:center;font-size:12px;color:#666;margin-bottom:4px">พิกัดกริด ' + (dg * 2) + ' หลัก = E ' + dg + ' หลัก + N ' + dg + ' หลัก</div>';
+    } else {
+      var nd = q.numDigits || 4; fmax = [nd]; flim = [0];
+      $('flds').innerHTML = '<div class="dline">' + fld(0) + '<span class="du" style="margin-left:6px">' + (q.numUnit || '') + '</span></div>';
+    }
+    fvals = fmax.map(function () { return ''; });
+    [].forEach.call(document.querySelectorAll('.df'), function (d) { d.onclick = function () { if (!submitted) { fidx = +d.dataset.i; drawFields(); A.sfx('tickLow'); } }; });
+    drawFields();
+  }
+  function fieldsDone() { return fvals.length > 0 && fvals.every(function (v) { return v !== '' && v !== '.' && v.charAt(v.length - 1) !== '.'; }); }
+  function drawFields() {
+    [].forEach.call(document.querySelectorAll('.df'), function (d) {
+      var i = +d.dataset.i; d.textContent = fvals[i]; d.className = 'df' + (i === fidx && !submitted ? ' act' : '');
+    });
+    var ok = fieldsDone();
+    if (!submitted && S && TYPED[kindOf(S.q)]) { $('confirm').disabled = !ok; $('confirm').textContent = ok ? '✔ ยืนยันคำตอบ' : 'กรอกให้ครบ'; }
+  }
   $('keys').onclick = function (e) {
     var k = e.target.dataset && e.target.dataset.k; if (k == null || submitted) return;
     A.unlock(); A.sfx('tickLow');
-    if (k === '⌫') dmsVals[dmsIdx] = dmsVals[dmsIdx].slice(0, -1);
-    else if (k === '➜') dmsIdx = (dmsIdx + 1) % 6;
+    if (k === '⌫') fvals[fidx] = fvals[fidx].slice(0, -1);
+    else if (k === '➜') fidx = (fidx + 1) % fvals.length;
+    else if (k === '.') { if (fvals[fidx] !== '' && fvals[fidx].indexOf('.') < 0 && fvals[fidx].length < fmax[fidx]) fvals[fidx] += '.'; }
     else {
-      var nv = dmsVals[dmsIdx] + k;
-      if (nv.length <= DMS_MAX[dmsIdx] && !((dmsIdx === 1 || dmsIdx === 2 || dmsIdx === 4 || dmsIdx === 5) && +nv > 59)) {
-        dmsVals[dmsIdx] = nv;
-        var full = (dmsIdx === 0 && nv.length === 2) || (dmsIdx === 3 && nv.length === 3) || ((dmsIdx === 1 || dmsIdx === 2 || dmsIdx === 4 || dmsIdx === 5) && nv.length === 2);
-        if (full && dmsIdx < 5) dmsIdx++;
+      var nv = fvals[fidx] + k;
+      if (nv.length <= fmax[fidx] && !(flim[fidx] && +nv > flim[fidx])) {
+        fvals[fidx] = nv;
+        if (nv.length === fmax[fidx] && fidx < fvals.length - 1) fidx++;
       }
     }
-    drawDms();
+    drawFields();
   };
 
   // เข็มทิศ
   function dialChanged(a) {
     if (submitted) return;
-    $('dRead').innerHTML = a + '° <small>≈ ' + QMap.pointName(a) + '</small>';
+    var mil = Math.round(a * 6400 / 360) % 6400;
+    $('dRead').innerHTML = (S && S.q && S.q.unit === 'mil') ? mil + ' มิลเลียม <small>(' + a + '°)</small>' : a + '° <small>· ' + mil + ' มิลเลียม · ' + QMap.pointName(a) + '</small>';
     $('confirm').disabled = false; $('confirm').textContent = '✔ ยืนยันคำตอบ';
   }
+
+  function buildChoices(q) {
+    choiceIdx = null;
+    $('pChoice').innerHTML = q.options.map(function (o, i) { return '<button data-i="' + i + '"><span class="l">' + 'กขคง'.charAt(i) + '</span><span>' + esc(o) + '</span></button>'; }).join('');
+  }
+  $('pChoice').onclick = function (e) {
+    var b = e.target.closest('button'); if (!b || submitted || !S || S.phase !== 'question') return;
+    choiceIdx = +b.dataset.i; A.sfx('pop');
+    [].forEach.call($('pChoice').children, function (x, i) { x.className = i === choiceIdx ? 'sel' : ''; });
+    $('confirm').disabled = false; $('confirm').textContent = '✔ ยืนยันคำตอบ';
+  };
 
   function submit() {
     if (submitted || !S || S.phase !== 'question') return;
     var kind = kindOf(S.q), body = { id: myId };
     if (kind === 'pin') { if (!myMarker) return; var ll = myMarker.getLngLat(); body.lat = ll.lat; body.lng = ll.lng; myMarker.setDraggable(false); }
-    else if (kind === 'dms') { if (!dmsVals.every(function (v) { return v !== ''; })) return; body.d = dmsVals.map(Number); }
+    else if (kind === 'choice') { if (choiceIdx == null) return; body.c = choiceIdx; }
+    else if (TYPED[kind]) { if (!fieldsDone()) return; var nums = fvals.map(Number); if (kind === 'dms') body.d = nums; else if (kind === 'grid') body.g = nums; else body.v = nums[0]; }
     else { var a = dial.getAngle(); if (a == null) return; body.ang = a; dial.setInteractive(false); }
-    submitted = true; A.sfx('ding'); drawDms();
+    submitted = true; A.sfx('ding'); drawFields();
     $('confirm').disabled = true; $('confirm').textContent = 'ส่งแล้ว ✓ รอเฉลย…';
     fetch('api/answer', { method: 'POST', body: JSON.stringify(body) }).catch(function () { submitted = false; });
   }
   $('confirm').onclick = function () { A.unlock(); submit(); };
 
   function showScreen(title, text, extra, mode) { // mode: 'join' แสดงฟอร์มเข้าร่วม
-    $('screen').hidden = false;
+    $('screen').hidden = false; $('screen').className = '';
     $('sTitle').innerHTML = title; $('sText').innerHTML = text; $('sExtra').innerHTML = extra || '';
     ['picker'].forEach(function (id) { $(id).hidden = mode !== 'join'; });
     document.querySelector('.nrow').hidden = mode !== 'join'; $('join').hidden = mode !== 'join';
   }
-  function hideScreen() { $('screen').hidden = true; }
+  function hideScreen() { $('screen').hidden = true; $('screen').className = ''; stopFx(); }
+
+  // ----- เอฟเฟกต์ตอนจบ -----
+  var fxRun = false;
+  function stopFx() { fxRun = false; $('fx').hidden = true; }
+  function burst(colors, secs, count) {
+    var c = $('fx'); c.hidden = false; c.width = innerWidth; c.height = innerHeight;
+    var g = c.getContext('2d'), ps = [], i;
+    for (i = 0; i < count; i++) ps.push({ x: Math.random() * c.width, y: -Math.random() * c.height * 0.8, vx: (Math.random() - .5) * 3, vy: 2 + Math.random() * 4, r: 4 + Math.random() * 6, c: colors[i % colors.length], a: Math.random() * 6, va: (Math.random() - .5) * .3 });
+    var t0 = Date.now(); fxRun = true;
+    (function f() {
+      if (!fxRun || Date.now() - t0 > secs * 1000) { g.clearRect(0, 0, c.width, c.height); c.hidden = true; fxRun = false; return; }
+      g.clearRect(0, 0, c.width, c.height);
+      ps.forEach(function (p) { p.x += p.vx; p.y += p.vy; p.a += p.va; if (p.y > c.height) { p.y = -10; p.x = Math.random() * c.width; }
+        g.save(); g.translate(p.x, p.y); g.rotate(p.a); g.fillStyle = p.c; g.fillRect(-p.r, -p.r / 2, p.r * 2, p.r); g.restore(); });
+      requestAnimationFrame(f);
+    })();
+  }
+  var CHEERS = [
+    'เก่งมากที่ลุยจนจบ! ทุกข้อคือการฝึก ครั้งหน้าจะแม่นขึ้นแน่นอน 💪',
+    'แผนที่ไม่ใช่เรื่องยาก ถ้าฝึกบ่อยๆ — คุณกำลังก้าวหน้าอยู่นะ 🌱',
+    'อย่าเพิ่งกังวลกับอันดับ ความรู้ที่ได้วันนี้ติดตัวคุณไปตลอด 🧭',
+    'ทุกคนเริ่มจากศูนย์ แต่คุณไม่หยุดแค่นั้น ภูมิใจในตัวเองได้เลย ✨',
+    'ที่ผิดวันนี้ คือสิ่งที่จะจำแม่นที่สุดในวันพรุ่งนี้ สู้ต่อไป! 🔥',
+    'ความพยายามของคุณมีค่า นักเดินทางที่เก่งเริ่มจากการหลงทางมาก่อนทั้งนั้น 🗺️'
+  ];
+  function finalScreen(s) {
+    var m = s.me, rk = m.rank, pct = m.pct.toFixed(1) + '%', cls = '', head, msg, medal, colors;
+    if (rk === 1) { cls = 'gold'; medal = '🥇'; head = 'อันดับ 1 — แชมป์!'; msg = 'ยอดเยี่ยมที่สุด! คุณคือผู้อ่านแผนที่เก่งที่สุดของห้องนี้ 👑'; colors = ['#ffd700', '#fff3b0', '#f5b301', '#ffffff']; }
+    else if (rk === 2) { cls = 'silver'; medal = '🥈'; head = 'อันดับ 2 — เหรียญเงิน'; msg = 'เก่งมาก! เฉียดแชมป์ไปนิดเดียวเท่านั้น ✨'; colors = ['#e8edf2', '#b9c2cc', '#ffffff', '#8fa0b0']; }
+    else if (rk === 3) { cls = 'bronze'; medal = '🥉'; head = 'อันดับ 3 — เหรียญทองแดง'; msg = 'ฝีมือดีเยี่ยม ติดโพเดียมแล้ว! 🎉'; colors = ['#cd7f32', '#f2cfa6', '#b8732e', '#ffffff']; }
+    else if (rk <= 10) { cls = 'top10'; medal = '🏅'; head = 'ติดท็อปเท็น! อันดับ ' + rk; msg = 'เก่งมาก! คุณติด 10 อันดับแรกของห้อง 🌟'; colors = ['#7cc4ff', '#ffffff', '#f5b301', '#1e6fb3']; }
+    else { medal = '🏁'; head = 'จบเกมแล้ว!'; msg = CHEERS[(m.name.length + rk) % CHEERS.length]; colors = null; }
+    showScreen('<div class="medal">' + medal + '</div>' + head, esc(m.name),
+      '<div class="me shine" style="border-color:' + m.color + '">' + m.av + '</div>' +
+      '<div class="pct' + (cls ? ' dark' : '') + '">' + pct + '</div><p style="font-size:19px;font-weight:700">อันดับ ' + rk + ' จาก ' + m.of + ' คน</p>' +
+      '<div class="cheer">' + msg + '</div>');
+    $('screen').className = cls;
+    if (colors) burst(colors, rk <= 3 ? 12 : 6, rk <= 3 ? 160 : 70);
+  }
   function avBubble(m) { return '<div class="me" style="border-color:' + m.color + '">' + m.av + '</div>'; }
 
   function layoutFor(kind, hasMap) {
-    var bottom = kind === 'pin' ? 110 : kind === 'dms' ? 340 : 390;
+    var bottom = kind === 'pin' ? 110 : kind === 'dms' ? 340 : (kind === 'grid' || kind === 'num') ? 280 : 390;
     qm.pad = { top: 150, bottom: bottom, left: 14, right: 14 };
     $('cover').hidden = hasMap;
-    $('pDial').hidden = kind !== 'dial'; $('pDms').hidden = kind !== 'dms';
+    $('pDial').hidden = kind !== 'dial'; $('pDms').hidden = !TYPED[kind]; $('pChoice').hidden = kind !== 'choice';
     $('dialHost').className = (kind === 'dial' && !hasMap) ? 'big' : '';
   }
 
@@ -276,29 +374,32 @@
     } else if (s.phase === 'question') {
       hideScreen(); $('top').hidden = false; $('bottom').hidden = false;
       var q = s.q, kind = kindOf(q);
+      $('myScore').textContent = 'คะแนน ' + (s.me.answered ? s.me.pct : lastTotal).toFixed(1) + '%';
       if (qChanged) {
         curQ = s.qi; clearMarkers(); submitted = false; lastSec = -1; A.sfx('whoosh');
         $('qno').textContent = 'ข้อ ' + (s.qi + 1) + ' / ' + s.total;
         $('prompt').textContent = q.prompt; $('hint').textContent = q.hint; $('hint').hidden = !q.hint;
-        var hasMap = !(kind === 'dial' && !(q.markers && q.markers.length));
+        var hasMap = kind === 'choice' ? false : kind === 'num' ? !!(q.frame || (q.markers && q.markers.length)) : !(kind === 'dial' && !(q.markers && q.markers.length));
         layoutFor(kind, hasMap);
         if (hasMap) qm.setQuestion(q);
         $('result').hidden = true; $('readout').hidden = true;
         $('confirm').hidden = kind === 'dial' ? false : false; $('confirm').disabled = true;
         if (kind === 'pin') $('confirm').textContent = 'แตะแผนที่เพื่อปักหมุด';
-        if (kind === 'dms') { dmsVals = ['', '', '', '', '', '']; dmsIdx = 0; $('confirm').textContent = 'กรอกพิกัดให้ครบ'; drawDms(); }
-        if (kind === 'dial') { dial.setAngle(null); dial.setTarget(null); dial.setHist(null); dial.setInteractive(true); $('dRead').innerHTML = 'แตะ/ลากบนหน้าปัดเพื่อตั้งเข็ม'; $('confirm').textContent = 'ตั้งเข็มก่อน'; }
+        if (TYPED[kind]) { buildFields(q); }
+        if (kind === 'choice') { buildChoices(q); $('confirm').textContent = 'เลือกคำตอบก่อน'; }
+        if (kind === 'dial') { newDial(q.dialStyle === 'night'); dial.setAngle(null); dial.setTarget(null); dial.setHist(null); dial.setInteractive(true); $('dRead').innerHTML = 'แตะ/ลากบนหน้าปัดเพื่อตั้งเข็ม'; $('confirm').textContent = 'ตั้งเข็มก่อน'; }
       }
       if (s.me.answered && !submitted) { // กลับเข้ามาใหม่หลังตอบแล้ว
         submitted = true; var c = s.me.cur;
         if (kind === 'pin' && !myMarker) { myMarker = new maplibregl.Marker({ element: QMap.pinEl('#d93025'), anchor: 'bottom' }).setLngLat([c.lng, c.lat]).addTo(map); updateReadout(); }
         if (kind === 'dial') { dial.setAngle(c.ang); dial.setInteractive(false); }
-        $('confirm').disabled = true; $('confirm').textContent = 'ส่งแล้ว ✓ รอเฉลย…'; drawDms();
+        $('confirm').disabled = true; $('confirm').textContent = 'ส่งแล้ว ✓ รอเฉลย…'; drawFields();
       }
     } else if (s.phase === 'reveal') {
       hideScreen(); $('top').hidden = false; $('bottom').hidden = false;
-      var kd = kindOf(s.q), t = s.reveal, r = s.me.last;
+      var kd = kindOf(s.q), t = s.reveal, r = s.me.last; lastTotal = s.me.pct; $('myScore').textContent = 'คะแนน ' + s.me.pct.toFixed(1) + '%';
       $('confirm').hidden = true; $('readout').hidden = true; $('pDms').hidden = true;
+      if (phaseChanged && kd === 'choice') [].forEach.call($('pChoice').children, function (x, i) { x.className = i === t.correct ? 'ok' : (r && i === r.c ? 'bad' : ''); });
       if (phaseChanged) {
         A.sfx(r ? (r.pct >= 70 ? 'good' : r.pct >= 30 ? 'ok' : 'bad') : 'bad');
         clearMarkers();
@@ -306,6 +407,8 @@
           dial.setTarget(t.angle); dial.setInteractive(false);
           if (r) dial.setAngle(r.ang);
           if (s.q.markers && s.q.markers.length > 1) qm.setAux([[s.q.markers[0].lng, s.q.markers[0].lat], [s.q.markers[1].lng, s.q.markers[1].lat]]);
+        } else if (kd === 'num' || kd === 'choice') {
+          // ข้อกรอกตัวเลข/เลือกตอบ: ไม่มีหมุดเฉลย (ข้อกรอกตัวเลขที่มีแผนที่ก็ไม่ปักหมุด)
         } else {
           qm.setLabels(true);
           ansMarker = new maplibregl.Marker({ element: QMap.pinEl('#2e6b3f', true), anchor: 'bottom' }).setLngLat([t.lng, t.lat]).addTo(map);
@@ -320,19 +423,25 @@
         }
       }
       var sub, extra = '';
-      if (kd === 'dial') sub = r ? 'คำตอบของคุณ ' + r.ang + '° (คลาดเคลื่อน ' + r.diff.toFixed(0) + '°)' : 'ไม่ได้ตอบข้อนี้';
+      if (kd === 'dial') sub = r ? 'คำตอบของคุณ ' + r.ang + '° · ' + Math.round(r.ang * 6400 / 360) + ' มิลเลียม (คลาดเคลื่อน ' + r.diff.toFixed(0) + '°)' : 'ไม่ได้ตอบข้อนี้';
+      else if (kd === 'choice') sub = r ? (r.c === t.correct ? 'ตอบถูก ✓' : 'คำตอบของคุณ: ' + esc(s.q.options[r.c]) + ' ✗') : 'ไม่ได้ตอบข้อนี้';
+      else if (kd === 'num') sub = r ? 'คำตอบของคุณ ' + r.v + ' ' + (t.numUnit || '') + ' (คลาด ' + r.diff + ')' : 'ไม่ได้ตอบข้อนี้';
       else sub = r ? 'คำตอบของคุณห่าง ' + fmtKm(r.km) : 'ไม่ได้ตอบข้อนี้';
-      if (kd === 'dial') extra = '<div class="big">' + Math.round(t.angle) + '°</div><div class="sub">' + esc(t.name) + '</div>';
-      else if (kd === 'dms') extra = '<div class="big" style="font-size:22px">' + esc(t.dmsText) + '</div><div class="sub">' + esc(t.name) + '</div>';
+      if (kd === 'dial') extra = '<div class="big">' + Math.round(t.angle) + '° · ' + Math.round(t.angle * 6400 / 360) + ' มิลเลียม</div><div class="sub">' + esc(t.name) + '</div>';
+      else if (kd === 'choice') extra = '<div class="big" style="font-size:22px">' + esc(t.options[t.correct]) + '</div>';
+      else if (kd === 'num') extra = '<div class="big">' + t.value + ' ' + esc(t.numUnit || '') + '</div><div class="sub">' + esc(t.name) + '</div>';
+      else if (kd === 'dms' || kd === 'grid') extra = '<div class="big" style="font-size:22px">' + esc(t.dmsText) + '</div><div class="sub">' + esc(t.name) + '</div>';
       else extra = '<div class="big" style="font-size:24px">' + esc(t.name) + '</div>';
       $('result').hidden = false;
       $('result').innerHTML = '<div class="sub">✅ คำตอบที่ถูกต้อง</div>' + extra + '<div class="sub" style="margin-top:6px">' + sub + '</div>' +
-        '<div class="tot">ดูคะแนนที่หน้าจอหลัก 📺</div>';
+        '<div class="tot">ข้อนี้ <b>' + (r ? r.pct.toFixed(1) : '0.0') + '%</b> · คะแนนรวม <b>' + s.me.pct.toFixed(1) + '%</b></div>';
     } else if (s.phase === 'final') {
       clearMarkers(); $('top').hidden = true; $('bottom').hidden = true; $('cover').hidden = true;
-      showScreen('🏁 จบเกม', esc(s.me.name), avBubble(s.me) + '<p style="margin-top:10px">ดูคะแนนและอันดับที่หน้าจอหลัก 📺</p>');
+      finalScreen(s);
     }
   }
+
+  window.GameDebug = { finalScreen: finalScreen }; // ใช้ทดสอบหน้าจบเกมแต่ละอันดับ
 
   // นับเวลา + เสียงนับถอยหลัง + ส่งอัตโนมัติเมื่อหมดเวลา
   setInterval(function () {
@@ -349,7 +458,7 @@
       if (sec <= 5 && sec >= 1 && sec !== lastSec) { lastSec = sec; if (!submitted) A.sfx('tickLow'); }
       if (left <= 400 && !submitted) { // หมดเวลา — ส่งคำตอบที่มีอยู่ให้อัตโนมัติ
         var k = kindOf(S.q);
-        if ((k === 'pin' && myMarker) || (k === 'dms' && dmsVals.every(function (v) { return v !== ''; })) || (k === 'dial' && dial.getAngle() != null)) submit();
+        if ((k === 'pin' && myMarker) || (TYPED[k] && fieldsDone()) || (k === 'choice' && choiceIdx != null) || (k === 'dial' && dial.getAngle() != null)) submit();
       }
     }
     if (S.phase === 'reveal') $('tleft').textContent = '';

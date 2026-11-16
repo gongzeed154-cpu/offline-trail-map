@@ -10,8 +10,9 @@ const crypto = require('crypto');
 
 const PORT = +process.env.PORT || 3000;
 const CFG = JSON.parse(fs.readFileSync(path.join(__dirname, 'questions.json'), 'utf8'));
-const QS = CFG.questions;
-const N = QS.length;
+const bank = require('./bank.js');
+let QS = [], N = 0;
+let gameCfg = JSON.parse(JSON.stringify(bank.DEFAULTS)); // หัวข้อ / จำนวนข้อ / มาตราส่วน ที่ครูเลือก
 const T_COUNT = (CFG.countdownSeconds || 5) * 1000;
 const qMs = q => (q.seconds || CFG.questionSeconds || 25) * 1000;
 const T_REVEAL = (CFG.revealSeconds || 6) * 1000;
@@ -55,18 +56,43 @@ function bearingDeg(a, b, c, d) { // มุมภาค (azimuth) จากจ�
   return (Math.atan2(y, x) / r + 360) % 360;
 }
 const angDiff = (a, b) => { const d = Math.abs(a - b) % 360; return d > 180 ? 360 - d : d; };
-QS.forEach(q => {
+// ใช้โค้ดพิกัดชุดเดียวกับแอปฝึกแผนที่ (UTM / MGRS / มุมกริด) — คัดลอกมาจาก docs/geo.js
+const Geo = require('./public/geo.js').TrailGeo;
+const pad3 = v => String(Math.floor(v)).padStart(3, '0');
+function prepare(q) {
   q.type = q.type || 'pin';
-  if (q.type === 'compass' && q.angle == null && q.from && q.to)
-    q.angle = Math.round(bearingDeg(q.from.lat, q.from.lng, q.to.lat, q.to.lng) * 10) / 10;
-});
+  if (q.utm) { const ll = Geo.fromUTM(q.utm.zone || 47, true, q.utm.e, q.utm.n); q.lat = ll.lat; q.lng = ll.lng; } // เฉลยเป็นพิกัดกริด UTM
+  q.gridMode = q.type === 'grid' || !!q.utm || (q.gridType === 'utm' && q.lat != null);
+  if (q.gridMode) {
+    q.u = q.utm ? { zone: 47, north: true, e: q.utm.e, n: q.utm.n } : Geo.toUTM(q.lat, q.lng, 47);
+    const r3 = v => Math.round(v * 1000) / 1000; q.u.e = r3(q.u.e); q.u.n = r3(q.u.n); // กันเศษทศนิยมลอยตอนปัดลงเป็นช่อง 100 ม.
+    q.digits = q.digits || 3; const un = Math.pow(10, 5 - q.digits), pd = v => String(Math.floor(v)).padStart(q.digits, '0');
+    q.gridText = pd((q.u.e % 100000) / un) + ' ' + pd((q.u.n % 100000) / un);
+    q.mgrsText = Geo.mgrsFromUTM(q.u, q.lat, q.digits);
+    if (!q.frame) { // กรอบแผนที่รอบจุดเฉลย (ครึ่งหนึ่งของด้าน, กม.) ในระบบกริด UTM
+      const h = (q.halfKm || 2.5) * 1000, ps = [[-h, -h], [h, -h], [h, h], [-h, h]].map(d => Geo.fromUTM(47, true, q.u.e + d[0], q.u.n + d[1]));
+      q.frame = [Math.min(...ps.map(p => p.lng)), Math.min(...ps.map(p => p.lat)), Math.max(...ps.map(p => p.lng)), Math.max(...ps.map(p => p.lat))];
+    }
+    if (!q.grid) q.grid = 1000; // ระยะเส้นกริด (เมตร)
+  }
+  if (q.type === 'compass' && q.angle == null && q.from && q.to) // ค่าเริ่มต้น = มุมกริด (grid azimuth) เหมือนแอป; north:"true" = เหนือจริง
+    q.angle = q.north === 'true' ? Math.round(bearingDeg(q.from.lat, q.from.lng, q.to.lat, q.to.lng) * 10) / 10
+      : Math.round(Geo.gridAzimuth(q.from, q.to).az * 10) / 10;
+}
+function rebuild() { QS = bank.generate(gameCfg); QS.forEach(prepare); N = QS.length; }
+rebuild();
+
 function publicQ(q) {
   return {
     type: q.type, prompt: q.prompt, hint: q.hint || '', say: q.say || '', labels: !!q.labels,
     seconds: qMs(q) / 1000, readout: q.readout || 'dec', frame: q.frame || null, grid: q.grid || 0, terrain: !!q.terrain,
+    gridType: (q.gridMode || q.gridType === 'utm') ? 'utm' : 'll', unit: q.unit || 'deg', numUnit: q.numUnit || '', numDigits: q.numDigits || 4,
+    digits: q.digits || 3, dialStyle: q.dialStyle || 'day', options: q.options || null, contours: !!q.contours, topic: q.topic || 0, scale: q.scale || 0,
     maxDeg: q.maxDeg || 45,
-    markers: q.type === 'dms' ? [{ lat: q.lat, lng: q.lng, label: '' }]
-      : (q.type === 'compass' && q.from && q.to) ? [{ lat: q.from.lat, lng: q.from.lng, label: 'A', name: q.from.name }, { lat: q.to.lat, lng: q.to.lng, label: 'B', name: q.to.name }] : []
+    decimal: !!q.decimal,
+    markers: q.markers ? q.markers : (q.type === 'dms' || q.type === 'grid') ? [{ lat: q.lat, lng: q.lng, label: '' }]
+      : (q.from && q.to) ? [{ lat: q.from.lat, lng: q.from.lng, label: 'A', name: q.from.name }, { lat: q.to.lat, lng: q.to.lng, label: 'B', name: q.to.name }]
+      : q.mark ? [{ lat: q.mark.lat, lng: q.mark.lng, label: q.mark.label || 'P', name: '' }] : []
   };
 }
 const scoreOf = (km, maxKm) => Math.round(Math.max(0, 1 - km / maxKm) * 10000) / 100; // 0–100 (เส้นตรง ละเอียด 0.01 กันคะแนนเสมอ)
@@ -108,7 +134,7 @@ function next() {
   else { phase = 'final'; deadline = 0; clearTimer(); pushNow(); }
 }
 function resetGame() {
-  clearTimer(); phase = 'lobby'; qi = -1; deadline = 0;
+  clearTimer(); phase = 'lobby'; qi = -1; deadline = 0; rebuild(); // ชุดโจทย์ใหม่ทุกเกม
   for (const p of players.values()) p.scores = [];
   pushNow();
 }
@@ -130,13 +156,18 @@ function pushNow() {
     phase, qi, total: N, title: CFG.title, now: Date.now(), deadline,
     players: players.size, connected: connectedCount(),
     answered: inQ ? answeredCount() : 0,
-    top, avg,
+    top, avg, cfg: gameCfg,
     q: q ? publicQ(q) : null
   };
   if (phase === 'reveal') {
     base.reveal = q.type === 'compass'
-      ? { type: 'compass', angle: q.angle, name: q.name, maxDeg: q.maxDeg || 45 }
-      : { type: q.type, lat: q.lat, lng: q.lng, name: q.name, maxKm: q.maxKm, dmsText: q.dmsText || '' };
+      ? { type: 'compass', angle: q.angle, name: q.name, maxDeg: q.maxDeg || 45, unit: q.unit || 'deg' }
+      : q.type === 'choice'
+        ? { type: 'choice', options: q.options, correct: q.correct, name: q.name }
+      : q.type === 'num'
+        ? { type: 'num', value: q.value, numUnit: q.numUnit || '', name: q.name, maxErr: q.maxErr || 10 }
+        : { type: q.type, lat: q.lat, lng: q.lng, name: q.name, maxKm: q.maxKm,
+            dmsText: q.type === 'grid' ? q.gridText + '   (' + q.mgrsText + ')' : (q.dmsText || '') };
     let s = 0; for (const p of players.values()) s += (p.scores[qi] && p.scores[qi].pct) || 0;
     base.qAvg = players.size ? Math.round(s / players.size * 10) / 10 : 0;
   }
@@ -162,7 +193,7 @@ function buildMsg(c) {
       msg.pins = [];
       for (const p of players.values()) {
         const a = p.scores[qi];
-        if (a) msg.pins.push(a.ang != null ? { ang: a.ang, pct: a.pct } : { lat: a.lat, lng: a.lng, pct: a.pct });
+        if (a) msg.pins.push(a.ang != null ? { ang: a.ang, pct: a.pct } : a.c != null ? { c: a.c, pct: a.pct } : a.v != null ? { v: a.v, pct: a.pct } : { lat: a.lat, lng: a.lng, pct: a.pct });
       }
     }
   } else {
@@ -269,6 +300,12 @@ http.createServer(async (req, res) => {
     if (req.method === 'GET') {
       if (p === '/') return serveStatic(req, res, '/index.html');
       if (p === '/host') return isLocal(req) ? serveStatic(req, res, '/host.html') : (res.writeHead(403), res.end('เปิดหน้านี้ได้เฉพาะบนเครื่องครู'));
+      if (p === '/api/sim-truth') { // เฉพาะเครื่องครู: ให้บอทซ้อมถามเฉลยของข้อที่สุ่มได้ (ไม่ใช้กับนักเรียนจริง)
+        if (!isLocal(req)) return json(res, 403, {});
+        const q = QS[+u.searchParams.get('qi')]; if (!q) return json(res, 404, {});
+        return json(res, 200, { type: q.type, lat: q.lat, lng: q.lng, u: q.u, digits: q.digits, angle: q.angle, maxDeg: q.maxDeg, value: q.value, maxErr: q.maxErr, maxKm: q.maxKm, correct: q.correct, seconds: q.seconds });
+      }
+      if (p === '/api/config') return isLocal(req) ? json(res, 200, { topics: bank.TOPICS, scales: bank.SCALES, cfg: gameCfg, total: N }) : json(res, 403, {});
       if (p === '/api/info') return json(res, 200, { url: lanUrl(), public: tunnelState === 'ready', tunnel: tunnelState, title: CFG.title, total: N });
       if (p === '/api/poll') {
         const id = u.searchParams.get('id'), v = +u.searchParams.get('v');
@@ -323,6 +360,24 @@ http.createServer(async (req, res) => {
           if (!(ang >= 0 && ang <= 360)) return json(res, 400, { ok: false });
           const diff = angDiff(ang, q.angle);
           rec = { ang: Math.round(ang) % 360, diff, pct: Math.round(Math.max(0, 1 - diff / (q.maxDeg || 45)) * 10000) / 100 };
+        } else if (q.type === 'num') { // ตอบเป็นตัวเลข (เช่น มิล, มุมแม่เหล็ก)
+          const v = +b.v;
+          if (!isFinite(v) || v < 0 || v > 99999) return json(res, 400, { ok: false });
+          const diff = Math.abs(v - q.value);
+          rec = { v, diff, pct: Math.round(Math.max(0, 1 - diff / (q.maxErr || 10)) * 10000) / 100 };
+        } else if (q.type === 'choice') { // เลือกตอบ: ถูก 100 / ผิด 0
+          const c = Number(b.c);
+          if (!Number.isInteger(c) || c < 0 || c >= (q.options || []).length) return json(res, 400, { ok: false });
+          rec = { c, pct: c === q.correct ? 100 : 0 };
+        } else if (q.type === 'grid') { // อ่านพิกัดกริด 6 หรือ 8 หลัก: E/N ตามจำนวนหลักของข้อ (ตำแหน่งมุมล่างซ้ายของช่อง)
+          const dg = q.digits || 3, unit = Math.pow(10, 5 - dg), lim = Math.pow(10, dg) - 1;
+          const g = Array.isArray(b.g) ? b.g.map(Number) : [];
+          if (g.length !== 2 || g.some(x => !Number.isInteger(x) || x < 0 || x > lim)) return json(res, 400, { ok: false });
+          const near = (t, x) => { let best = null; for (let k = -1; k <= 1; k++) { const v = (Math.floor(t / 100000) + k) * 100000 + x * unit; if (best === null || Math.abs(v - t) < Math.abs(best - t)) best = v; } return best; };
+          const tE = Math.floor(q.u.e / unit) * unit, tN = Math.floor(q.u.n / unit) * unit; // เทียบกับช่องที่จุดเฉลยอยู่
+          const E = near(q.u.e, g[0]), Nn = near(q.u.n, g[1]);
+          const km = Math.hypot(E - tE, Nn - tN) / 1000, ll = Geo.fromUTM(47, true, E + unit / 2, Nn + unit / 2);
+          rec = { lat: ll.lat, lng: ll.lng, km, pct: scoreOf(km, q.maxKm), g };
         } else {
           let lat, lng, d = null;
           if (q.type === 'dms') { // กรอก องศา ลิปดา ฟิลิปดา (ซีกโลกเหนือ/ตะวันออก)
@@ -350,6 +405,14 @@ http.createServer(async (req, res) => {
         if (!isLocal(req)) return json(res, 403, {});
         if (b.cmd === 'start') startGame();
         else if (b.cmd === 'skip') { if (phase === 'question') reveal(); else if (phase === 'reveal') next(); else if (phase === 'countdown') { clearTimer(); startQuestion(0); } }
+        else if (b.cmd === 'config') { // ตั้งค่าเกม (เฉพาะตอนอยู่ห้องรอ)
+          if (phase !== 'lobby') return json(res, 200, { ok: false });
+          const c = b.cfg || {};
+          const topics = [...new Set((c.topics || []).map(Number).filter(t => t >= 1 && t <= 7))];
+          const scales = [...new Set((c.scales || []).map(Number).filter(x => bank.SCALES.includes(x)))];
+          gameCfg = { topics: topics.length ? topics : gameCfg.topics, count: Math.max(1, Math.min(40, Math.round(+c.count) || gameCfg.count)), scales: scales.length ? scales : gameCfg.scales };
+          rebuild(); pushNow();
+        }
         else if (b.cmd === 'reset') resetGame();
         else if (b.cmd === 'clear') { players.clear(); resetGame(); }
         else if (b.cmd === 'kick') { // เตะผู้เล่น (ใช้ตอนตั้งชื่อไม่เหมาะสม)

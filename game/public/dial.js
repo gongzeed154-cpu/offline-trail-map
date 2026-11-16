@@ -12,20 +12,29 @@
 
   function create(host, opts) {
     opts = opts || {};
+    var night = !!opts.night; // โหมดกลางคืน: พื้นมืด ขีดและตัวเลขเรืองแสง
     var svg = el('svg', { viewBox: '-135 -135 270 270', width: '100%', height: '100%', style: 'touch-action:none;display:block' });
     host.innerHTML = ''; host.appendChild(svg);
-    el('circle', { r: 112, fill: opts.dark ? '#14301c' : '#fffdf5', stroke: opts.dark ? '#5fd07a' : '#2e6b3f', 'stroke-width': 4 }, svg);
-    el('circle', { r: 76, fill: 'none', stroke: opts.dark ? '#2b4b34' : '#e4dfcc', 'stroke-width': 1 }, svg);
-    var fg = opts.dark ? '#e9f5ec' : '#222';
+    // หน้าปัดแบบเข็มทิศเลนเซติกจริง: วงนอก (ดำ) = มิลเลียม ตัวเลขหน่วยร้อย · วงใน (แดง) = องศา · แผ่น N E S W เรืองแสง
+    var fg = night ? '#b6ffb6' : (opts.dark ? '#e9f5ec' : '#1a1a1a');
+    var degCol = night ? '#ffd27a' : (opts.dark ? '#ff8a80' : '#c62828');
+    el('circle', { r: 112, fill: night ? '#070d08' : (opts.dark ? '#14301c' : '#f4f1e1'), stroke: night ? '#59d86a' : (opts.dark ? '#7fbf6a' : '#3f5a2a'), 'stroke-width': 6 }, svg);
+    el('circle', { r: 80, fill: 'none', stroke: degCol, 'stroke-width': 0.8, opacity: 0.7 }, svg);
     var hist = el('g', {}, svg);
-    for (var a = 0; a < 360; a += 5) {
-      var big = a % 30 === 0, mid = a % 10 === 0;
-      var p1 = pol(a, 112), p2 = pol(a, big ? 98 : mid ? 104 : 107);
-      el('line', { x1: p1[0], y1: p1[1], x2: p2[0], y2: p2[1], stroke: fg, 'stroke-width': big ? 2 : 1, opacity: big ? 1 : 0.6 }, svg);
-      if (big && a % 90 !== 0) { var pl = pol(a, 86); var t = el('text', { x: pl[0], y: pl[1] + 4, 'text-anchor': 'middle', 'font-size': 11, fill: fg, opacity: 0.8 }, svg); t.textContent = a; }
+    for (var m = 0; m < 6400; m += 100) { // วงนอก: มิลเลียม ขีดทุก 100 ยาวทุก 400 เลขทุก 200 (÷100)
+      var am = m * 360 / 6400, bigm = m % 400 === 0, o1 = pol(am, 111), o2 = pol(am, bigm ? 100 : 104);
+      el('line', { x1: o1[0], y1: o1[1], x2: o2[0], y2: o2[1], stroke: fg, 'stroke-width': bigm ? 1.6 : 0.9, opacity: bigm ? 1 : 0.75 }, svg);
+      if (m % 200 === 0) { var ol = pol(am, 92); var tm = el('text', { x: ol[0], y: ol[1] + 3, 'text-anchor': 'middle', 'font-size': 8, 'font-weight': 700, fill: fg }, svg); tm.textContent = m / 100; }
     }
-    [['N', 0, '#d93025'], ['E', 90, fg], ['S', 180, fg], ['W', 270, fg]].forEach(function (c) {
-      var p = pol(c[1], 82); var t = el('text', { x: p[0], y: p[1] + 7, 'text-anchor': 'middle', 'font-size': 22, 'font-weight': 800, fill: c[2] }, svg); t.textContent = c[0];
+    for (var a = 0; a < 360; a += 5) { // วงใน: องศา ขีดทุก 5° ยาวทุก 20° เลขทุก 20°
+      var big = a % 20 === 0, i1 = pol(a, 80), i2 = pol(a, big ? 73 : 76.5);
+      el('line', { x1: i1[0], y1: i1[1], x2: i2[0], y2: i2[1], stroke: degCol, 'stroke-width': big ? 1.5 : 0.8 }, svg);
+      if (big) { var il = pol(a, 65); var td = el('text', { x: il[0], y: il[1] + 3, 'text-anchor': 'middle', 'font-size': 8.5, 'font-weight': 700, fill: degCol }, svg); td.textContent = a; }
+    }
+    [['N', 0, '#d93025'], ['E', 90, '#111'], ['S', 180, '#111'], ['W', 270, '#111']].forEach(function (c) {
+      var p = pol(c[1], 38);
+      el('rect', { x: p[0] - 11, y: p[1] - 11, width: 22, height: 22, rx: 4, fill: night ? '#8dff8d' : '#e3f4c3', stroke: night ? '#2c8a2c' : '#8a9a6a', 'stroke-width': 1 }, svg);
+      var t = el('text', { x: p[0], y: p[1] + 6, 'text-anchor': 'middle', 'font-size': 17, 'font-weight': 800, fill: night && c[0] !== 'N' ? '#06310a' : c[2] }, svg); t.textContent = c[0];
     });
     var tgt = el('g', { visibility: 'hidden' }, svg);
     el('line', { x1: 0, y1: 0, x2: 0, y2: -104, stroke: '#2e9d4f', 'stroke-width': 7, 'stroke-linecap': 'round' }, tgt);

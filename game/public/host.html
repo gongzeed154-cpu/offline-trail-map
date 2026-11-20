@@ -123,6 +123,33 @@
   #finalLb { position: relative; width: 1000px; flex: 1; margin-top: 10px; }
   #finalLb .row { height: 58px; } #finalLb .av { width: 48px; height: 48px; font-size: 30px; border-width: 3px; }
   #finalLb .rb { height: 48px; } #finalLb .rn { font-size: 27px; } #finalLb .rp { font-size: 29px; } #finalLb .rk { font-size: 29px; }
+  #bank { position: absolute; inset: 0; z-index: 45; background: #0c1710; display: flex; flex-direction: column; }
+  #bank header { display: flex; align-items: center; gap: 20px; padding: 14px 30px; background: var(--panel); border-bottom: 3px solid var(--line); }
+  #bank header h2 { margin: 0; font-size: 40px; flex: 1; }
+  #bank .bx { display: flex; flex: 1; min-height: 0; }
+  #bleft { flex: 1; display: flex; flex-direction: column; min-width: 0; border-right: 3px solid var(--line); }
+  #bright { width: 620px; padding: 16px 20px; overflow-y: auto; background: #101f16; }
+  #btool { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px 24px; background: #12251a; }
+  #btool .chip { font-size: 20px; padding: 4px 14px; }
+  .btn { background: #2a4733; color: #fff; border: 0; border-radius: 22px; padding: 8px 20px; font-size: 22px; font-weight: 700; cursor: pointer; }
+  .btn.gold { background: var(--gold); color: #3a2a00; } .btn.red { background: #7a2a24; } .btn.sm { font-size: 17px; padding: 4px 12px; }
+  #blist { flex: 1; overflow-y: auto; padding: 14px 24px 80px; display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-content: start; }
+  .qc { position: relative; background: #17291d; border: 3px solid transparent; border-radius: 16px; padding: 12px 16px 12px 62px; cursor: pointer; min-height: 120px; }
+  .qc:hover { border-color: #3d6b4a; } .qc.on { border-color: var(--gold); background: #2a3a1a; }
+  .qc .ord { position: absolute; left: 14px; top: 14px; width: 36px; height: 36px; border-radius: 18px; border: 3px solid #6a8a74; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 800; color: transparent; }
+  .qc.on .ord { background: var(--gold); border-color: var(--gold); color: #3a2a00; }
+  .qc .meta { font-size: 17px; opacity: .75; margin-bottom: 3px; }
+  .qc .qp { font-size: 22px; font-weight: 700; line-height: 1.3; }
+  .qc .qa { font-size: 19px; color: #7fe08f; margin-top: 5px; }
+  .qc .qo { font-size: 17px; margin-top: 4px; opacity: .85; } .qc .qo .c { color: #7fe08f; font-weight: 700; }
+  .fld { margin: 6px 0 14px; } .fld label { display: block; font-size: 18px; opacity: .8; margin-bottom: 3px; }
+  .fld input, .fld select { width: 100%; font: inherit; font-size: 22px; padding: 8px 12px; border-radius: 10px; border: 0; background: #fff; color: #111; }
+  .fold { background: #17291d; border-radius: 14px; padding: 8px 12px; margin: 8px 0; }
+  .fold .fh { display: flex; align-items: center; gap: 8px; font-size: 22px; font-weight: 800; }
+  .fold .fh span { flex: 1; } .fold .st { display: flex; align-items: center; gap: 6px; padding: 5px 0 5px 12px; font-size: 19px; border-top: 1px solid #28402e; }
+  .fold .st .nm { flex: 1; } .fold .st small { opacity: .7; }
+  #bbar { padding: 12px 24px; background: var(--panel); border-top: 3px solid var(--line); display: flex; align-items: center; gap: 14px; font-size: 24px; }
+  #setLabel { margin-top: 8px; font-size: 22px; color: var(--gold); }
   #confetti { position: absolute; inset: 0; z-index: 70; pointer-events: none; width: 1920px; height: 1080px; }
 </style>
 </head>
@@ -173,6 +200,7 @@
     <div id="cntRow"><div id="cnt">0</div><div style="font-size:26px">คนเข้าร่วมแล้ว</div></div>
     <div id="names"></div>
     <button id="startBtn" disabled>▶ เริ่มเกม</button>
+    <div style="margin-top:10px;font-size:22px"><button class="btn" id="openBank">📚 คลังข้อสอบ / ชุดที่บันทึกไว้</button> <span id="setLabel" hidden></span></div>
     <div style="margin-top:10px;font-size:20px;opacity:.85"><a href="check" target="_blank" style="color:#9fd8ff">🔍 ตรวจระบบก่อนเล่น (แผนที่/เสียง/เครือข่าย)</a></div>
   </div>
 </div>
@@ -186,6 +214,30 @@
   <div id="finalLb"></div>
 </div>
 
+<div id="bank" hidden>
+  <header><h2>📚 คลังข้อสอบ — เลือกข้อและบันทึกเป็นชุด</h2><button class="btn" id="bClose">✕ ปิด</button></header>
+  <div class="bx">
+    <div id="bleft">
+      <div id="btool">
+        <span style="font-size:20px">หัวข้อ:</span><span id="bTopics" class="chips"></span>
+        <button class="btn gold" id="bMore">🎲 สุ่มข้อมาให้เลือกเพิ่ม</button>
+        <button class="btn" id="bAll">เลือกทั้งหมดที่แสดง</button>
+        <button class="btn" id="bNone">ล้างที่เลือก</button>
+      </div>
+      <div id="blist"></div>
+    </div>
+    <div id="bright">
+      <h3 style="margin:0 0 6px;font-size:28px">💾 บันทึกชุดที่เลือก</h3>
+      <div class="fld"><label>โฟลเดอร์</label><select id="sFolder"></select></div>
+      <div class="fld"><label>ชื่อชุด</label><input id="sName" maxlength="60" placeholder="เช่น บทที่ 1 พิกัดภูมิศาสตร์"></div>
+      <button class="btn gold" id="sSave">💾 บันทึก</button>
+      <h3 style="margin:22px 0 4px;font-size:28px">📁 ชุดที่บันทึกไว้ <button class="btn sm" id="sNewFolder">➕ โฟลเดอร์ใหม่</button></h3>
+      <div id="sList"></div>
+      <div id="sPath" style="font-size:15px;opacity:.6;margin-top:10px;word-break:break-all"></div>
+    </div>
+  </div>
+  <div id="bbar"><span id="bCount">เลือกแล้ว 0 ข้อ</span><span style="flex:1"></span><button class="btn gold" id="bPlay">▶ เล่นชุดที่เลือก</button></div>
+</div>
 <div id="toasts"></div>
 <canvas id="confetti" hidden></canvas>
 <div id="soundBanner">🔊 คลิก/กดปุ่มใดก็ได้ เพื่อเปิดเสียงเพลงและเสียงพูด</div>
@@ -224,6 +276,7 @@
   $('bSfx').onclick = function () { A.toggle('sfx'); syncBtns(); };
   $('bVoice').onclick = function () { A.toggle('voice'); syncBtns(); };
   document.addEventListener('keydown', function (e) {
+    if (/^(INPUT|SELECT|TEXTAREA)$/.test((e.target && e.target.tagName) || '') || !$('bank').hidden) return; // กำลังพิมพ์/เปิดคลังข้อสอบอยู่
     if (e.key === 'ArrowRight') cmd('skip');
     if (e.key === ' ' && S && S.phase === 'lobby') { e.preventDefault(); cmd('start'); }
     if (e.key === 'm' || e.key === 'M') { A.toggle('music'); syncBtns(); }
@@ -266,7 +319,7 @@
   loadInfo();
 
   // ---------- ตั้งค่าเกมก่อนเริ่ม: หัวข้อ / จำนวนข้อ / มาตราส่วน ----------
-  var curCfg = null;
+  var curCfg = null, TOPICS = {};
   function postCfg() { fetch('api/host', { method: 'POST', body: JSON.stringify({ cmd: 'config', cfg: curCfg }) }); }
   function paintCfg() {
     if (!curCfg) return;
@@ -276,6 +329,7 @@
   }
   fetch('api/config').then(function (r) { return r.json(); }).then(function (j) {
     curCfg = j.cfg;
+    j.topics.forEach(function (t) { TOPICS[t.id] = t; });
     $('topicList').innerHTML = j.topics.map(function (t) { return '<div class="topic" data-t="' + t.id + '"><span class="ck">✓</span><span>' + t.icon + ' ' + t.id + '. ' + esc(t.name) + '</span></div>'; }).join('');
     $('countRow').innerHTML = [5, 10, 15, 20].map(function (n) { return '<span class="chip" data-n="' + n + '">' + n + ' ข้อ</span>'; }).join('');
     $('scaleRow').innerHTML = j.scales.map(function (x) { return '<span class="chip" data-s="' + x + '">1:' + x.toLocaleString('en-US') + '</span>'; }).join('');
@@ -327,6 +381,7 @@
     $('cnt').textContent = s.players; $('startBtn').disabled = s.players === 0;
     $('startBtn').textContent = '▶ เริ่มเกม (' + s.total + ' ข้อ)';
     if (s.cfg) { curCfg = s.cfg; paintCfg(); }
+    showSetLabel(s.set);
     var box = $('names'), keep = {};
     (s.names || []).forEach(function (n) {
       keep[n.k] = 1;
@@ -509,6 +564,105 @@
   }, 100);
 
   syncBtns();
+  // ---------- คลังข้อสอบ: ดูทั้งหมด ติ๊กเลือก บันทึกเป็นชุดในโฟลเดอร์ ----------
+  var TYPE_TH = { pin: 'ปักหมุด', dms: 'กรอก ° ′ ″', grid: 'กรอกพิกัดกริด', num: 'ตอบตัวเลข', compass: 'เข็มทิศ', choice: 'เลือกตอบ' };
+  var items = [], byId = {}, sel = [], bTopics = [1, 2, 3, 4, 5, 6, 7], editing = null;
+  function api(path, o) { return fetch(path, o).then(function (r) { return r.json(); }); }
+  function post(o) { return api('api/host', { method: 'POST', body: JSON.stringify(o) }); }
+  function showSetLabel(set) {
+    var el = $('setLabel'); el.hidden = !set;
+    if (set) { el.innerHTML = '📚 ใช้ชุด: <b>' + esc(set.name) + '</b> (' + set.count + ' ข้อ) <button class="btn sm red" id="clearSetBtn">✕ กลับไปสุ่ม</button>'; $('clearSetBtn').onclick = function () { post({ cmd: 'clearSet' }); }; }
+    $('setup').style.opacity = set ? 0.5 : 1;
+  }
+  function cardHtml(q) {
+    var t = TOPICS[q.topic] || { icon: '❓', name: '' };
+    var meta = t.icon + ' หัวข้อ ' + q.topic + ' · ' + (TYPE_TH[q.type] || q.type) + ' · ' + q.seconds + ' วิ' + (q.scale ? ' · 1:' + q.scale.toLocaleString('en-US') : '');
+    var opts = q.options ? '<div class="qo">' + q.options.map(function (o, i) { return '<span class="' + (i === q.correct ? 'c' : '') + '">' + 'กขคง'.charAt(i) + '. ' + esc(o) + (i === q.correct ? ' ✓' : '') + '</span>'; }).join(' &nbsp; ') + '</div>' : '';
+    return '<div class="ord"></div><div class="meta">' + esc(meta) + '</div><div class="qp">' + esc(q.prompt) + '</div>' + (q.options ? '' : '<div class="qa">✅ ' + esc(q.name) + '</div>') + opts;
+  }
+  function renderList() {
+    var box = $('blist'); box.innerHTML = '';
+    items.filter(function (q) { return bTopics.indexOf(q.topic) >= 0; }).forEach(function (q) {
+      var d = document.createElement('div'); d.className = 'qc' + (sel.indexOf(q.id) >= 0 ? ' on' : ''); d.dataset.id = q.id; d.innerHTML = cardHtml(q);
+      var i = sel.indexOf(q.id); if (i >= 0) d.querySelector('.ord').textContent = i + 1;
+      box.appendChild(d);
+    });
+    $('bCount').textContent = 'เลือกแล้ว ' + sel.length + ' ข้อ' + (sel.length ? ' · เวลารวมประมาณ ' + Math.round(sel.reduce(function (a, id) { return a + (byId[id] ? byId[id].seconds + 6 : 0); }, 0) / 60 * 10) / 10 + ' นาที' : '');
+    $('bPlay').disabled = !sel.length; $('bPlay').style.opacity = sel.length ? 1 : 0.4;
+  }
+  $('blist').onclick = function (e) { var c = e.target.closest('.qc'); if (!c) return; var id = c.dataset.id, i = sel.indexOf(id); if (i >= 0) sel.splice(i, 1); else sel.push(id); A.sfx('pop'); renderList(); };
+  function addItems(list) { list.forEach(function (q) { if (!byId[q.id]) { byId[q.id] = q; items.unshift(q); } }); }
+  function more() {
+    $('bMore').disabled = true; $('bMore').textContent = 'กำลังสุ่ม…';
+    api('api/bank?topics=' + bTopics.join(',') + '&per=6').then(function (j) { addItems(j.questions.slice().reverse()); renderList(); $('blist').scrollTop = 0; })
+      .catch(function () { toast('สุ่มข้อไม่สำเร็จ'); }).then(function () { $('bMore').disabled = false; $('bMore').textContent = '🎲 สุ่มข้อมาให้เลือกเพิ่ม'; });
+  }
+  function drawTopicChips() {
+    $('bTopics').innerHTML = Object.keys(TOPICS).map(function (id) { var t = TOPICS[id]; return '<span class="chip' + (bTopics.indexOf(+id) >= 0 ? ' on' : '') + '" data-t="' + id + '" title="' + esc(t.name) + '">' + t.icon + ' ' + id + '</span>'; }).join('');
+  }
+  $('bTopics').onclick = function (e) { var c = e.target.closest('.chip'); if (!c) return; var id = +c.dataset.t, i = bTopics.indexOf(id); if (i >= 0) { if (bTopics.length > 1) bTopics.splice(i, 1); } else bTopics.push(id); drawTopicChips(); renderList(); };
+  $('bMore').onclick = more;
+  $('bAll').onclick = function () { items.filter(function (q) { return bTopics.indexOf(q.topic) >= 0 && sel.indexOf(q.id) < 0; }).forEach(function (q) { sel.push(q.id); }); renderList(); };
+  $('bNone').onclick = function () { sel = []; editing = null; renderList(); };
+  $('openBank').onclick = function () {
+    A.unlock(); $('bank').hidden = false; drawTopicChips(); refreshSets();
+    if (!items.length) more(); else renderList();
+  };
+  $('bClose').onclick = function () { $('bank').hidden = true; };
+  $('bPlay').onclick = function () {
+    if (!sel.length) return;
+    post({ cmd: 'useSet', ids: sel, name: ($('sName').value || '').trim() || 'ชุดที่เลือก' }).then(function (r) {
+      if (r.ok) { $('bank').hidden = true; toast('✅ ใช้ชุดที่เลือก ' + r.count + ' ข้อ'); } else toast('ใช้ชุดไม่ได้ (เปลี่ยนได้เฉพาะตอนอยู่ห้องรอ)');
+    });
+  };
+  // ----- ชุดที่บันทึกไว้ (หลายโฟลเดอร์) -----
+  var folders = [];
+  function refreshSets() {
+    return api('api/sets').then(function (j) {
+      folders = j.folders; $('sPath').textContent = 'เก็บที่: ' + j.root;
+      var cur = $('sFolder').value;
+      $('sFolder').innerHTML = folders.map(function (f) { return '<option value="' + esc(f.folder) + '">' + (f.folder ? '📁 ' + esc(f.folder) : '(ไม่ใส่โฟลเดอร์)') + '</option>'; }).join('');
+      if (cur && folders.some(function (f) { return f.folder === cur; })) $('sFolder').value = cur;
+      var html = '';
+      folders.forEach(function (f) {
+        if (!f.folder && !f.sets.length) return;
+        html += '<div class="fold"><div class="fh"><span>' + (f.folder ? '📁 ' + esc(f.folder) : '📄 (ไม่มีโฟลเดอร์)') + '</span>' + (f.folder ? '<button class="btn sm red" data-act="delfolder" data-f="' + esc(f.folder) + '">🗑</button>' : '') + '</div>';
+        if (!f.sets.length) html += '<div class="st"><small>(ว่าง)</small></div>';
+        f.sets.forEach(function (s) {
+          html += '<div class="st"><span class="nm">' + esc(s.name) + ' <small>' + s.count + ' ข้อ</small></span>' +
+            '<button class="btn sm gold" data-act="play" data-f="' + esc(f.folder) + '" data-n="' + esc(s.name) + '">▶ เล่น</button>' +
+            '<button class="btn sm" data-act="edit" data-f="' + esc(f.folder) + '" data-n="' + esc(s.name) + '">✏️ เปิด</button>' +
+            '<button class="btn sm red" data-act="del" data-f="' + esc(f.folder) + '" data-n="' + esc(s.name) + '">🗑</button></div>';
+        });
+        html += '</div>';
+      });
+      $('sList').innerHTML = html || '<div style="opacity:.7;font-size:19px">ยังไม่มีชุดที่บันทึกไว้</div>';
+    });
+  }
+  $('sList').onclick = function (e) {
+    var b = e.target.closest('button'); if (!b) return; var act = b.dataset.act, f = b.dataset.f, n = b.dataset.n;
+    if (act === 'play') post({ cmd: 'loadSet', folder: f, name: n }).then(function (r) { if (r.ok) { $('bank').hidden = true; toast('✅ ใช้ชุด "' + n + '" (' + r.count + ' ข้อ)'); } else toast('ใช้ชุดไม่ได้ (เปลี่ยนได้เฉพาะตอนอยู่ห้องรอ)'); });
+    else if (act === 'edit') api('api/set?folder=' + encodeURIComponent(f) + '&name=' + encodeURIComponent(n)).then(function (j) {
+      sel = []; j.questions.forEach(function (q) { byId[q.id] = q; items.unshift(q); sel.push(q.id); }); bTopics = Object.keys(TOPICS).map(Number); drawTopicChips();
+      $('sName').value = n; $('sFolder').value = f; renderList(); $('blist').scrollTop = 0; toast('เปิดชุด "' + n + '" แล้ว — เพิ่ม/เอาข้อออกแล้วกดบันทึกทับได้');
+    });
+    else if (act === 'del') { if (confirm('ลบชุด "' + n + '" ?')) post({ cmd: 'deleteSet', folder: f, name: n }).then(refreshSets); }
+    else if (act === 'delfolder') { if (confirm('ลบโฟลเดอร์ "' + f + '" ?')) post({ cmd: 'deleteFolder', folder: f }).then(function (r) { if (!r.ok && confirm('โฟลเดอร์นี้ยังมีชุดอยู่ ลบทั้งโฟลเดอร์รวมชุดข้างในเลย?')) return post({ cmd: 'deleteFolder', folder: f, force: true }); }).then(refreshSets); }
+  };
+  $('sNewFolder').onclick = function () {
+    var name = (prompt('ชื่อโฟลเดอร์ใหม่ (เช่น ห้อง 1-66, เทอม 2) — อักษร / : * ? < > | จะถูกแปลงเป็น _') || '').trim(); if (!name) return;
+    post({ cmd: 'createFolder', folder: name }).then(function (r) { if (r.ok) refreshSets().then(function () { $('sFolder').value = r.folder; }); else toast('สร้างโฟลเดอร์ไม่ได้'); });
+  };
+  $('sSave').onclick = function () {
+    var name = ($('sName').value || '').trim();
+    if (!sel.length) return toast('ยังไม่ได้เลือกข้อ — คลิกการ์ดข้อสอบเพื่อเลือก');
+    if (!name) { $('sName').focus(); return toast('ตั้งชื่อชุดก่อน'); }
+    post({ cmd: 'saveSet', folder: $('sFolder').value, name: name, ids: sel }).then(function (r) {
+      if (r.ok) { toast('✅ บันทึก "' + r.name + '" ' + r.count + ' ข้อ ' + (r.folder ? 'ในโฟลเดอร์ ' + r.folder : '')); refreshSets(); } else toast('บันทึกไม่สำเร็จ: ' + (r.error || ''));
+    });
+  };
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !$('bank').hidden) $('bank').hidden = true; }, true);
+
   var es = new EventSource('api/host/stream');
   es.onmessage = function (e) { S = JSON.parse(e.data); offset = S.now - Date.now(); render(S); };
 })();

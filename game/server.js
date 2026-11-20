@@ -79,7 +79,39 @@ function prepare(q) {
     q.angle = q.north === 'true' ? Math.round(bearingDeg(q.from.lat, q.from.lng, q.to.lat, q.to.lng) * 10) / 10
       : Math.round(Geo.gridAzimuth(q.from, q.to).az * 10) / 10;
 }
-function rebuild() { QS = bank.generate(gameCfg); QS.forEach(prepare); N = QS.length; }
+// ---------- คลังข้อสอบ / ชุดที่บันทึกไว้ (โฟลเดอร์ saved/) ----------
+const SAVED = path.join(__dirname, 'saved');
+try { fs.mkdirSync(SAVED, { recursive: true }); } catch (e) { console.error('สร้างโฟลเดอร์ saved ไม่ได้:', e.message); }
+let fixedSet = null, fixedName = ''; // ชุดที่ครูเลือกเอง (ถ้ามี) จะถูกใช้แทนการสุ่ม
+const pool = new Map(); let poolSeq = 0; // ข้อที่ครูกำลังดู/เลือก: id -> ข้อสอบดิบ
+const cloneQ = o => JSON.parse(JSON.stringify(o));
+const safeName = n => String(n || '').trim().replace(/[\\/:*?"<>|\x00-\x1f]/g, '_').replace(/\s+/g, ' ').replace(/^\.+/, '').slice(0, 60);
+function addToPool(q) { const id = 'q' + (++poolSeq); pool.set(id, q); if (pool.size > 1500) pool.delete(pool.keys().next().value); return id; }
+function previewOf(q, id) {
+  return { id, topic: q.topic || 0, type: q.type, prompt: q.prompt, hint: q.hint || '', name: q.name || '', seconds: q.seconds || CFG.questionSeconds || 25,
+    scale: q.scale || 0, options: q.options || null, correct: q.correct != null ? q.correct : null, value: q.value != null ? q.value : null, numUnit: q.numUnit || '' };
+}
+const folderDir = f => { const n = safeName(f); return n ? path.join(SAVED, n) : SAVED; }; // '' = โฟลเดอร์หลัก
+const setFile = (folder, name) => path.join(folderDir(folder), safeName(name) + '.json');
+function metaOf(file, folder) {
+  try { const j = JSON.parse(fs.readFileSync(file, 'utf8')); return { name: j.name || path.basename(file, '.json'), folder: folder, count: (j.questions || []).length, saved: j.saved || '', topics: [...new Set((j.questions || []).map(q => q.topic).filter(Boolean))] }; }
+  catch (e) { return null; }
+}
+function listSets() { // [{folder, sets:[...]}]: โฟลเดอร์หลัก ('') + โฟลเดอร์ย่อยทั้งหมด (รวมโฟลเดอร์ว่าง)
+  const out = [];
+  const read = (dir, folder) => {
+    let sets = [];
+    try { sets = fs.readdirSync(dir).filter(f => f.endsWith('.json')).map(f => metaOf(path.join(dir, f), folder)).filter(Boolean); } catch (e) {}
+    sets.sort((x, y) => String(y.saved).localeCompare(String(x.saved)));
+    return sets;
+  };
+  out.push({ folder: '', sets: read(SAVED, '') });
+  try { fs.readdirSync(SAVED, { withFileTypes: true }).filter(d => d.isDirectory()).forEach(d => out.push({ folder: d.name, sets: read(path.join(SAVED, d.name), d.name) })); } catch (e) {}
+  return out;
+}
+function readSet(folder, name) { try { const j = JSON.parse(fs.readFileSync(setFile(folder, name), 'utf8')); return Array.isArray(j.questions) ? j : null; } catch (e) { return null; } }
+const setLabel = (folder, name) => (safeName(folder) ? safeName(folder) + ' / ' : '') + name;
+function rebuild() { QS = fixedSet ? fixedSet.map(cloneQ) : bank.generate(gameCfg); QS.forEach(prepare); N = QS.length; }
 rebuild();
 
 function publicQ(q) {
@@ -156,7 +188,7 @@ function pushNow() {
     phase, qi, total: N, title: CFG.title, now: Date.now(), deadline,
     players: players.size, connected: connectedCount(),
     answered: inQ ? answeredCount() : 0,
-    top, avg, cfg: gameCfg,
+    top, avg, cfg: gameCfg, set: fixedSet ? { name: fixedName, count: N } : null,
     q: q ? publicQ(q) : null
   };
   if (phase === 'reveal') {
@@ -306,6 +338,21 @@ http.createServer(async (req, res) => {
         const q = QS[+u.searchParams.get('qi')]; if (!q) return json(res, 404, {});
         return json(res, 200, { type: q.type, lat: q.lat, lng: q.lng, u: q.u, digits: q.digits, angle: q.angle, maxDeg: q.maxDeg, value: q.value, maxErr: q.maxErr, maxKm: q.maxKm, correct: q.correct, seconds: q.seconds });
       }
+      if (p === '/api/bank') { // สุ่มข้อสอบมาให้ครูดู/เลือก (ต่อหัวข้อ)
+        if (!isLocal(req)) return json(res, 403, {});
+        const tp = (u.searchParams.get('topics') || '').split(',').map(Number).filter(t => t >= 1 && t <= 7);
+        const per = Math.min(20, Math.max(1, +u.searchParams.get('per') || 8));
+        const out = [];
+        (tp.length ? tp : [1, 2, 3, 4, 5, 6, 7]).forEach(t => bank.generate({ topics: [t], count: per, scales: gameCfg.scales }).forEach(q => out.push(previewOf(q, addToPool(q)))));
+        return json(res, 200, { questions: out });
+      }
+      if (p === '/api/sets') return isLocal(req) ? json(res, 200, { folders: listSets(), root: SAVED, active: fixedSet ? { name: fixedName, count: N } : null }) : json(res, 403, {});
+      if (p === '/api/set') { // เปิดชุดที่บันทึกไว้ เพื่อดู/แก้ไข
+        if (!isLocal(req)) return json(res, 403, {});
+        const j = readSet(u.searchParams.get('folder'), u.searchParams.get('name'));
+        if (!j) return json(res, 404, {});
+        return json(res, 200, { name: j.name, questions: j.questions.map(q => previewOf(q, addToPool(q))) });
+      }
       if (p === '/api/config') return isLocal(req) ? json(res, 200, { topics: bank.TOPICS, scales: bank.SCALES, cfg: gameCfg, total: N }) : json(res, 403, {});
       if (p === '/api/info') return json(res, 200, { url: lanUrl(), public: tunnelState === 'ready', tunnel: tunnelState, title: CFG.title, total: N });
       if (p === '/api/poll') {
@@ -412,8 +459,44 @@ http.createServer(async (req, res) => {
           const topics = [...new Set((c.topics || []).map(Number).filter(t => t >= 1 && t <= 7))];
           const scales = [...new Set((c.scales || []).map(Number).filter(x => bank.SCALES.includes(x)))];
           gameCfg = { topics: topics.length ? topics : gameCfg.topics, count: Math.max(1, Math.min(40, Math.round(+c.count) || gameCfg.count)), scales: scales.length ? scales : gameCfg.scales };
+          fixedSet = null; fixedName = ''; // ตั้งค่าหัวข้อ/จำนวนข้อ = กลับไปใช้การสุ่ม
           rebuild(); pushNow();
         }
+        else if (b.cmd === 'useSet' || b.cmd === 'loadSet') { // เล่นชุดที่ครูเลือก (เฉพาะห้องรอ)
+          if (phase !== 'lobby') return json(res, 200, { ok: false });
+          let list, nm;
+          if (b.cmd === 'useSet') { list = (b.ids || []).map(id => pool.get(id)).filter(Boolean); nm = safeName(b.name) || 'ชุดที่เลือก'; }
+          else { const j = readSet(b.folder, b.name); list = j ? j.questions : []; nm = j ? setLabel(b.folder, j.name) : ''; }
+          if (!list.length) return json(res, 200, { ok: false, error: 'empty' });
+          fixedSet = list.map(cloneQ); fixedName = nm; rebuild(); pushNow();
+          return json(res, 200, { ok: true, count: N });
+        }
+        else if (b.cmd === 'saveSet') { // บันทึกชุดลงโฟลเดอร์ saved/<โฟลเดอร์>/
+          const name = safeName(b.name), list = (b.ids || []).map(id => pool.get(id)).filter(Boolean);
+          if (!name) return json(res, 200, { ok: false, error: 'name' });
+          if (!list.length) return json(res, 200, { ok: false, error: 'empty' });
+          try { fs.mkdirSync(folderDir(b.folder), { recursive: true }); fs.writeFileSync(setFile(b.folder, name), JSON.stringify({ name, saved: new Date().toISOString(), questions: list }, null, 1), 'utf8'); }
+          catch (e) { return json(res, 200, { ok: false, error: 'write: ' + e.message }); }
+          return json(res, 200, { ok: true, name, folder: safeName(b.folder), count: list.length, path: setFile(b.folder, name) });
+        }
+        else if (b.cmd === 'createFolder') {
+          const f = safeName(b.folder); if (!f) return json(res, 200, { ok: false, error: 'name' });
+          try { fs.mkdirSync(path.join(SAVED, f), { recursive: true }); } catch (e) { return json(res, 200, { ok: false, error: e.message }); }
+          return json(res, 200, { ok: true, folder: f });
+        }
+        else if (b.cmd === 'deleteFolder') { // ลบได้เฉพาะโฟลเดอร์ว่าง ยกเว้นส่ง force
+          const f = safeName(b.folder); if (!f) return json(res, 200, { ok: false });
+          try { if (b.force) fs.rmSync(path.join(SAVED, f), { recursive: true, force: true }); else fs.rmdirSync(path.join(SAVED, f)); }
+          catch (e) { return json(res, 200, { ok: false, error: 'notEmpty' }); }
+          if (fixedSet && fixedName.indexOf(f + ' / ') === 0) { fixedSet = null; fixedName = ''; rebuild(); pushNow(); }
+          return json(res, 200, { ok: true });
+        }
+        else if (b.cmd === 'deleteSet') {
+          try { fs.unlinkSync(setFile(b.folder, b.name)); } catch (e) { return json(res, 200, { ok: false }); }
+          if (fixedSet && fixedName === setLabel(b.folder, safeName(b.name))) { fixedSet = null; fixedName = ''; rebuild(); pushNow(); }
+          return json(res, 200, { ok: true });
+        }
+        else if (b.cmd === 'clearSet') { if (phase === 'lobby') { fixedSet = null; fixedName = ''; rebuild(); pushNow(); } }
         else if (b.cmd === 'reset') resetGame();
         else if (b.cmd === 'clear') { players.clear(); resetGame(); }
         else if (b.cmd === 'kick') { // เตะผู้เล่น (ใช้ตอนตั้งชื่อไม่เหมาะสม)

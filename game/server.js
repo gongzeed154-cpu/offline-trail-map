@@ -299,6 +299,7 @@ http.createServer(async (req, res) => {
   try {
     if (req.method === 'GET') {
       if (p === '/') return serveStatic(req, res, '/index.html');
+      if (p === '/check') return serveStatic(req, res, '/check.html'); // หน้าตรวจระบบ (ใช้ได้ทั้งครูและนักเรียน)
       if (p === '/host') return isLocal(req) ? serveStatic(req, res, '/host.html') : (res.writeHead(403), res.end('เปิดหน้านี้ได้เฉพาะบนเครื่องครู'));
       if (p === '/api/sim-truth') { // เฉพาะเครื่องครู: ให้บอทซ้อมถามเฉลยของข้อที่สุ่มได้ (ไม่ใช้กับนักเรียนจริง)
         if (!isLocal(req)) return json(res, 403, {});

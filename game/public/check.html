@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<title>ตรวจระบบก่อนเล่น</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="lib/maplibre-gl.css">
+<style>
+  body { margin: 0; font-family: -apple-system, "Sarabun", "Noto Sans Thai", "Segoe UI", sans-serif; background: #0f1d14; color: #fff; }
+  main { max-width: 760px; margin: 0 auto; padding: 18px 16px 40px; }
+  h1 { font-size: 26px; margin: 6px 0 4px; }
+  p.sub { margin: 0 0 14px; opacity: .8; }
+  .row { display: flex; gap: 10px; align-items: flex-start; background: #17291d; border-radius: 12px; padding: 10px 14px; margin: 8px 0; }
+  .ic { font-size: 22px; width: 28px; flex: none; text-align: center; }
+  .t { flex: 1; } .t b { display: block; font-size: 17px; } .t small { opacity: .75; display: block; margin-top: 2px; line-height: 1.4; }
+  .ok .ic { color: #5fd07a; } .bad { outline: 2px solid #ff6b5e; } .bad .ic { color: #ff6b5e; } .warn .ic { color: #f5b301; }
+  #sum { font-size: 20px; font-weight: 800; margin: 14px 0; padding: 12px 14px; border-radius: 12px; background: #17291d; }
+  #mapbox { height: 180px; border-radius: 12px; overflow: hidden; margin: 8px 0; background: #fff; }
+  button { font: inherit; padding: 8px 18px; border-radius: 18px; border: 0; background: #f5b301; color: #3a2a00; font-weight: 800; cursor: pointer; }
+</style>
+</head>
+<body>
+<main>
+  <h1>🔍 ตรวจระบบก่อนเล่น</h1>
+  <p class="sub">เปิดหน้านี้บนเครื่อง/มือถือที่จะใช้เล่น เพื่อดูว่าแผนที่ เสียง และการเชื่อมต่อใช้ได้ไหม</p>
+  <div id="sum">กำลังตรวจ…</div>
+  <div id="list"></div>
+  <div id="mapbox"></div>
+  <button id="again">ตรวจอีกครั้ง</button>
+</main>
+<script src="lib/maplibre-gl.js"></script>
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var rows = {};
+  function row(id, title, state, detail) {
+    var el = rows[id];
+    if (!el) { el = rows[id] = document.createElement('div'); $('list').appendChild(el); }
+    var ic = state === 'ok' ? '✅' : state === 'bad' ? '❌' : state === 'warn' ? '⚠️' : '⏳';
+    el.className = 'row ' + state; el.innerHTML = '<div class="ic">' + ic + '</div><div class="t"><b>' + title + '</b><small>' + (detail || '') + '</small></div>';
+  }
+  var bad = 0, warn = 0;
+  function done(state) { if (state === 'bad') bad++; if (state === 'warn') warn++; }
+
+  function timeout(p, ms) { return Promise.race([p, new Promise(function (_, rej) { setTimeout(function () { rej(new Error('หมดเวลา (' + ms / 1000 + ' วินาที)')); }, ms); })]); }
+  function test(id, title, url, adviceBad) {
+    row(id, title, 'wait', 'กำลังทดสอบ…');
+    var t0 = Date.now();
+    return timeout(fetch(url, { cache: 'no-store' }).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.arrayBuffer(); }), 15000)
+      .then(function (b) { row(id, title, 'ok', 'เข้าถึงได้ (' + Math.round(b.byteLength / 1024) + ' KB · ' + (Date.now() - t0) + ' มิลลิวินาที)'); return true; })
+      .catch(function (e) { done('bad'); row(id, title, 'bad', (e.message || e) + '<br>' + adviceBad); return false; });
+  }
+
+  function run() {
+    $('list').innerHTML = ''; rows = {}; bad = 0; warn = 0; $('sum').textContent = 'กำลังตรวจ…'; $('sum').style.color = '';
+    // 1) WebGL
+    var gl = null; try { var c = document.createElement('canvas'); gl = c.getContext('webgl2') || c.getContext('webgl'); } catch (e) {}
+    if (gl) row('gl', 'WebGL (จำเป็นสำหรับแผนที่)', 'ok', 'เบราว์เซอร์รองรับ');
+    else { done('bad'); row('gl', 'WebGL (จำเป็นสำหรับแผนที่)', 'bad', 'เบราว์เซอร์ไม่รองรับ WebGL ทำให้แผนที่ว่างเปล่า<br>แก้: ใช้ Chrome หรือ Edge ล่าสุด · เปิด "ใช้การเร่งด้วยฮาร์ดแวร์" ในการตั้งค่า · อัปเดตไดรเวอร์การ์ดจอ'); }
+    // 2) เสียง
+    var AC = window.AudioContext || window.webkitAudioContext;
+    row('ac', 'เสียง (เพลง/เอฟเฟกต์)', AC ? 'ok' : 'warn', AC ? 'รองรับ — ต้องคลิก 1 ครั้งบนหน้าจอก่อนเสียงจะดัง' : 'เบราว์เซอร์ไม่รองรับเสียง');
+    var tts = function () {
+      var v = (window.speechSynthesis ? speechSynthesis.getVoices() : []).filter(function (x) { return /^th/i.test(x.lang); });
+      row('tts', 'เสียงพูดภาษาไทย (ผู้ประกาศ AI)', v.length ? 'ok' : 'warn', v.length ? 'พบเสียง: ' + v[0].name : 'ไม่พบเสียงไทยในเบราว์เซอร์นี้ — ใช้ Microsoft Edge จะมีเสียง Natural (เกมยังเล่นได้ แสดงเป็นข้อความแทน)');
+    };
+    tts(); if (window.speechSynthesis) speechSynthesis.onvoiceschanged = tts;
+    // 3) เซิร์ฟเวอร์เกม
+    row('srv', 'เซิร์ฟเวอร์เกม', 'wait', 'กำลังทดสอบ…');
+    fetch('api/info', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (i) {
+      row('srv', 'เซิร์ฟเวอร์เกม', 'ok', 'ติดต่อได้ · ลิงก์นักเรียน: <b>' + i.url + '</b>' + (i.public ? '' : '<br>⚠️ ยังไม่ได้ลิงก์สาธารณะ (ใช้ได้เฉพาะ Wi-Fi วงเดียวกัน)'));
+    }).catch(function () { done('bad'); row('srv', 'เซิร์ฟเวอร์เกม', 'bad', 'ติดต่อเซิร์ฟเวอร์ไม่ได้ — เซิร์ฟเวอร์ปิดอยู่หรืออยู่คนละเครือข่าย'); });
+    // 4) เว็บแผนที่ (ต้องเข้าได้จากเครื่องที่เปิดหน้านี้)
+    var advice = 'เครือข่ายนี้อาจบล็อกเว็บนี้ ลองใช้ Hotspot จากมือถือ หรือขอให้ IT เปิดโดเมนนี้';
+    test('style', 'ไฟล์สไตล์แผนที่ (tiles.openfreemap.org)', 'https://tiles.openfreemap.org/styles/liberty', advice)
+      .then(function (ok) {
+        if (!ok) return;
+        return fetch('https://tiles.openfreemap.org/planet', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (tj) {
+          var u = tj.tiles[0].replace('{z}', 5).replace('{x}', 25).replace('{y}', 14);
+          return test('tile', 'ชิ้นแผนที่ (vector tile)', u, advice);
+        }).catch(function () { done('bad'); row('tile', 'ชิ้นแผนที่ (vector tile)', 'bad', advice); });
+      });
+    test('sprite', 'ไอคอนแผนที่', 'https://tiles.openfreemap.org/sprites/ofm_f384/ofm.json', advice);
+    test('glyph', 'ฟอนต์ป้ายชื่อบนแผนที่', 'https://tiles.openfreemap.org/fonts/Noto%20Sans%20Regular/0-255.pbf', advice);
+    test('dem', 'ข้อมูลความสูง (เส้นชั้นความสูง/สีภูมิประเทศ)', 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/8/200/115.png', 'ข้อภูมิประเทศจะไม่แสดงสีความสูงและเส้นชั้นความสูง · ' + advice);
+    // 5) ทดสอบวาดแผนที่จริง
+    $('mapbox').innerHTML = '';
+    row('map', 'ทดสอบวาดแผนที่จริง', 'wait', 'กำลังโหลดแผนที่ด้านล่าง… (รอได้ถึง 20 วินาที)');
+    if (gl) {
+      var t0 = Date.now(), ok = false, m;
+      try {
+        m = new maplibregl.Map({ container: 'mapbox', style: 'https://tiles.openfreemap.org/styles/liberty', center: [100.5, 13.75], zoom: 9, interactive: false });
+        m.on('load', function () { ok = true; row('map', 'ทดสอบวาดแผนที่จริง', 'ok', 'แผนที่โหลดและวาดได้ (' + Math.round((Date.now() - t0) / 100) / 10 + ' วินาที)'); finish(); });
+        // บางเครื่องไม่วาดเฟรมแรก ถ้าอยู่หลังหน้าต่างอื่น/ย่ออยู่ — สั่งวาดซ้ำเป็นระยะ
+        var kick = setInterval(function () { if (ok) clearInterval(kick); else { try { m.resize(); m.triggerRepaint(); } catch (e) {} } }, 2500);
+        setTimeout(function () { if (!ok) { done('bad'); row('map', 'ทดสอบวาดแผนที่จริง', 'bad', 'แผนที่ไม่ขึ้นภายใน 20 วินาที<br>ถ้าข้อ "เว็บแผนที่" ด้านบนผ่านหมด ให้ลอง: ดึงหน้าต่างนี้มาไว้ด้านหน้าและไม่ย่อ · ปิดโปรแกรมประหยัดพลังงานของเบราว์เซอร์ · รีเฟรชหน้า'); finish(); } }, 20000);
+      } catch (e) { done('bad'); row('map', 'ทดสอบวาดแผนที่จริง', 'bad', 'สร้างแผนที่ไม่ได้: ' + (e.message || e)); finish(); }
+    } else { row('map', 'ทดสอบวาดแผนที่จริง', 'bad', 'ข้ามเพราะไม่มี WebGL'); finish(); }
+    function finish() {
+      setTimeout(function () {
+        $('sum').textContent = bad ? '❌ พบปัญหา ' + bad + ' จุด — ดูข้อที่ขอบแดงด้านบน' : (warn ? '✅ ใช้เล่นได้ (มีข้อสังเกต ' + warn + ' ข้อ)' : '✅ ทุกอย่างพร้อมเล่น');
+        $('sum').style.color = bad ? '#ff6b5e' : '#5fd07a';
+      }, 2500);
+    }
+  }
+  $('again').onclick = function () { location.reload(); };
+  run();
+})();
+</script>
+</body>
+</html>

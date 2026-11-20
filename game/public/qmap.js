@@ -64,11 +64,21 @@
 
   function create(opts) {
     var pad = opts.pad || { top: 20, bottom: 20, left: 20, right: 20 };
-    var map = new maplibregl.Map({
-      container: opts.container, style: STYLE, bounds: TH, fitBoundsOptions: { padding: pad },
-      maxZoom: opts.maxZoom || 14, minZoom: 3.5, dragRotate: false, pitchWithRotate: false,
-      attributionControl: { compact: true }
-    });
+    var map;
+    try {
+      map = new maplibregl.Map({
+        container: opts.container, style: STYLE, bounds: TH, fitBoundsOptions: { padding: pad },
+        maxZoom: opts.maxZoom || 14, minZoom: 3.5, dragRotate: false, pitchWithRotate: false,
+        attributionControl: { compact: true }
+      });
+    } catch (err) { // ส่วนมากคือเบราว์เซอร์ไม่รองรับ WebGL — แสดงข้อความ ไม่ให้ทั้งหน้าพัง
+      var box0 = typeof opts.container === 'string' ? document.getElementById(opts.container) : opts.container;
+      if (box0) box0.innerHTML = '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;background:#fff;color:#222;font:600 17px sans-serif;padding:20px">⚠️ แผนที่แสดงไม่ได้<br>เบราว์เซอร์นี้ไม่รองรับ WebGL<br><small style="font-weight:400">ใช้ Chrome/Edge ล่าสุด เปิดการเร่งด้วยฮาร์ดแวร์ แล้วเปิดหน้า /check เพื่อตรวจ</small></div>';
+      var noop = function () { return noopMap; };
+      var noopMap = new Proxy(function () {}, { get: function (t, k) { return k === 'then' ? undefined : noop; }, apply: function () { return noopMap; } });
+      return { map: noopMap, ready: false, pad: pad, whenReady: function () {}, setLabels: function () {}, clearMarkers: function () {}, setAux: function () {}, unlock: function () {}, fitTH: function () {},
+        fitPoints: function () {}, setQuestion: function () {}, reset: function () {}, pinEl: pinEl, markers: [] };
+    }
     if (map.touchZoomRotate) map.touchZoomRotate.disableRotation();
     map.on('error', function (e) { console.warn('map error:', e && e.error && e.error.message); });
     if (root.ResizeObserver) new ResizeObserver(function () { map.resize(); }).observe(map.getContainer());
@@ -79,7 +89,23 @@
     }
     var m = { map: map, pad: pad, ready: false, symbolIds: [], wantLabels: true, cbs: [], markers: [], pinEl: pinEl };
 
+    // กันพลาด: แผนที่บางเครื่อง/เบราว์เซอร์ไม่วาดเฟรมแรก -> สั่งวาดซ้ำ ถ้ายังไม่ขึ้นแสดงข้อความ + ปุ่มลองใหม่ (ไม่ปล่อยให้จอว่างเฉยๆ)
+    var warnBox = null;
+    // หน้าต่างที่เพิ่งถูกนำมาไว้ด้านหน้า (เช่น แท็บที่เปิดอยู่เบื้องหลัง) -> วาดทันที
+    function wake() { if (!m.ready) { try { map.resize(); map.triggerRepaint(); } catch (e) {} } }
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) wake(); });
+    window.addEventListener('focus', wake);
+    var kicker = setInterval(function () { if (m.ready) clearInterval(kicker); else { try { map.resize(); map.triggerRepaint(); } catch (e) {} } }, 3000); // บางเครื่องไม่วาดเฟรมแรก
+    setTimeout(function () {
+      if (m.ready || warnBox) return;
+      warnBox = document.createElement('div');
+      warnBox.style.cssText = 'position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:6;background:rgba(0,0,0,.85);color:#fff;padding:14px 18px;border-radius:14px;font:600 16px sans-serif;text-align:center;max-width:80%';
+      warnBox.innerHTML = '⚠️ แผนที่โหลดไม่ขึ้น<br><small style="font-weight:400">ตรวจอินเทอร์เน็ต (ต้องเข้า tiles.openfreemap.org ได้) · ใช้ Chrome/Edge · ไม่ย่อหน้าต่าง<br>ดูรายละเอียดที่หน้า <b>/check</b></small><br><button style="margin-top:10px;padding:6px 18px;border-radius:16px;border:0;font:700 15px sans-serif">ลองใหม่</button>';
+      warnBox.querySelector('button').onclick = function () { location.reload(); };
+      map.getContainer().appendChild(warnBox);
+    }, 15000);
     map.on('load', function () {
+      if (warnBox) { warnBox.remove(); warnBox = null; }
       try {
       m.symbolIds = map.getStyle().layers.filter(function (l) { return l.type === 'symbol'; }).map(function (l) { return l.id; });
       var firstSym = m.symbolIds[0];

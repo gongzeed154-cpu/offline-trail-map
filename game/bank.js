@@ -26,10 +26,12 @@ const PROF = {
   50000: { half: 2.5, grid: 1000, digits: 3, maxKm: 1.0, dmsStep: 1, dmsHalf: 0.05, dmsRound: 12 }
 };
 
-const rnd = (a, b) => a + Math.random() * (b - a);
+let rng = Math.random; // ใช้ตัวสุ่มที่เปลี่ยนได้ (คลังข้อสอบใช้ seed คงที่)
+const mulberry32 = a => () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+const rnd = (a, b) => a + rng() * (b - a);
 const ri = (a, b) => Math.floor(rnd(a, b + 1));
-const pick = a => a[Math.floor(Math.random() * a.length)];
-const shuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+const pick = a => a[Math.floor(rng() * a.length)];
+const shuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 const sc = s => '1:' + s.toLocaleString('en-US');
 const n2 = n => (n < 10 ? '0' : '') + n;
 const fmtDMS = (v, hemi) => { v = Math.abs(v); let d = Math.floor(v), mm = (v - d) * 60, m = Math.floor(mm), s = Math.round((mm - m) * 60); if (s === 60) { s = 0; m++; } if (m === 60) { m = 0; d++; } return d + '°' + n2(m) + '′' + n2(s) + '″' + hemi; };
@@ -82,7 +84,7 @@ function t1(ctx, v) {
     const c = pick(CONTOUR_CHOICES), order = shuffle([0, 1, 2, 3]);
     return { type: 'choice', topic: 1, seconds: 20, prompt: c[0], hint: 'เลือกคำตอบที่ถูกต้องที่สุด', options: order.map(i => c[1][i]), correct: order.indexOf(0), name: c[1][0] };
   }
-  if (Math.random() < 0.5) { // คำนวณความสูงจากเส้นชั้นความสูง
+  if (rng() < 0.5) { // คำนวณความสูงจากเส้นชั้นความสูง
     const I = pick([10, 20, 40, 50]), F = pick([100, 200, 300, 400, 500]), K = ri(4, 9);
     return { type: 'num', topic: 1, seconds: 35, numUnit: 'เมตร', numDigits: 4, maxErr: Math.max(2 * I, 40), value: F + (K - 1) * I,
       prompt: 'เส้นชั้นความสูงช่วงห่าง ' + I + ' ม. เส้นแรกสูง ' + F + ' ม. เส้นที่ ' + K + ' สูงกี่ เมตร?',
@@ -169,7 +171,7 @@ function t5(ctx, v) {
   if (v === 'd2m') { const k = ri(1, 39), d = 9 * k; return { type: 'num', topic: 5, seconds: 35, numUnit: 'มิลเลียม', numDigits: 4, value: 160 * k, maxErr: 300, prompt: d + '° เท่ากับกี่ มิลเลียม?', hint: 'วงกลม 360° = 6,400 มิลเลียม (9° = 160 มิลเลียม)', name: d + ' × 6,400 ÷ 360 = ' + (160 * k) + ' มิลเลียม' }; }
   if (v === 'm2d') { const k = ri(1, 39), m = 160 * k; return { type: 'num', topic: 5, seconds: 35, numUnit: '°', numDigits: 3, value: 9 * k, maxErr: 15, prompt: m.toLocaleString('en-US') + ' มิลเลียม เท่ากับกี่ องศา?', hint: 'วงกลม 6,400 มิลเลียม = 360° (160 มิลเลียม = 9°)', name: m + ' × 360 ÷ 6,400 = ' + (9 * k) + '°' }; }
   if (v === 'clicks') { const a = ri(2, 60) * 3; return { type: 'num', topic: 5, seconds: 30, numUnit: 'คลิก', numDigits: 3, value: a / 3, maxErr: 10, prompt: '🌙 กลางคืน: หมุนขอบเข็มทิศเลนเซติก (1 คลิก = 3°) ไปที่ ' + a + '° ต้องหมุนกี่ คลิก?', hint: 'จำนวนคลิก = องศา ÷ 3 (1 รอบ = 120 คลิก)', name: a + ' ÷ 3 = ' + (a / 3) + ' คลิก' }; }
-  if (v === 'turn') { const a = ri(0, 35) * 10, t = ri(1, 17) * 5, right = Math.random() < 0.5, r = deg(a + (right ? t : -t) + 360);
+  if (v === 'turn') { const a = ri(0, 35) * 10, t = ri(1, 17) * 5, right = rng() < 0.5, r = deg(a + (right ? t : -t) + 360);
     return { type: 'num', topic: 5, seconds: 40, numUnit: '°', numDigits: 3, value: r, maxErr: 15, prompt: 'หันหน้าที่ Azimuth ' + a + '° แล้วเลี้ยว' + (right ? 'ขวา ' : 'ซ้าย ') + t + '° ตอนนี้หันหน้าไป Azimuth เท่าไร?', hint: 'ขวา = บวก (ตามเข็มนาฬิกา) · ซ้าย = ลบ', name: a + (right ? ' + ' : ' − ') + t + ' = ' + r + '°' }; }
   if (v === 'dec') { const g = ri(0, 35) * 10, d = ri(1, 6); return { type: 'num', topic: 5, seconds: 40, numUnit: '°', numDigits: 3, value: g + d, maxErr: 10, prompt: 'มุมกริด ' + g + '° — เหนือแม่เหล็กอยู่ทางตะวันตกของเหนือกริด ' + d + '° (G–M ' + d + '° W) มุมแม่เหล็กที่ตั้งบนเข็มทิศ = ?', hint: 'เหนือแม่เหล็กอยู่ตะวันตก → มุมแม่เหล็ก = มุมกริด + G–M', name: g + ' + ' + d + ' = ' + (g + d) + '°' }; }
   if (v === 'cbezel') return { type: 'choice', topic: 5, seconds: 20, options: ['1°', '3°', '5°', '10°'], correct: 1, prompt: 'ขอบหมุด (bezel) ของเข็มทิศเลนเซติก หมุน 1 คลิก เท่ากับกี่องศา?', hint: 'ตามเข็มทิศเลนเซติกแบบมาตรฐาน (120 คลิกต่อรอบ)', name: '3° ต่อ 1 คลิก' };
@@ -195,7 +197,7 @@ function t7(ctx, v) {
   if (v === 'form') return scaleForm();
   const S = ctx.scale();
   if (v === 'cm2m') { const cm = ri(2, 12), m = cm * S / 100; return { type: 'num', topic: 7, seconds: 35, numUnit: 'เมตร', numDigits: 5, value: m, maxErr: Math.max(m * 0.1, 20), prompt: 'แผนที่มาตราส่วน ' + sc(S) + ' ระยะบนแผนที่ ' + cm + ' ซม. คือระยะจริงกี่ เมตร?', hint: '1 ซม. บนแผนที่ = ' + (S / 100).toLocaleString('en-US') + ' ม. จริง', name: cm + ' × ' + (S / 100) + ' = ' + m.toLocaleString('en-US') + ' ม.' }; }
-  if (v === 'm2cm') { const half = S % 200 === 0 && Math.random() < 0.5, cm = ri(2, 11) + (half ? 0.5 : 0), m = cm * S / 100; return { type: 'num', topic: 7, seconds: 40, numUnit: 'ซม.', numDigits: 4, decimal: half, value: cm, maxErr: half ? 1 : 3, prompt: 'ระยะจริง ' + m.toLocaleString('en-US') + ' เมตร บนแผนที่ ' + sc(S) + ' วัดได้กี่ ซม.?', hint: 'ระยะบนแผนที่ = ระยะจริง ÷ (S ÷ 100)', name: m.toLocaleString('en-US') + ' ÷ ' + (S / 100) + ' = ' + cm + ' ซม.' }; }
+  if (v === 'm2cm') { const half = S % 200 === 0 && rng() < 0.5, cm = ri(2, 11) + (half ? 0.5 : 0), m = cm * S / 100; return { type: 'num', topic: 7, seconds: 40, numUnit: 'ซม.', numDigits: 4, decimal: half, value: cm, maxErr: half ? 1 : 3, prompt: 'ระยะจริง ' + m.toLocaleString('en-US') + ' เมตร บนแผนที่ ' + sc(S) + ' วัดได้กี่ ซม.?', hint: 'ระยะบนแผนที่ = ระยะจริง ÷ (S ÷ 100)', name: m.toLocaleString('en-US') + ' ÷ ' + (S / 100) + ' = ' + cm + ' ซม.' }; }
   if (v === 'grid') { const g = pick([100, 500, 1000]), cm = g * 100 / S; if (!Number.isInteger(cm)) return t7(ctx, 'cm2m'); return { type: 'num', topic: 7, seconds: 35, numUnit: 'ซม.', numDigits: 3, value: cm, maxErr: 3, prompt: 'ช่องกริดกว้าง ' + gridWord(g) + ' บนแผนที่ ' + sc(S) + ' กว้างกี่ ซม.?', hint: 'ซม. บนแผนที่ = ระยะจริง (ม.) × 100 ÷ S', name: g + ' × 100 ÷ ' + S + ' = ' + cm + ' ซม.' }; }
   if (v === 'large') return { type: 'choice', topic: 7, seconds: 20, options: shuffleOpts(['1:5,000', '1:25,000', '1:50,000', '1:250,000'], 0), prompt: 'มาตราส่วนใด แสดงรายละเอียดภูมิประเทศ "มากที่สุด"?', hint: 'มาตราส่วนใหญ่ = ตัวส่วนน้อย', name: '1:5,000 (มาตราส่วนใหญ่ที่สุด)' };
   return { type: 'choice', topic: 7, seconds: 20, options: shuffleOpts(['1 ซม. = ' + (S / 100).toLocaleString('en-US') + ' ม.', '1 ซม. = ' + (S / 10).toLocaleString('en-US') + ' ม.', '1 ซม. = ' + (S).toLocaleString('en-US') + ' ม.', '1 ซม. = ' + (S / 1000).toLocaleString('en-US') + ' ม.'], 0), prompt: 'แผนที่มาตราส่วน ' + sc(S) + ' 1 เซนติเมตร บนแผนที่ เท่ากับระยะจริงเท่าไร?', hint: '1 ซม. = S ซม. จริง ÷ 100 = เมตร', name: '1 ซม. = ' + (S / 100).toLocaleString('en-US') + ' ม.' };
@@ -224,7 +226,7 @@ const GEO_FACTS = [
   ['ละติจูด 14°15′35″ เหนือ หมายความว่าอย่างไร?', 'อยู่เหนือเส้นศูนย์สูตร 14 องศา 15 ลิปดา 35 ฟิลิปดา', ['อยู่ใต้เส้นศูนย์สูตร 14 องศา 15 ลิปดา 35 ฟิลิปดา', 'อยู่ตะวันออกของเมอริเดียนเริ่มแรก 14 องศา', 'อยู่ห่างจากขั้วโลกเหนือ 14 องศา']]
 ];
 function geoFact() {
-  const r = Math.random();
+  const r = rng();
   if (r < 0.2) return { type: 'num', topic: 2, seconds: 35, numUnit: 'เมตร', numDigits: 4, value: 1800, maxErr: 400, prompt: '1 ลิปดา มีความยาวประมาณกี่ เมตร?', hint: '1 ลิปดา ≈ 1 ไมล์ทะเล (ประมาณ 1,800 ม.)', name: '1 ลิปดา ≈ 1,800 ม.' };
   if (r < 0.4) return { type: 'num', topic: 2, seconds: 35, numUnit: 'เมตร', numDigits: 3, value: 30, maxErr: 15, prompt: '1 ฟิลิปดา มีความยาวประมาณกี่ เมตร?', hint: '1 ลิปดา ≈ 1,800 ม. ÷ 60 ฟิลิปดา', name: '1 ฟิลิปดา ≈ 30 ม.' };
   const f = pick(GEO_FACTS);
@@ -253,7 +255,7 @@ function compassPart() {
   return { type: 'choice', topic: 5, seconds: 25, prompt: c[0], hint: 'ส่วนประกอบเข็มทิศเลนเซติก: ฝาตลับ · ตัวเรือน · ก้านเล็ง', options: opts4(c[1], c[2]), name: c[1] };
 }
 function obstacle() { // เดินอ้อมสิ่งกีดขวาง: หักออกเป็นมุมฉาก ขวา + 90° ซ้าย − 90°
-  const a = ri(0, 35) * 10, right = Math.random() < 0.5, r = (((a + (right ? 90 : -90)) % 360) + 360) % 360;
+  const a = ri(0, 35) * 10, right = rng() < 0.5, r = (((a + (right ? 90 : -90)) % 360) + 360) % 360;
   return { type: 'num', topic: 5, seconds: 35, numUnit: '°', numDigits: 3, value: r, maxErr: 15,
     prompt: 'เดินที่ Azimuth ' + a + '° พบสิ่งกีดขวาง หักออกทาง' + (right ? 'ขวา' : 'ซ้าย') + 'เป็นมุมฉาก ต้องเดินที่ Azimuth เท่าไร?',
     hint: 'หักออกจากแนวเดิมเป็นมุมฉาก: ขวา = บวก 90° · ซ้าย = ลบ 90°', name: a + (right ? ' + ' : ' − ') + '90 = ' + r + '°' };
@@ -304,6 +306,84 @@ function finalize(q) { // ตัวเลือกแบบสุ่มสลั
   return q;
 }
 
+
+// ---------- รูปประกอบ (art): ทุกข้อมีคำอธิบายรูป ให้หน้าเว็บวาด (public/art.js) ----------
+const numOf = s => +String(s).replace(/,/g, '');
+const CONCEPTS = ['steep', 'gentle', 'hill', 'vup', 'vdown', 'equal', 'interval', 'saddle'];
+const PART_HL = ['all', 'dial', 'dial', 'loop', 'sight', 'dial', 'arrow', 'ruler', 'bezel'];
+const FACT_HL = ['lat', 'lng', 'dms', 'dms', 'lat'];
+function llOf(q) { if (q.utm) { const ll = Geo.fromUTM(q.utm.zone || 47, true, q.utm.e, q.utm.n); return { lat: ll.lat, lng: ll.lng }; } return q.lat != null ? { lat: q.lat, lng: q.lng } : null; }
+function gridSpec(q) { return (q.gridType === 'utm' || q.type === 'grid' || q.utm) ? { t: 'utm', step: q.grid || 1000 } : q.grid ? { t: 'll', step: q.grid } : null; }
+function artOf(q) {
+  const p = q.prompt || '', n = q.name || '', T = q.topic || 0; let m;
+  // ----- แผนที่ -----
+  if (q.type === 'pin' && q.markers && q.markers.length && q.frame) { // สกัดกลับ: ลากเส้นจากยอด A/B มาที่ตำแหน่งผู้เล่น
+    const P = llOf(q); return { k: 'map', frame: q.frame, grid: gridSpec(q), target: P, markers: q.markers, lines: q.markers.map(x => [[x.lat, x.lng], [P.lat, P.lng]]) };
+  }
+  if (q.type === 'num' && q.mark && q.frame) return { k: 'map', frame: q.frame, terrain: !!q.terrain, markers: [{ lat: q.mark.lat, lng: q.mark.lng, label: q.mark.label || 'P' }] };
+  if (q.from && q.to) {
+    const mp = { k: 'map', frame: q.frame, grid: gridSpec(q), markers: [{ lat: q.from.lat, lng: q.from.lng, label: 'A' }, { lat: q.to.lat, lng: q.to.lng, label: 'B' }], lines: [[[q.from.lat, q.from.lng], [q.to.lat, q.to.lng]]], north: true };
+    return q.type === 'compass' ? { k: 'mapdial', map: mp, angle: q.angle, unit: q.unit || 'deg' } : mp;
+  }
+  if ((q.type === 'pin' || q.type === 'dms' || q.type === 'grid') && q.frame) { const P = llOf(q); return { k: 'map', frame: q.frame, grid: gridSpec(q), target: P, terrain: !!q.terrain }; }
+  if (q.type === 'compass') return { k: 'dial', angle: q.angle, unit: q.unit || 'deg', night: q.dialStyle === 'night' };
+  // ----- เส้นชั้นความสูง -----
+  let i = CONTOUR_CHOICES.findIndex(c => c[0] === p); if (i >= 0) return { k: 'contour', c: CONCEPTS[i] };
+  i = CONTOUR_DEF.indexOf(p); if (i >= 0) return { k: 'ctypes', hl: i };
+  if ((m = /ช่วงห่าง (\d+) ม\. เส้นแรกสูง (\d+) ม\. เส้นที่ (\d+)/.exec(p))) return { k: 'profile', interval: +m[1], first: +m[2], count: +m[3] };
+  if ((m = /จุด A สูง (\d+) ม\. จุด B สูง (\d+) ม\. ช่วงห่างเส้นชั้นความสูง (\d+) ม\./.exec(p))) return { k: 'profile2', h1: +m[1], h2: +m[2], interval: +m[3] };
+  // ----- พิกัดภูมิศาสตร์ -----
+  i = GEO_FACTS.findIndex(c => c[0] === p); if (i >= 0) return { k: 'graticule', hl: FACT_HL[i] };
+  if (/^1 ลิปดา มีความยาว/.test(p)) return { k: 'dmsbar', hl: 'min' };
+  if (/^1 ฟิลิปดา มีความยาว/.test(p)) return { k: 'dmsbar', hl: 'sec' };
+  // ----- วัดระยะ / นับก้าว -----
+  if ((m = /√\((\d+)² \+ (\d+)²\)/.exec(n))) return { k: 'coordgrid', dE: +m[1], dN: +m[2], dist: q.value };
+  if ((m = /นับก้าวได้ (\d+) ก้าว \(ก้าวมาตรฐาน 100 เมตร = (\d+) ก้าว\)/.exec(p))) return { k: 'pace', steps: +m[1], std: +m[2], dist: q.value };
+  if ((m = /ก้าวมาตรฐาน 100 เมตร = (\d+) ก้าว เดินทาง (\d+) เมตร/.exec(p))) return { k: 'pace', steps: q.value, std: +m[1], dist: +m[2] };
+  // ----- เข็มทิศ -----
+  if ((m = /^(\d+)° เท่ากับกี่ มิลเลียม/.exec(p))) return { k: 'circle', deg: +m[1] };
+  if ((m = /^([\d,]+) มิลเลียม เท่ากับกี่ องศา/.exec(p))) return { k: 'circle', mil: numOf(m[1]) };
+  if ((m = /ไปที่ (\d+)° ต้องหมุนกี่ คลิก/.exec(p))) return { k: 'bezel', az: +m[1] };
+  if ((m = /Azimuth (\d+)° แล้วเลี้ยว(ขวา|ซ้าย) (\d+)°/.exec(p))) return { k: 'turn', a: +m[1], t: +m[3], right: m[2] === 'ขวา' };
+  if ((m = /มุมกริด (\d+)° .*G–M (\d+)° W/.exec(p))) return { k: 'decl', grid: +m[1], gm: +m[2] };
+  if ((m = /Azimuth (\d+)° พบสิ่งกีดขวาง หักออกทาง(ขวา|ซ้าย)/.exec(p))) return { k: 'obstacle', a: +m[1], right: m[2] === 'ขวา' };
+  i = COMPASS_Q.findIndex(c => c[0] === p); if (i >= 0) return { k: 'parts', hl: PART_HL[i] };
+  if (/ขอบหมุด \(bezel\)/.test(p)) return { k: 'bezel', az: 60, one: true };
+  if (/^ครึ่งวงกลม/.test(p)) return { k: 'circle', deg: 180 };
+  i = ORIENT_Q.findIndex(c => c[0] === p); if (i >= 0) return { k: 'orient', i };
+  // ----- มาตราส่วน -----
+  if ((m = /มาตราส่วน 1:([\d,]+) ระยะบนแผนที่ (\d+) ซม\./.exec(p))) return { k: 'scalebar', S: numOf(m[1]), cm: +m[2] };
+  if ((m = /ระยะจริง ([\d,]+) เมตร บนแผนที่ 1:([\d,]+)/.exec(p))) return { k: 'scalebar', S: numOf(m[2]), cm: q.value };
+  if ((m = /ช่องกริดกว้าง (.+?) บนแผนที่ 1:([\d,]+)/.exec(p))) return { k: 'gridsq', S: numOf(m[2]), cm: q.value };
+  if ((m = /แผนที่มาตราส่วน 1:([\d,]+) 1 เซนติเมตร/.exec(p))) return { k: 'scalebar', S: numOf(m[1]), cm: 1 };
+  if (/แสดงรายละเอียดภูมิประเทศ/.test(p)) return { k: 'scalecmp' };
+  if (/เป็นมาตราส่วนแบบใด/.test(p)) { const mr = /^1 : ([\d,]+)/.exec(p), mv = /“1 เซนติเมตร เท่ากับ ([\d,]+) เมตร”/.exec(p); return { k: 'scaleforms', hl: mr ? 'rf' : mv ? 'verbal' : 'bar', S: mr ? numOf(mr[1]) : mv ? numOf(mv[1]) * 100 : 0 }; }
+  return { k: 'topic', t: T }; // อย่างน้อยทุกข้อมีรูปหัวข้อ
+}
+const withArt = q => { q.art = artOf(q); return q; };
+
+// ---------- คลังข้อสอบคงที่: หัวข้อละ 50 ข้อ (seed คงที่ → ลำดับเหมือนเดิมทุกครั้ง) ----------
+let _catalog = null;
+const CATALOG_PER_TOPIC = 50;
+function catalog() {
+  if (_catalog) return _catalog;
+  const keep = rng; rng = mulberry32(20261120);
+  try {
+    const out = {};
+    TOPICS.forEach(tp => {
+      const ctx = makeCtx({ scales: SCALES }), seen = new Set(), list = [], vs = [...new Set(GEN[tp.id].v)];
+      for (let tries = 0; list.length < CATALOG_PER_TOPIC && tries < 4000; tries++) {
+        const q = finalize(GEN[tp.id].fn(ctx, vs[tries % vs.length])), key = q.prompt + '|' + q.name;
+        if (seen.has(key)) continue;
+        seen.add(key); list.push(withArt(q));
+      }
+      out[tp.id] = list;
+    });
+    _catalog = out;
+  } finally { rng = keep; }
+  return _catalog;
+}
+
 function generate(cfg) {
   cfg = Object.assign({}, DEFAULTS, cfg || {});
   let topics = (cfg.topics || []).filter(t => GEN[t]);
@@ -317,7 +397,7 @@ function generate(cfg) {
     const vs = shuffle(GEN[t].v), list = [];
     for (let i = 0; i < per[t]; i++) {
       let v = vs[i % vs.length]; if (i >= vs.length) v = pick(GEN[t].v);
-      list.push(finalize(GEN[t].fn(ctx, v)));
+      list.push(withArt(finalize(GEN[t].fn(ctx, v))));
     }
     buckets[t] = list;
   });
@@ -330,4 +410,4 @@ function generate(cfg) {
   return out;
 }
 
-module.exports = { generate, TOPICS, SCALES, DEFAULTS, PROF };
+module.exports = { generate, catalog, artOf, TOPICS, SCALES, DEFAULTS, PROF };

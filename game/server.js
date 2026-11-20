@@ -86,10 +86,15 @@ let fixedSet = null, fixedName = ''; // ชุดที่ครูเลือ�
 const pool = new Map(); let poolSeq = 0; // ข้อที่ครูกำลังดู/เลือก: id -> ข้อสอบดิบ
 const cloneQ = o => JSON.parse(JSON.stringify(o));
 const safeName = n => String(n || '').trim().replace(/[\\/:*?"<>|\x00-\x1f]/g, '_').replace(/\s+/g, ' ').replace(/^\.+/, '').slice(0, 60);
+const catalogMap = new Map();
+function catalogList(t) { // คลังข้อสอบคงที่ หัวข้อละ 50 ข้อ (id คงที่ c<หัวข้อ>-<ลำดับ>)
+  return (bank.catalog()[t] || []).map((q, i) => { const id = 'c' + t + '-' + (i + 1); catalogMap.set(id, q); return previewOf(q, id); });
+}
+const getQ = id => pool.get(id) || catalogMap.get(id);
 function addToPool(q) { const id = 'q' + (++poolSeq); pool.set(id, q); if (pool.size > 1500) pool.delete(pool.keys().next().value); return id; }
 function previewOf(q, id) {
   return { id, topic: q.topic || 0, type: q.type, prompt: q.prompt, hint: q.hint || '', name: q.name || '', seconds: q.seconds || CFG.questionSeconds || 25,
-    scale: q.scale || 0, options: q.options || null, correct: q.correct != null ? q.correct : null, value: q.value != null ? q.value : null, numUnit: q.numUnit || '' };
+    scale: q.scale || 0, art: q.art || bank.artOf(q), options: q.options || null, correct: q.correct != null ? q.correct : null, value: q.value != null ? q.value : null, numUnit: q.numUnit || '' };
 }
 const folderDir = f => { const n = safeName(f); return n ? path.join(SAVED, n) : SAVED; }; // '' = โฟลเดอร์หลัก
 const setFile = (folder, name) => path.join(folderDir(folder), safeName(name) + '.json');
@@ -341,6 +346,10 @@ http.createServer(async (req, res) => {
       if (p === '/api/bank') { // สุ่มข้อสอบมาให้ครูดู/เลือก (ต่อหัวข้อ)
         if (!isLocal(req)) return json(res, 403, {});
         const tp = (u.searchParams.get('topics') || '').split(',').map(Number).filter(t => t >= 1 && t <= 7);
+        if (u.searchParams.get('catalog')) { // คลังข้อสอบคงที่ (ไม่สุ่มใหม่)
+          const o = {}; (tp.length ? tp : [1, 2, 3, 4, 5, 6, 7]).forEach(t => { o[t] = catalogList(t); });
+          return json(res, 200, { catalog: o });
+        }
         const per = Math.min(20, Math.max(1, +u.searchParams.get('per') || 8));
         const out = [];
         (tp.length ? tp : [1, 2, 3, 4, 5, 6, 7]).forEach(t => bank.generate({ topics: [t], count: per, scales: gameCfg.scales }).forEach(q => out.push(previewOf(q, addToPool(q)))));
@@ -465,14 +474,14 @@ http.createServer(async (req, res) => {
         else if (b.cmd === 'useSet' || b.cmd === 'loadSet') { // เล่นชุดที่ครูเลือก (เฉพาะห้องรอ)
           if (phase !== 'lobby') return json(res, 200, { ok: false });
           let list, nm;
-          if (b.cmd === 'useSet') { list = (b.ids || []).map(id => pool.get(id)).filter(Boolean); nm = safeName(b.name) || 'ชุดที่เลือก'; }
+          if (b.cmd === 'useSet') { list = (b.ids || []).map(getQ).filter(Boolean); nm = safeName(b.name) || 'ชุดที่เลือก'; }
           else { const j = readSet(b.folder, b.name); list = j ? j.questions : []; nm = j ? setLabel(b.folder, j.name) : ''; }
           if (!list.length) return json(res, 200, { ok: false, error: 'empty' });
           fixedSet = list.map(cloneQ); fixedName = nm; rebuild(); pushNow();
           return json(res, 200, { ok: true, count: N });
         }
         else if (b.cmd === 'saveSet') { // บันทึกชุดลงโฟลเดอร์ saved/<โฟลเดอร์>/
-          const name = safeName(b.name), list = (b.ids || []).map(id => pool.get(id)).filter(Boolean);
+          const name = safeName(b.name), list = (b.ids || []).map(getQ).filter(Boolean);
           if (!name) return json(res, 200, { ok: false, error: 'name' });
           if (!list.length) return json(res, 200, { ok: false, error: 'empty' });
           try { fs.mkdirSync(folderDir(b.folder), { recursive: true }); fs.writeFileSync(setFile(b.folder, name), JSON.stringify({ name, saved: new Date().toISOString(), questions: list }, null, 1), 'utf8'); }

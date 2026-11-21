@@ -328,7 +328,7 @@ function serveStatic(req, res, key) {
   if (!f.etag) f.etag = '"' + crypto.createHash('md5').update(f.buf).digest('hex') + '"';
   // ตรวจ ETag ทุกครั้ง (ไฟล์ไม่เปลี่ยน = 304 ไม่ต้องโหลดซ้ำ; ครูแก้ไฟล์แล้วเห็นผลทันที)
   if (req.headers['if-none-match'] === f.etag) { res.writeHead(304, { ETag: f.etag, 'Cache-Control': 'no-cache' }); return res.end(); }
-  const gz = /gzip/.test(req.headers['accept-encoding'] || '');
+  const gz = /gzip/.test(req.headers['accept-encoding'] || '');
   const h = { 'Content-Type': f.type, 'Cache-Control': 'no-cache', ETag: f.etag, Vary: 'Accept-Encoding' };
   if (gz) h['Content-Encoding'] = 'gzip';
   res.writeHead(200, h); res.end(gz ? f.gz : f.buf);

@@ -472,7 +472,8 @@
   }
   function kickedScreen() {
     pollGen++; if (es) { es.close(); es = null; }
-    showScreen('🚫 ถูกเชิญออก', 'ครูเอาคุณออกจากเกม', '', 'none');
+    showScreen('🚫 ถูกเชิญออก', 'ครูเอาคุณออกจากเกมแล้ว', '<button class="btn" id="again" style="margin-top:14px;font-size:20px;padding:12px 22px">✏️ เข้าใหม่ / เปลี่ยนชื่อ</button>', 'none');
+    $('again').onclick = function () { store.set('mapgame_id', ''); myId = null; showScreen('🗺️ เข้าร่วมเกมใหม่', 'ตั้งชื่อและเลือกตัวละครได้เลย', '', 'join'); };
   }
   function rejoin() { // id ถูกลบ (เซิร์ฟเวอร์รีสตาร์ท) -> สมัครใหม่
     return fetch('api/join', { method: 'POST', body: JSON.stringify({ id: myId, name: store.get('mapgame_name') || '', av: pick.av, color: pick.color }) })

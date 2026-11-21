@@ -509,7 +509,7 @@ http.createServer(async (req, res) => {
         }
         else if (b.cmd === 'clearSet') { if (phase === 'lobby') { fixedSet = null; fixedName = ''; rebuild(); pushNow(); } }
         else if (b.cmd === 'reset') resetGame();
-        else if (b.cmd === 'clear') { players.clear(); resetGame(); }
+        else if (b.cmd === 'clear') { for (const id of players.keys()) kicked.add(id); players.clear(); resetGame(); } // ผู้เล่นเดิมต้องกด "เข้าใหม่" เอง (ไม่เด้งกลับเข้ามาด้วยชื่อเดิมอัตโนมัติ)
         else if (b.cmd === 'kick') { // เตะผู้เล่น (ใช้ตอนตั้งชื่อไม่เหมาะสม)
           for (const [id, pl] of players) if (pl.n === +b.k) { players.delete(id); kicked.add(id); }
           push();

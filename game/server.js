@@ -197,6 +197,7 @@ function pushNow() {
     q: q ? publicQ(q) : null
   };
   if (phase === 'reveal') {
+    base.art = q.art || bank.artOf(q); // รูปประกอบ/เฉลยภาพ (ส่งตอนเฉลยเท่านั้น ไม่เผยคำตอบก่อน)
     base.reveal = q.type === 'compass'
       ? { type: 'compass', angle: q.angle, name: q.name, maxDeg: q.maxDeg || 45, unit: q.unit || 'deg' }
       : q.type === 'choice'

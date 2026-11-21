@@ -44,6 +44,9 @@
   #revealBox { position: absolute; z-index: 4; left: 20px; top: 20px; background: rgba(255,255,255,.96); color: #1b1b1b; border-radius: 18px; padding: 16px 26px; font-size: 34px; max-width: 900px; }
   #revealBox b { color: var(--green); }
   #revealBox small { font-size: 24px; }
+  #artBox { position: absolute; z-index: 6; left: 20px; bottom: 20px; width: 480px; height: 267px; border-radius: 16px; overflow: hidden; background: #fbf8ee; border: 4px solid var(--gold); box-shadow: 0 8px 30px rgba(0,0,0,.5); }
+  #mapWrap.hasArt #caption { bottom: 310px; }
+  #artBox > * { transform-origin: 0 0; }
   #caption { position: absolute; z-index: 5; left: 50%; transform: translateX(-50%); bottom: 130px; max-width: 1000px; background: rgba(0,0,0,.72); border-radius: 28px; padding: 10px 28px; font-size: 28px; text-align: center; }
 
   #side { background: var(--panel); border-left: 3px solid var(--line); padding: 20px 24px; display: flex; flex-direction: column; min-height: 0; }
@@ -177,6 +180,7 @@
       <div id="numWrap" hidden><div id="numBig"></div><div id="choiceList" hidden></div><div id="numSub"></div></div>
       <div id="answered"><span id="aTxt"></span><div id="aBar"><div id="aIn"></div></div></div>
       <div id="revealBox" hidden></div>
+      <div id="artBox" hidden></div>
       <div id="caption" hidden></div>
     </div>
     <div id="side">
@@ -444,6 +448,13 @@
   }
   function showNum(on) { $('numWrap').hidden = !on; if (on) { $('hdialWrap').hidden = true; $('map').style.visibility = 'hidden'; } }
 
+  // รูปประกอบ/เฉลยภาพ ตอนเฉลย (ข้ามชนิดที่จอหลักแสดงอยู่แล้ว: แผนที่/หน้าปัด)
+  function showArt(a) {
+    var box = $('artBox'); box.innerHTML = '';
+    if (!a || !window.Art || a.k === 'map' || a.k === 'mapdial' || a.k === 'dial') { box.hidden = true; $('mapWrap').classList.remove('hasArt'); return; }
+    try { var el = Art.render(a); el.style.transform = 'scale(' + (472 / 360) + ')'; el.style.transformOrigin = '0 0'; box.appendChild(el); box.hidden = false; $('mapWrap').classList.add('hasArt'); } catch (e) { box.hidden = true; $('mapWrap').classList.remove('hasArt'); }
+  }
+
   function render(s) {
     var phaseChanged = s.phase !== prev.phase, qChanged = s.qi !== prev.qi;
     var inGame = s.phase === 'question' || s.phase === 'reveal';
@@ -465,6 +476,7 @@
       $('prompt').textContent = q.prompt; $('hint').textContent = q.hint || '';
       $('avg').innerHTML = 'ค่าเฉลี่ยทั้งห้อง <b>' + s.avg.toFixed(1) + '%</b> · ผู้เล่น ' + s.players + ' คน';
       drawLB($('lb'), s.top);
+      if (s.phase !== 'reveal') { $('artBox').hidden = true; $('mapWrap').classList.remove('hasArt'); }
       if (s.phase === 'question') {
         $('answered').hidden = false; $('revealBox').hidden = true;
         $('aTxt').textContent = 'ตอบแล้ว ' + s.answered + ' / ' + s.connected + ' คน';
@@ -491,6 +503,7 @@
           var msg = isCompass ? 'เฉลย ' + Math.round(t.angle) + ' องศา ' : isChoice ? 'เฉลย ' + t.options[t.correct] + ' ' : isNum ? 'เฉลย ' + t.value + ' ' + (t.numUnit || '') + ' ' : 'เฉลย ' + t.name + ' ';
           say(msg + 'ค่าเฉลี่ยข้อนี้ ' + Math.round(s.qAvg) + ' เปอร์เซ็นต์' + (lead ? ' ผู้นำตอนนี้คือ ' + lead.name : ''));
           $('revealBox').hidden = false;
+          showArt(s.art);
           if (isChoice) {
             var cnt = [0, 0, 0, 0], tot = Math.max(1, (s.pins || []).length);
             (s.pins || []).forEach(function (p) { if (p.c != null) cnt[p.c]++; });

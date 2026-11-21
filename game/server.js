@@ -196,8 +196,9 @@ function pushNow() {
     top, avg, cfg: gameCfg, set: fixedSet ? { name: fixedName, count: N } : null,
     q: q ? publicQ(q) : null
   };
+  if (phase === 'question') { const A = Object.assign({}, q.art || bank.artOf(q)); delete A.hl; delete A.dist; delete A.cm; if (A.k === 'map' || A.k === 'mapdial' || A.k === 'dial') base.art = null; else base.art = A; } // รูปโจทย์ (ตัดค่าที่เป็นเฉลยออก)
   if (phase === 'reveal') {
-    base.art = q.art || bank.artOf(q); // รูปประกอบ/เฉลยภาพ (ส่งตอนเฉลยเท่านั้น ไม่เผยคำตอบก่อน)
+    base.art = q.art || bank.artOf(q); // รูปประกอบ/เฉลยภาพ
     base.reveal = q.type === 'compass'
       ? { type: 'compass', angle: q.angle, name: q.name, maxDeg: q.maxDeg || 45, unit: q.unit || 'deg' }
       : q.type === 'choice'

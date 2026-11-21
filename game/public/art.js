@@ -263,8 +263,13 @@
   }
   function topicArt(t) { return box('<div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:90px">' + (TOPIC_ICON[t] || '❓') + '</div>'); }
 
+  // โหมดโจทย์ (quiz): ไม่เผยเฉลย — เอาตัวอักษรคำอธิบายออกทั้งหมด และไม่ไฮไลต์ส่วนที่ถูก
   function render(a, opts) {
     opts = opts || {};
+    if (opts.quiz) {
+      var qa = {}; Object.keys(a).forEach(function (k) { qa[k] = a[k]; }); qa.hl = null;
+      var el = render(qa, {}); [].forEach.call(el.querySelectorAll('text'), function (t) { t.parentNode.removeChild(t); }); return el;
+    }
     try {
       switch (a.k) {
         case 'map': return mapThumb(a, W, H);

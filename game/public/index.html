@@ -153,6 +153,7 @@
 <script src="geo.js"></script>
 <script src="qmap.js"></script>
 <script src="dial.js"></script>
+<div id="pauseOv" hidden style="position:fixed;inset:0;z-index:99;background:rgba(10,25,15,.88);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:34px;font-weight:800;text-align:center"><div style="font-size:80px">⏸</div>ครูหยุดเวลา<div style="font-size:20px;font-weight:400;margin-top:8px">รอครูกดเล่นต่อ</div></div>
 <script>
 (function () {
   var $ = function (id) { return document.getElementById(id); };
@@ -446,7 +447,9 @@
   // นับเวลา + เสียงนับถอยหลัง + ส่งอัตโนมัติเมื่อหมดเวลา
   setInterval(function () {
     if (!S) return;
-    var left = S.deadline - (Date.now() + offset), sec = Math.ceil(left / 1000);
+    var left = S.paused ? S.remain : S.deadline - (Date.now() + offset), sec = Math.ceil(left / 1000);
+    var pz = $('pauseOv'); if (pz) pz.hidden = !(S.paused && (S.phase === 'question' || S.phase === 'reveal'));
+    if (S.paused) { if (S.phase === 'question') { $('tleft').textContent = '⏸ ' + Math.max(0, sec) + ' วิ'; $('barIn').style.width = Math.max(0, Math.min(100, left / qMs * 100)) + '%'; } return; }
     if (S.phase === 'countdown') {
       var cd = $('cd'); if (cd) cd.textContent = Math.max(1, sec);
       if (sec !== lastSec && sec >= 1) { lastSec = sec; A.sfx('tick'); }

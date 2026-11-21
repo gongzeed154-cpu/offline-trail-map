@@ -41,6 +41,7 @@ let qi = -1;
 let deadline = 0;
 let timer = null;
 let earlyScheduled = false;
+let paused = false, remain = 0; // ครูหยุดเวลา (ข้อที่กำลังเล่น/ช่วงเฉลย)
 const streams = new Set(); // {res, id, host}
 const kicked = new Set();
 
@@ -153,7 +154,7 @@ function startGame() {
   pushNow();
 }
 function startQuestion(i) {
-  qi = i; phase = 'question'; earlyScheduled = false;
+  qi = i; phase = 'question'; earlyScheduled = false; paused = false;
   const ms = qMs(QS[i]);
   deadline = Date.now() + ms;
   clearTimer(); timer = setTimeout(reveal, ms + GRACE);
@@ -161,7 +162,7 @@ function startQuestion(i) {
 }
 function reveal() {
   if (phase !== 'question') return;
-  phase = 'reveal'; deadline = Date.now() + T_REVEAL;
+  phase = 'reveal'; paused = false; deadline = Date.now() + T_REVEAL;
   clearTimer(); timer = setTimeout(next, T_REVEAL);
   pushNow();
 }
@@ -170,8 +171,18 @@ function next() {
   if (qi + 1 < N) startQuestion(qi + 1);
   else { phase = 'final'; deadline = 0; clearTimer(); pushNow(); }
 }
+function pauseGame() {
+  if (paused || (phase !== 'question' && phase !== 'reveal')) return;
+  remain = Math.max(0, deadline - Date.now()); clearTimer(); paused = true; pushNow();
+}
+function resumeGame() {
+  if (!paused) return;
+  paused = false; deadline = Date.now() + remain;
+  clearTimer(); timer = setTimeout(phase === 'question' ? reveal : next, remain + (phase === 'question' ? GRACE : 0));
+  pushNow();
+}
 function resetGame() {
-  clearTimer(); phase = 'lobby'; qi = -1; deadline = 0; rebuild(); // ชุดโจทย์ใหม่ทุกเกม
+  paused = false; clearTimer(); phase = 'lobby'; qi = -1; deadline = 0; rebuild(); // ชุดโจทย์ใหม่ทุกเกม
   for (const p of players.values()) p.scores = [];
   pushNow();
 }
@@ -190,7 +201,7 @@ function pushNow() {
   const q = inQ ? QS[qi] : null;
 
   const base = {
-    phase, qi, total: N, title: CFG.title, now: Date.now(), deadline,
+    paused, remain: paused ? remain : 0, phase, qi, total: N, title: CFG.title, now: Date.now(), deadline,
     players: players.size, connected: connectedCount(),
     answered: inQ ? answeredCount() : 0,
     top, avg, cfg: gameCfg, set: fixedSet ? { name: fixedName, count: N } : null,
@@ -411,7 +422,7 @@ http.createServer(async (req, res) => {
       }
       if (p === '/api/answer') {
         const pl = players.get(b.id);
-        if (!pl || phase !== 'question' || Date.now() > deadline + GRACE) return json(res, 200, { ok: false });
+        if (!pl || phase !== 'question' || paused || Date.now() > deadline + GRACE) return json(res, 200, { ok: false });
         const q = QS[qi];
         let rec;
         if (q.type === 'compass') {
@@ -453,7 +464,7 @@ http.createServer(async (req, res) => {
         if (!pl.scores[qi]) {
           pl.scores[qi] = rec;
           // ทุกคนที่ออนไลน์ตอบครบแล้ว -> ข้ามไปเฉลยเลย ประหยัดเวลา
-          if (!earlyScheduled && answeredCount() >= connectedCount()) {
+          if (!paused && !earlyScheduled && answeredCount() >= connectedCount()) {
             earlyScheduled = true; clearTimer(); timer = setTimeout(reveal, 1200);
           }
           push();
@@ -463,7 +474,9 @@ http.createServer(async (req, res) => {
       if (p === '/api/host') {
         if (!isLocal(req)) return json(res, 403, {});
         if (b.cmd === 'start') startGame();
-        else if (b.cmd === 'skip') { if (phase === 'question') reveal(); else if (phase === 'reveal') next(); else if (phase === 'countdown') { clearTimer(); startQuestion(0); } }
+        else if (b.cmd === 'pause') pauseGame();
+        else if (b.cmd === 'resume') resumeGame();
+        else if (b.cmd === 'skip') { if (paused) { paused = false; clearTimer(); } if (phase === 'question') reveal(); else if (phase === 'reveal') next(); else if (phase === 'countdown') { clearTimer(); startQuestion(0); } }
         else if (b.cmd === 'config') { // ตั้งค่าเกม (เฉพาะตอนอยู่ห้องรอ)
           if (phase !== 'lobby') return json(res, 200, { ok: false });
           const c = b.cfg || {};

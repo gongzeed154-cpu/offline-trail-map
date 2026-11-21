@@ -461,14 +461,12 @@ http.createServer(async (req, res) => {
           rec = { lat, lng, km, pct: scoreOf(km, q.maxKm) };
           if (d) rec.d = d;
         }
-        if (!pl.scores[qi]) {
-          pl.scores[qi] = rec;
-          // ทุกคนที่ออนไลน์ตอบครบแล้ว -> ข้ามไปเฉลยเลย ประหยัดเวลา
-          if (!paused && !earlyScheduled && answeredCount() >= connectedCount()) {
-            earlyScheduled = true; clearTimer(); timer = setTimeout(reveal, 1200);
-          }
-          push();
+        pl.scores[qi] = rec; // ส่งซ้ำได้จนหมดเวลา (นักเรียนแก้คำตอบได้) — ใช้คำตอบล่าสุด
+        // ทุกคนที่ออนไลน์ตอบครบแล้ว -> ข้ามไปเฉลย (รอ 3.5 วิ เผื่อมีคนกดแก้คำตอบ; ถ้ามีคนส่งซ้ำจะนับใหม่)
+        if (!paused && answeredCount() >= connectedCount()) {
+          earlyScheduled = true; clearTimer(); timer = setTimeout(reveal, 3500);
         }
+        push();
         return json(res, 200, { ok: true });
       }
       if (p === '/api/host') {

@@ -201,7 +201,7 @@
   var TYPED = { dms: 1, grid: 1, num: 1 };
 
   // ---------- สถานะ ----------
-  var S = null, offset = 0, myId = store.get('mapgame_id'), submitted = false, curQ = -2, curPhase = '', es = null, qMs = 25000, lastSec = -1;
+  var S = null, offset = 0, myId = store.get('mapgame_id'), submitted = false, curQ = -2, curPhase = '', editing = false, es = null, qMs = 25000, lastSec = -1;
   var dial = Dial.create($('dialHost'), { interactive: true, onChange: function (a) { dialChanged(a); } });
   var choiceIdx = null, lastTotal = 0;
   function newDial(night) { dial = Dial.create($('dialHost'), { interactive: true, night: night, onChange: function (a) { dialChanged(a); } }); $('pDial').classList.toggle('night', !!night); }
@@ -301,10 +301,18 @@
     else if (TYPED[kind]) { if (!fieldsDone()) return; var nums = fvals.map(Number); if (kind === 'dms') body.d = nums; else if (kind === 'grid') body.g = nums; else body.v = nums[0]; }
     else { var a = dial.getAngle(); if (a == null) return; body.ang = a; dial.setInteractive(false); }
     submitted = true; A.sfx('ding'); drawFields();
-    $('confirm').disabled = true; $('confirm').textContent = 'ส่งแล้ว ✓ รอเฉลย…';
+    $('confirm').disabled = false; $('confirm').textContent = 'ส่งแล้ว ✓ — แตะเพื่อแก้ไขคำตอบ';
     fetch('api/answer', { method: 'POST', body: JSON.stringify(body) }).catch(function () { submitted = false; });
   }
-  $('confirm').onclick = function () { A.unlock(); submit(); };
+  function startEdit() { // ส่งแล้วแต่กดผิด -> เปิดให้แก้ แล้วกดยืนยันส่งใหม่ (ได้จนหมดเวลา)
+    if (!submitted || !S || S.phase !== 'question') return;
+    var kind = kindOf(S.q); submitted = false; editing = true; A.sfx('pop');
+    if (kind === 'pin' && myMarker) myMarker.setDraggable(true);
+    if (kind === 'dial') dial.setInteractive(true);
+    drawFields();
+    $('confirm').disabled = false; $('confirm').textContent = '✔ ส่งคำตอบใหม่';
+  }
+  $('confirm').onclick = function () { A.unlock(); if (submitted) startEdit(); else submit(); };
 
   function showScreen(title, text, extra, mode) { // mode: 'join' แสดงฟอร์มเข้าร่วม
     $('screen').hidden = false; $('screen').className = '';
@@ -377,7 +385,7 @@
       var q = s.q, kind = kindOf(q);
       $('myScore').textContent = 'คะแนน ' + (s.me.answered ? s.me.pct : lastTotal).toFixed(1) + '%';
       if (qChanged) {
-        curQ = s.qi; clearMarkers(); submitted = false; lastSec = -1; A.sfx('whoosh');
+        curQ = s.qi; clearMarkers(); submitted = false; editing = false; lastSec = -1; A.sfx('whoosh');
         $('qno').textContent = 'ข้อ ' + (s.qi + 1) + ' / ' + s.total;
         $('prompt').textContent = q.prompt; $('hint').textContent = q.hint; $('hint').hidden = !q.hint;
         var hasMap = kind === 'choice' ? false : kind === 'num' ? !!(q.frame || (q.markers && q.markers.length)) : !(kind === 'dial' && !(q.markers && q.markers.length));
@@ -390,11 +398,11 @@
         if (kind === 'choice') { buildChoices(q); $('confirm').textContent = 'เลือกคำตอบก่อน'; }
         if (kind === 'dial') { newDial(q.dialStyle === 'night'); dial.setAngle(null); dial.setTarget(null); dial.setHist(null); dial.setInteractive(true); $('dRead').innerHTML = 'แตะ/ลากบนหน้าปัดเพื่อตั้งเข็ม'; $('confirm').textContent = 'ตั้งเข็มก่อน'; }
       }
-      if (s.me.answered && !submitted) { // กลับเข้ามาใหม่หลังตอบแล้ว
+      if (s.me.answered && !submitted && !editing) { // กลับเข้ามาใหม่หลังตอบแล้ว
         submitted = true; var c = s.me.cur;
         if (kind === 'pin' && !myMarker) { myMarker = new maplibregl.Marker({ element: QMap.pinEl('#d93025'), anchor: 'bottom' }).setLngLat([c.lng, c.lat]).addTo(map); updateReadout(); }
         if (kind === 'dial') { dial.setAngle(c.ang); dial.setInteractive(false); }
-        $('confirm').disabled = true; $('confirm').textContent = 'ส่งแล้ว ✓ รอเฉลย…'; drawFields();
+        $('confirm').disabled = false; $('confirm').textContent = 'ส่งแล้ว ✓ — แตะเพื่อแก้ไขคำตอบ'; drawFields();
       }
     } else if (s.phase === 'reveal') {
       hideScreen(); $('top').hidden = false; $('bottom').hidden = false;

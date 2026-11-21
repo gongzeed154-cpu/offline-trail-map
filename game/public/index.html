@@ -131,6 +131,7 @@
     <div id="keys"></div>
   </div>
   <button id="confirm" class="btn" disabled>แตะแผนที่เพื่อปักหมุด</button>
+  <button id="nextBtn" class="btn" hidden style="background:#1e6fb3">ข้อต่อไป ▶</button>
   <div id="result" class="card" hidden></div>
 </div>
 
@@ -158,6 +159,7 @@
 <script>
 (function () {
   var $ = function (id) { return document.getElementById(id); };
+  var SOLO = /^\/solo\/?$/.test(location.pathname); // โหมดทำเอง: นักเรียนทำคนละเวลา ผลเก็บที่ครู
   var store = { get: function (k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
                 set: function (k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
   function esc(t) { return String(t).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
@@ -202,7 +204,7 @@
   var TYPED = { dms: 1, grid: 1, num: 1 };
 
   // ---------- สถานะ ----------
-  var S = null, offset = 0, myId = store.get('mapgame_id'), submitted = false, curQ = -2, curPhase = '', editing = false, es = null, qMs = 25000, lastSec = -1;
+  var S = null, offset = 0, myId = store.get(SOLO ? 'solo_id' : 'mapgame_id'), submitted = false, curQ = -2, curPhase = '', editing = false, es = null, qMs = 25000, lastSec = -1;
   var dial = Dial.create($('dialHost'), { interactive: true, onChange: function (a) { dialChanged(a); } });
   var choiceIdx = null, lastTotal = 0;
   function newDial(night) { dial = Dial.create($('dialHost'), { interactive: true, night: night, onChange: function (a) { dialChanged(a); } }); $('pDial').classList.toggle('night', !!night); }
@@ -303,7 +305,10 @@
     else { var a = dial.getAngle(); if (a == null) return; body.ang = a; dial.setInteractive(false); }
     submitted = true; A.sfx('ding'); drawFields();
     $('confirm').disabled = false; $('confirm').textContent = 'ส่งแล้ว ✓ — แตะเพื่อแก้ไขคำตอบ';
-    fetch('api/answer', { method: 'POST', body: JSON.stringify(body) }).catch(function () { submitted = false; });
+    if (SOLO) body.qi = S.qi;
+    fetch(SOLO ? 'api/solo/answer' : 'api/answer', { method: 'POST', body: JSON.stringify(body) })
+      .then(function (r) { return r.json(); }).then(function (j) { if (SOLO && j && j.ok === false) soloPoll(); })
+      .catch(function () { submitted = false; });
   }
   function startEdit() { // ส่งแล้วแต่กดผิด -> เปิดให้แก้ แล้วกดยืนยันส่งใหม่ (ได้จนหมดเวลา)
     if (!submitted || !S || S.phase !== 'question') return;
@@ -384,7 +389,7 @@
     } else if (s.phase === 'question') {
       hideScreen(); $('top').hidden = false; $('bottom').hidden = false;
       var q = s.q, kind = kindOf(q);
-      $('myScore').textContent = 'คะแนน ' + (s.me.answered ? s.me.pct : lastTotal).toFixed(1) + '%';
+      $('myScore').textContent = SOLO ? '' : 'คะแนน ' + (s.me.answered ? s.me.pct : lastTotal).toFixed(1) + '%';
       if (qChanged) {
         curQ = s.qi; clearMarkers(); submitted = false; editing = false; lastSec = -1; A.sfx('whoosh');
         $('qno').textContent = 'ข้อ ' + (s.qi + 1) + ' / ' + s.total;
@@ -445,9 +450,11 @@
       $('result').hidden = false;
       $('result').innerHTML = '<div class="sub">✅ คำตอบที่ถูกต้อง</div>' + extra + '<div class="sub" style="margin-top:6px">' + sub + '</div>' +
         '<div class="tot">ข้อนี้ <b>' + (r ? r.pct.toFixed(1) : '0.0') + '%</b> · คะแนนรวม <b>' + s.me.pct.toFixed(1) + '%</b></div>';
+    } else if (s.phase === 'intro') {
+      if (phaseChanged) soloIntro(s);
     } else if (s.phase === 'final') {
       clearMarkers(); $('top').hidden = true; $('bottom').hidden = true; $('cover').hidden = true;
-      finalScreen(s);
+      if (s.solo) soloFinal(s); else finalScreen(s);
     }
   }
 
@@ -468,12 +475,14 @@
       $('barIn').style.width = Math.max(0, Math.min(100, left / qMs * 100)) + '%';
       $('barIn').className = sec <= 5 ? 'low' : '';
       if (sec <= 5 && sec >= 1 && sec !== lastSec) { lastSec = sec; if (!submitted) A.sfx('tickLow'); }
+      if (SOLO && left < -1000 && autoNextQ !== S.qi) { autoNextQ = S.qi; soloNext(); } // โหมดทำเอง: หมดเวลา -> ข้อถัดไปอัตโนมัติ
       if (left <= 400 && !submitted) { // หมดเวลา — ส่งคำตอบที่มีอยู่ให้อัตโนมัติ
         var k = kindOf(S.q);
         if ((k === 'pin' && myMarker) || (TYPED[k] && fieldsDone()) || (k === 'choice' && choiceIdx != null) || (k === 'dial' && dial.getAngle() != null)) submit();
       }
     }
     if (S.phase === 'reveal') $('tleft').textContent = '';
+    if (SOLO) { var nb = $('nextBtn'); nb.hidden = !(S.phase === 'question' && submitted); nb.textContent = (S.qi + 1 >= S.total) ? '✅ ส่งข้อสุดท้าย ดูผลสรุป' : 'ข้อต่อไป ▶'; }
   }, 100);
 
   // ---------- เชื่อมต่อ ----------
@@ -507,6 +516,7 @@
     })();
   }
   function connect() {
+    if (SOLO) return soloPoll();
     if (es) { es.close(); es = null; }
     pollGen++; pv = 0;
     if (mode === 'poll') return startPoll();
@@ -516,7 +526,70 @@
     es.onmessage = function (e) { got = true; handle(JSON.parse(e.data)); };
     es.onerror = function () { rejoin(); };
   }
+  // ---------- โหมดทำเอง (ทำคนละเวลา) ----------
+  var autoNextQ = -1, soloGen = 0, lastFinalKey = '';
+  function soloPoll() {
+    var g = ++soloGen;
+    (function loop() {
+      if (g !== soloGen || !myId) return;
+      fetch('api/solo/state?id=' + encodeURIComponent(myId))
+        .then(function (r) { if (r.status === 404) throw 404; return r.json(); })
+        .then(function (s) {
+          if (g !== soloGen) return;
+          if (s.phase === 'final') { var key = s.result.code + '|' + s.result.reveal; if (key !== lastFinalKey) { lastFinalKey = key; handle(s); } setTimeout(loop, 15000); }
+          else { handle(s); setTimeout(loop, 2500); }
+        })
+        .catch(function (e) { if (g !== soloGen) return; if (e === 404) { store.set('solo_id', ''); myId = null; soloJoinScreen('ไม่พบข้อมูลของคุณในรอบนี้ — พิมพ์ชื่อเล่นเพื่อเข้าใหม่ (ถ้าเคยทำแล้ว ผลเดิมจะยังอยู่ที่ครู แจ้งครูด้วย)'); } else setTimeout(loop, 3000); });
+    })();
+  }
+  function soloNext() {
+    if (!S || S.phase !== 'question') return;
+    var qi = S.qi; $('nextBtn').disabled = true;
+    fetch('api/solo/next', { method: 'POST', body: JSON.stringify({ id: myId, qi: qi }) })
+      .catch(function () {}).then(function () { $('nextBtn').disabled = false; soloPoll(); });
+  }
+  $('nextBtn').onclick = function () { soloNext(); };
+  function soloJoinScreen(msg) {
+    $('top').hidden = true; $('bottom').hidden = true; $('cover').hidden = true;
+    showScreen('📝 ' + esc((S && S.title) || 'ข้อสอบแผนที่'), esc(msg || 'พิมพ์ชื่อเล่น ทำได้ครั้งเดียว'), '', 'join');
+  }
+  function soloIntro(s) {
+    $('top').hidden = true; $('bottom').hidden = true; $('cover').hidden = true;
+    showScreen('📝 ' + esc(s.title), 'สวัสดี ' + esc(s.me.name),
+      '<p style="line-height:1.7">มีทั้งหมด <b>' + s.total + ' ข้อ</b> ใช้เวลาประมาณ ' + s.minutes + ' นาที<br>แต่ละข้อมีเวลานับถอยหลัง · ทำได้ <b>ครั้งเดียว</b><br>กดยืนยันแล้วแก้ไขได้จนกว่าจะกด "ข้อต่อไป"<br>ต้องมีอินเทอร์เน็ตตลอดการทำ</p><button class="go" id="startBtn" style="margin-top:6px">▶ เริ่มทำ</button>', 'none');
+    $('startBtn').onclick = function () { $('startBtn').disabled = true; fetch('api/solo/start', { method: 'POST', body: JSON.stringify({ id: myId }) }).catch(function () {}).then(function () { soloPoll(); }); };
+  }
+  function soloFinal(s) {
+    var r = s.result, when = new Date(r.finishedAt).toLocaleString('th-TH', { hour12: false });
+    var rows = r.review.map(function (v) { return '<div style="display:flex;gap:8px;text-align:left;padding:4px 0;border-top:1px solid rgba(255,255,255,.2)"><b style="width:44px;flex:none">ข้อ ' + v.n + '</b><span style="flex:1">' + (r.reveal && v.correct ? 'เฉลย: ' + esc(v.correct) : (v.answered ? 'ตอบแล้ว' : 'ไม่ได้ตอบ')) + '</span><b>' + v.pct.toFixed(0) + '%</b></div>'; }).join('');
+    showScreen('🏁 ทำครบแล้ว', esc(r.name) + ' · ลำดับที่ ' + esc(r.no),
+      '<div class="pct">' + r.pct.toFixed(1) + '%</div>' +
+      '<div style="background:#fff;color:#1b1b1b;border-radius:16px;padding:10px 16px;max-width:330px;width:100%">' +
+      '<div style="font-size:13px;color:#555">รหัสยืนยัน</div><div style="font-size:30px;font-weight:800;letter-spacing:2px;font-family:ui-monospace,Menlo,monospace">' + esc(r.code) + '</div>' +
+      '<div style="font-size:13px;color:#555;margin-top:2px">' + esc(when) + (r.partial ? ' · ทำไม่ครบ (ปิดรับแล้ว)' : '') + '</div></div>' +
+      '<div class="cheer" style="background:rgba(245,179,1,.28);font-weight:700">📸 แคปหน้าจอนี้ แล้วส่งให้ครูเพื่อยืนยันคะแนน<br><span style="font-weight:400;font-size:15px">ต้องเห็นชื่อเล่น คะแนน รหัสยืนยัน และเวลาครบ</span></div>' +
+      '<div class="cheer">' + CHEERS[(r.name.length + r.no.length) % CHEERS.length] + '</div>' +
+      '<details style="max-width:330px;width:100%;font-size:15px"><summary style="cursor:pointer;opacity:.9">ดูคะแนนแต่ละข้อ' + (r.reveal ? ' + เฉลย' : '') + '</summary>' + rows + '</details>');
+    $('screen').className = '';
+  }
+  function soloJoin() {
+    var name = $('name').value.trim();
+    if (!name) { $('name').focus(); return; }
+    store.set('mapgame_name', name); store.set('mg_cat', pick.cat); store.set('mg_av', pick.av); store.set('mg_col', pick.color);
+    fetch('api/solo/join', { method: 'POST', body: JSON.stringify({ id: myId, name: name, av: pick.av, color: pick.color }) })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (j.error) {
+          var M = { none: 'ครูยังไม่เปิดให้ทำข้อสอบ', closed: 'ปิดรับแล้ว', need: 'พิมพ์ชื่อเล่นก่อน' };
+          showScreen('📝 ข้อสอบแผนที่', M[j.error] || 'เข้าร่วมไม่ได้', '', 'join'); return;
+        }
+        myId = j.id; store.set('solo_id', myId); lastFinalKey = ''; soloPoll();
+      })
+      .catch(function () { alert('เชื่อมต่อไม่ได้ ตรวจสอบสัญญาณอินเทอร์เน็ต'); });
+  }
+
   function join() {
+    if (SOLO) return soloJoin();
     var name = $('name').value.trim();
     if (!name) { $('name').focus(); return; }
     A.unlock(); A.sfx('join');
@@ -529,7 +602,10 @@
   $('join').onclick = join;
   $('name').addEventListener('keydown', function (e) { if (e.key === 'Enter') join(); });
 
-  fetch('api/info').then(function (r) { return r.json(); }).then(function (i) { $('sTitle').innerHTML = '🗺️ ' + esc(i.title); }).catch(function () {});
+  if (SOLO) {
+    $('dice').hidden = true; $('name').maxLength = 20; $('name').placeholder = 'ชื่อเล่น'; $('sText').textContent = 'พิมพ์ชื่อเล่น ทำได้ครั้งเดียว';
+    fetch('api/solo/info').then(function (r) { return r.json(); }).then(function (i) { $('sTitle').innerHTML = '📝 ' + esc(i.title || 'ข้อสอบแผนที่'); if (i.none || !i.open) $('sText').textContent = i.none ? 'ครูยังไม่เปิดให้ทำข้อสอบ' : 'ปิดรับแล้ว (ถ้าเคยเข้าแล้ว ให้เปิดลิงก์ในเครื่องเดิม)'; }).catch(function () {});
+  } else fetch('api/info').then(function (r) { return r.json(); }).then(function (i) { $('sTitle').innerHTML = '🗺️ ' + esc(i.title); }).catch(function () {});
   var saved = store.get('mapgame_name'); if (saved) $('name').value = saved;
   if (myId) connect(); // กลับเข้าเกมเดิมอัตโนมัติ
 })();

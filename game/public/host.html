@@ -126,6 +126,35 @@
   #finalLb { position: relative; width: 1000px; flex: 1; margin-top: 10px; }
   #finalLb .row { height: 58px; } #finalLb .av { width: 48px; height: 48px; font-size: 30px; border-width: 3px; }
   #finalLb .rb { height: 48px; } #finalLb .rn { font-size: 27px; } #finalLb .rp { font-size: 29px; } #finalLb .rk { font-size: 29px; }
+  #annBox { position: absolute; inset: 0; z-index: 48; background: radial-gradient(circle at 50% 30%, #2a4a1f, #0c1710 75%); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+  #annIn { width: 1300px; }
+  #annIn h1 { text-align: center; font-size: 76px; margin: 0 0 22px; color: var(--gold); }
+  .annRow { display: flex; align-items: center; gap: 26px; background: rgba(255,255,255,.09); border-radius: 22px; padding: 10px 30px; margin-bottom: 12px; animation: rise2 .6s backwards; }
+  .annRow .rk { width: 110px; font-size: 62px; font-weight: 800; text-align: center; }
+  .annRow .nm { flex: 1; font-size: 52px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .annRow .pp { font-size: 56px; font-weight: 800; color: var(--gold); }
+  .annRow .tm { font-size: 28px; opacity: .75; width: 120px; text-align: right; }
+  .annRow.r1 { background: linear-gradient(90deg, #8a6a05, #d4a017); color: #2a1d00; transform: scale(1.04); } .annRow.r1 .pp { color: #2a1d00; }
+  .annRow.r2 { background: linear-gradient(90deg, #56606b, #b9c2cc); color: #1b232b; } .annRow.r2 .pp { color: #1b232b; }
+  .annRow.r3 { background: linear-gradient(90deg, #6b3f14, #c77f35); }
+  @keyframes rise2 { from { transform: translateY(60px); opacity: 0; } }
+  #solo { position: absolute; inset: 0; z-index: 46; background: #0c1710; display: flex; flex-direction: column; }
+  #solo header { display: flex; align-items: center; gap: 20px; padding: 14px 30px; background: var(--panel); border-bottom: 3px solid var(--line); }
+  #solo header h2 { margin: 0; font-size: 38px; flex: 1; }
+  #soBody { flex: 1; overflow-y: auto; padding: 18px 30px 40px; font-size: 24px; }
+  #soBody .box { background: #17291d; border-radius: 16px; padding: 14px 20px; margin-bottom: 16px; }
+  #soBody h3 { margin: 0 0 8px; font-size: 28px; }
+  #soBody select, #soBody input { font-size: 22px; padding: 6px 12px; border-radius: 12px; border: 0; max-width: 100%; font-family: inherit; }
+  #soBody .row2 { display: flex; gap: 22px; align-items: center; flex-wrap: wrap; }
+  #soQr { width: 190px; height: 190px; background: #fff; border-radius: 12px; padding: 6px; }
+  #soLink { font-size: 24px; font-weight: 700; color: #9fd8ff; word-break: break-all; }
+  #soTbl { width: 100%; border-collapse: collapse; font-size: 22px; }
+  #soTbl th, #soTbl td { text-align: left; padding: 6px 10px; border-bottom: 1px solid #284532; }
+  #soTbl th { color: #9fc9a9; font-weight: 700; cursor: pointer; user-select: none; }
+  #soTbl .pc { font-weight: 800; color: var(--gold); font-size: 26px; }
+  #soTbl .sm { font-size: 15px; opacity: .7; }
+  .tag { display: inline-block; border-radius: 12px; padding: 1px 12px; font-size: 18px; font-weight: 700; }
+  .tag.on { background: #2e9d4f; } .tag.off { background: #7a2a24; } .tag.wip { background: #6b5b1a; }
   #bank { position: absolute; inset: 0; z-index: 45; background: #0c1710; display: flex; flex-direction: column; }
   #bank header { display: flex; align-items: center; gap: 20px; padding: 14px 30px; background: var(--panel); border-bottom: 3px solid var(--line); }
   #bank header h2 { margin: 0; font-size: 40px; flex: 1; }
@@ -209,6 +238,7 @@
     <div id="names"></div>
     <button id="startBtn" disabled>▶ เริ่มเกม</button>
     <div style="margin-top:10px;font-size:22px"><button class="btn" id="openBank">📚 คลังข้อสอบ / ชุดที่บันทึกไว้</button> <span id="setLabel" hidden></span></div>
+    <div style="margin-top:10px;font-size:22px"><button class="btn gold" id="openSolo">📝 โหมดทำเอง — ให้นักเรียนทำคนละเวลา เก็บผลมาประกาศ</button></div>
     <div style="margin-top:10px;font-size:20px;opacity:.85"><a href="check" target="_blank" style="color:#9fd8ff">🔍 ตรวจระบบก่อนเล่น (แผนที่/เสียง/เครือข่าย)</a></div>
   </div>
 </div>
@@ -246,6 +276,28 @@
   </div>
   <div id="bbar"><span id="bCount">เลือกแล้ว 0 ข้อ</span><span style="flex:1"></span><button class="btn gold" id="bPlay">▶ เล่นชุดที่เลือก</button></div>
 </div>
+<div id="solo" hidden>
+  <header><h2>📝 โหมดทำเอง — นักเรียนสแกนแล้วทำคนละเวลา ไม่ต้องออนไลน์พร้อมกัน</h2><button class="btn" id="soClose">✕ ปิด</button></header>
+  <div id="soBody">
+    <div class="box" id="soSetup">
+      <h3>1) เลือกชุดข้อสอบ แล้วเปิดรอบ</h3>
+      <div class="row2"><select id="soSrc"></select><button class="btn gold" id="soOpen">🟢 เปิดรอบใหม่</button></div>
+      <div style="font-size:18px;opacity:.75;margin-top:6px">เปิดรอบใหม่จะแทนรอบเดิมที่แสดงอยู่ (ผลรอบเดิมยังเก็บอยู่ในโฟลเดอร์ results/ ของเกม) · ทุกคนได้ข้อสอบชุดเดียวกัน เรียงข้อเดียวกัน</div>
+    </div>
+    <div class="box" id="soLive" hidden>
+      <h3>2) ให้นักเรียนสแกน/เปิดลิงก์นี้ <span id="soState"></span></h3>
+      <div class="row2"><img id="soQr" alt="QR"><div><div id="soLink"></div><div id="soInfo" style="margin-top:8px;font-size:21px"></div>
+        <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap"><button class="btn" id="soToggle">⏹ ปิดรับ</button><button class="btn" id="soReveal">👁 เปิดเฉลยให้นักเรียนดู</button><button class="btn gold" id="soAnn">🏆 ประกาศผล</button><a class="btn" id="soCsv" href="api/solo/csv" style="text-decoration:none">⬇ ดาวน์โหลดผล (CSV/Excel)</a></div>
+        <div style="margin-top:12px;font-size:20px">ตรวจรหัสยืนยันจากภาพแคปหน้าจอ: <input id="soCode" placeholder="XXXX-XXXX-XXXX" size="16" style="text-transform:uppercase"> <button class="btn sm" id="soVerify">ตรวจ</button> <span id="soVRes"></span></div></div></div>
+      <div style="font-size:18px;opacity:.75;margin-top:8px">คอมนี้ต้องเปิดเกมและต่ออินเทอร์เน็ตค้างไว้ตลอดช่วงที่ให้ทำ · ถ้ารีสตาร์ท start-game.bat ลิงก์ (Cloudflare) จะเปลี่ยน ต้องแจกใหม่ แต่ผลที่ทำแล้วไม่หาย</div>
+    </div>
+    <div class="box" id="soResBox" hidden>
+      <h3>3) ผลคะแนน <span id="soCnt" style="font-size:22px;opacity:.8"></span></h3>
+      <table id="soTbl"><thead><tr><th data-k="rank">อันดับ</th><th data-k="no">ลำดับที่เข้า</th><th data-k="name">ชื่อเล่น</th><th data-k="st">สถานะ</th><th data-k="pct">คะแนน %</th><th data-k="dur">ใช้เวลา</th><th data-k="fin">เสร็จเมื่อ</th><th>รหัสยืนยัน</th><th>แต่ละข้อ (%)</th><th>สังเกต</th><th></th></tr></thead><tbody id="soRows"></tbody></table>
+    </div>
+  </div>
+</div>
+<div id="annBox" hidden><div id="annIn"></div></div>
 <div id="toasts"></div>
 <canvas id="confetti" hidden></canvas>
 <div id="soundBanner">🔊 คลิก/กดปุ่มใดก็ได้ เพื่อเปิดเสียงเพลงและเสียงพูด</div>
@@ -287,7 +339,7 @@
   $('bSfx').onclick = function () { A.toggle('sfx'); syncBtns(); };
   $('bVoice').onclick = function () { A.toggle('voice'); syncBtns(); };
   document.addEventListener('keydown', function (e) {
-    if (/^(INPUT|SELECT|TEXTAREA)$/.test((e.target && e.target.tagName) || '') || !$('bank').hidden) return; // กำลังพิมพ์/เปิดคลังข้อสอบอยู่
+    if (/^(INPUT|SELECT|TEXTAREA)$/.test((e.target && e.target.tagName) || '') || !$('bank').hidden || !$('solo').hidden) return; // กำลังพิมพ์/เปิดคลังข้อสอบอยู่
     if (e.key === 'ArrowRight') cmd('skip');
     if (e.key === 'p' || e.key === 'P') togglePause();
     if (e.key === ' ' && S && S.phase === 'lobby') { e.preventDefault(); cmd('start'); }
@@ -716,6 +768,76 @@
     });
   };
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !$('bank').hidden) $('bank').hidden = true; }, true);
+
+  // ---------- โหมดทำเอง (self-paced) ----------
+  var soTimer = null, soSort = { k: 'rank', d: 1 }, soData = null;
+  function soDur(s) { return s ? Math.floor(s / 60) + ':' + ('0' + (s % 60)).slice(-2) : ''; }
+  function soFmt(t) { return t ? new Date(t).toLocaleString('th-TH', { hour12: false }) : ''; }
+  function soLoadSrc() {
+    api('api/sets').then(function (j) {
+      var o = '<option value="current">ชุดที่ตั้งไว้ในห้องรอตอนนี้' + (S && S.total ? ' (' + S.total + ' ข้อ)' : '') + '</option>';
+      (j.folders || []).forEach(function (f) { f.sets.forEach(function (s) { o += '<option value="' + esc(f.folder) + '|' + esc(s.name) + '">📁 ' + esc(f.folder || '(ไม่มีโฟลเดอร์)') + ' / ' + esc(s.name) + ' (' + s.count + ' ข้อ)</option>'; }); });
+      $('soSrc').innerHTML = o;
+    }).catch(function () {});
+  }
+  function soDraw() {
+    var d = soData; if (!d || !d.session) { $('soLive').hidden = true; $('soResBox').hidden = true; return; }
+    var s = d.session; $('soLive').hidden = false; $('soResBox').hidden = false;
+    $('soState').innerHTML = '<span class="tag ' + (s.open ? 'on' : 'off') + '">' + (s.open ? 'เปิดรับอยู่' : 'ปิดรับแล้ว') + '</span>';
+    $('soLink').textContent = s.link;
+    $('soInfo').innerHTML = 'ชุดข้อสอบ: <b>' + esc(s.setName) + '</b> (' + s.total + ' ข้อ) · เปิดรอบเมื่อ ' + esc(soFmt(s.created));
+    $('soToggle').textContent = s.open ? '⏹ ปิดรับ (คนที่ยังทำไม่เสร็จจะถูกสรุปตามที่ทำไว้)' : '▶ เปิดรับอีกครั้ง';
+    $('soReveal').textContent = s.reveal ? '🙈 ซ่อนเฉลย' : '👁 เปิดเฉลยให้นักเรียนดู';
+    if ($('soQr').dataset.l !== s.link) { try { var q = qrcode(0, 'M'); q.addData(s.link); q.make(); $('soQr').src = q.createDataURL(8, 2); $('soQr').dataset.l = s.link; } catch (e) {} }
+    $('soCnt').textContent = '— เข้าร่วม ' + d.counts.joined + ' คน · ทำเสร็จ ' + d.counts.done + ' คน';
+    var rows = d.players.slice(), k = soSort.k;
+    var val = function (p) { return k === 'rank' ? (p.rank || 9999) : k === 'dur' ? (p.dur || 99999) : k === 'no' ? +p.no : k === 'name' ? p.name : k === 'st' ? (p.done ? 2 : p.si >= 0 ? 1 : 0) : k === 'fin' ? p.finished : p.pct; };
+    rows.sort(function (a, b) { var x = val(a), y = val(b); if (typeof x === 'string') return soSort.d * -1 * String(x).localeCompare(String(y), 'th', { numeric: true }); return soSort.d * (x - y); });
+    $('soRows').innerHTML = rows.map(function (p) {
+      var st = p.done ? '<span class="tag ' + (p.partial ? 'wip' : 'on') + '">' + (p.partial ? 'ไม่ครบ' : 'เสร็จ') + '</span>' : p.si >= 0 ? '<span class="tag wip">ข้อ ' + (p.si + 1) + '/' + s.total + '</span>' : '<span class="tag off">ยังไม่เริ่ม</span>';
+      return '<tr><td style="font-weight:800;font-size:26px;color:var(--gold)">' + (p.rank ? p.rank + (p.tie ? ' <span class="sm" style="color:#ff9">เสมอ</span>' : '') : '–') + '</td><td>' + esc(p.no) + '</td><td>' + esc(p.av) + ' ' + esc(p.name) + '</td><td>' + st + '</td><td class="pc">' + p.pct.toFixed(1) + '</td><td class="sm">' + (p.done ? soDur(p.dur) : '') + '</td><td class="sm">' + esc(soFmt(p.finished)) + '</td><td class="sm" style="font-family:monospace">' + esc(p.code) + '</td><td class="sm">' + p.scores.map(function (v) { return Math.round(v); }).join(' · ') + '</td><td>' + (p.flag ? '<span title="' + esc(p.flag) + '" style="cursor:help;font-size:20px">🚩 <span class="sm">' + esc(p.flag) + '</span></span>' : '') + '</td><td><button class="btn sm red" data-rm="' + esc(p.no) + '" title="ลบคนนี้ ให้ทำใหม่ได้">🗑</button></td></tr>';
+    }).join('') || '<tr><td colspan="11" style="opacity:.7">ยังไม่มีใครเข้าร่วม</td></tr>';
+  }
+  function soRefresh() { api('api/solo/admin').then(function (j) { soData = j; soDraw(); }).catch(function () {}); }
+  function soCmd(o) { return api('api/solo/cmd', { method: 'POST', body: JSON.stringify(o) }).then(function (j) { if (j && j.ok === false && j.error) toast(j.error); soRefresh(); return j; }); }
+  $('openSolo').onclick = function () { A.unlock(); $('solo').hidden = false; soLoadSrc(); soRefresh(); clearInterval(soTimer); soTimer = setInterval(soRefresh, 3000); };
+  $('soClose').onclick = function () { $('solo').hidden = true; clearInterval(soTimer); };
+  $('soOpen').onclick = function () {
+    var v = $('soSrc').value, had = soData && soData.session;
+    if (had && !confirm('เปิดรอบใหม่ จะแทนรอบเดิมที่แสดงอยู่ (ผลรอบเดิมยังเก็บอยู่ในไฟล์ results/) ต้องการเปิดรอบใหม่ไหม?')) return;
+    var o = { cmd: 'open' }; if (v === 'current') o.source = 'current'; else { var i = v.indexOf('|'); o.source = 'saved'; o.folder = v.slice(0, i); o.name = v.slice(i + 1); }
+    soCmd(o).then(function (j) { if (j && j.ok) { toast('เปิดรอบแล้ว — ให้นักเรียนสแกน QR'); A.sfx('pop'); } });
+  };
+  $('soToggle').onclick = function () {
+    var s = soData && soData.session; if (!s) return;
+    if (s.open && !confirm('ปิดรับ? คนที่ยังทำไม่เสร็จจะถูกสรุปคะแนนตามที่ทำไว้ และคนใหม่เข้าไม่ได้')) return;
+    soCmd({ cmd: s.open ? 'close' : 'reopen' });
+  };
+  $('soAnn').onclick = function () {
+    var d = soData; if (!d || !d.session) return;
+    var list = d.players.filter(function (p) { return p.rank; }).sort(function (a, b) { return a.rank - b.rank; }).slice(0, 10);
+    var med = ['🥇', '🥈', '🥉'], tie = list.some(function (p) { return p.rank === 1 && p.tie; });
+    $('annIn').innerHTML = '<h1>🏆 ประกาศผล</h1>' + (list.length ? list.map(function (p, i) {
+      return '<div class="annRow r' + (p.rank <= 3 ? p.rank : 0) + '" style="animation-delay:' + (i * 0.15) + 's"><div class="rk">' + (med[p.rank - 1] || p.rank) + '</div><div class="nm">' + esc(p.av) + ' ' + esc(p.name) + (p.tie ? ' <span style="font-size:28px;opacity:.8">(เสมอ)</span>' : '') + '</div><div class="tm">' + soDur(p.dur) + '</div><div class="pp">' + p.pct.toFixed(1) + '%</div></div>';
+    }).join('') : '<div style="text-align:center;font-size:40px;opacity:.7">ยังไม่มีผู้ทำเสร็จ</div>') +
+      (tie ? '<div style="text-align:center;font-size:30px;margin-top:8px;color:#ffe08a">อันดับ 1 เสมอกันทั้งคะแนนและเวลา — ให้ครูตัดสิน/จับสลาก</div>' : '') +
+      '<div style="text-align:center;font-size:22px;opacity:.6;margin-top:10px">เรียงตามคะแนน → ใช้เวลาน้อยกว่า → ส่งเสร็จก่อน · คลิกเพื่อปิด</div>';
+    $('annBox').hidden = false; A.sfx('fanfare');
+  };
+  $('annBox').onclick = function () { $('annBox').hidden = true; };
+  $('soReveal').onclick = function () { var s = soData && soData.session; if (s) soCmd({ cmd: 'reveal', on: !s.reveal }); };
+  $('soVerify').onclick = function () {
+    var c = $('soCode').value.trim(); if (!c) return;
+    api('api/solo/cmd', { method: 'POST', body: JSON.stringify({ cmd: 'verify', code: c }) }).then(function (j) {
+      $('soVRes').innerHTML = j.ok ? '<span style="color:#7be08f">✅ ถูกต้อง: ' + esc(j.name) + ' (ลำดับที่ ' + esc(j.no) + ') ได้ <b>' + j.pct.toFixed(1) + '%</b> · ' + esc(j.finished) + (j.partial ? ' · ทำไม่ครบ' : '') + '</span>' : '<span style="color:#ff8a80">❌ ไม่พบรหัสนี้</span>';
+    });
+  };
+  $('soCode').addEventListener('keydown', function (e) { if (e.key === 'Enter') $('soVerify').click(); });
+  $('soTbl').onclick = function (e) {
+    var th = e.target.closest('th'), rm = e.target.closest('[data-rm]');
+    if (th && th.dataset.k) { soSort = { k: th.dataset.k, d: soSort.k === th.dataset.k ? -soSort.d : (/^(rank|dur|fin)$/.test(th.dataset.k) ? 1 : -1) }; soDraw(); }
+    if (rm && confirm('ลบผลของลำดับที่ ' + rm.dataset.rm + ' ? (ให้นักเรียนคนนี้ทำใหม่ได้)')) soCmd({ cmd: 'remove', no: rm.dataset.rm });
+  };
 
   var es = new EventSource('api/host/stream');
   es.onmessage = function (e) { S = JSON.parse(e.data); offset = S.now - Date.now(); render(S); };

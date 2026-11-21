@@ -2,3 +2,6 @@ node_modules/
 ios/
 android/
 .expo/
+
+# ผลสอบนักเรียน (โหมดทำเอง) มีชื่อ/เลขที่ ไม่อัปขึ้น GitHub
+game/results/

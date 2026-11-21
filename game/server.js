@@ -343,12 +343,62 @@ function openStream(req, res, client) {
   pushNow();
 }
 
+// ตรวจคำตอบ 1 ข้อ -> {pct,...} หรือ null ถ้าข้อมูลไม่ถูกต้อง (ใช้ทั้งเกมสดและโหมดทำเอง)
+function grade(q, b) {
+  let rec;
+  if (q.type === 'compass') {
+    const ang = +b.ang;
+    if (!(ang >= 0 && ang <= 360)) return null;
+    const diff = angDiff(ang, q.angle);
+    rec = { ang: Math.round(ang) % 360, diff, pct: Math.round(Math.max(0, 1 - diff / (q.maxDeg || 45)) * 10000) / 100 };
+  } else if (q.type === 'num') { // ตอบเป็นตัวเลข (เช่น มิล, มุมแม่เหล็ก)
+    const v = +b.v;
+    if (!isFinite(v) || v < 0 || v > 99999) return null;
+    const diff = Math.abs(v - q.value);
+    rec = { v, diff, pct: Math.round(Math.max(0, 1 - diff / (q.maxErr || 10)) * 10000) / 100 };
+  } else if (q.type === 'choice') { // เลือกตอบ: ถูก 100 / ผิด 0
+    const c = Number(b.c);
+    if (!Number.isInteger(c) || c < 0 || c >= (q.options || []).length) return null;
+    rec = { c, pct: c === q.correct ? 100 : 0 };
+  } else if (q.type === 'grid') { // อ่านพิกัดกริด 6 หรือ 8 หลัก: E/N ตามจำนวนหลักของข้อ (ตำแหน่งมุมล่างซ้ายของช่อง)
+    const dg = q.digits || 3, unit = Math.pow(10, 5 - dg), lim = Math.pow(10, dg) - 1;
+    const g = Array.isArray(b.g) ? b.g.map(Number) : [];
+    if (g.length !== 2 || g.some(x => !Number.isInteger(x) || x < 0 || x > lim)) return null;
+    const near = (t, x) => { let best = null; for (let k = -1; k <= 1; k++) { const v = (Math.floor(t / 100000) + k) * 100000 + x * unit; if (best === null || Math.abs(v - t) < Math.abs(best - t)) best = v; } return best; };
+    const tE = Math.floor(q.u.e / unit) * unit, tN = Math.floor(q.u.n / unit) * unit; // เทียบกับช่องที่จุดเฉลยอยู่
+    const E = near(q.u.e, g[0]), Nn = near(q.u.n, g[1]);
+    const km = Math.hypot(E - tE, Nn - tN) / 1000, ll = Geo.fromUTM(47, true, E + unit / 2, Nn + unit / 2);
+    rec = { lat: ll.lat, lng: ll.lng, km, pct: scoreOf(km, q.maxKm), g };
+  } else {
+    let lat, lng, d = null;
+    if (q.type === 'dms') { // กรอก องศา ลิปดา ฟิลิปดา (ซีกโลกเหนือ/ตะวันออก)
+      d = Array.isArray(b.d) ? b.d.map(Number) : [];
+      if (d.length !== 6 || d.some(x => !isFinite(x) || x < 0 || x > 360)) return null;
+      d[1] = Math.min(d[1], 59); d[2] = Math.min(d[2], 59.99); d[4] = Math.min(d[4], 59); d[5] = Math.min(d[5], 59.99);
+      lat = d[0] + d[1] / 60 + d[2] / 3600; lng = d[3] + d[4] / 60 + d[5] / 3600;
+    } else { lat = +b.lat; lng = +b.lng; }
+    if (!(lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180)) return null;
+    const km = haversineKm(lat, lng, q.lat, q.lng);
+    rec = { lat, lng, km, pct: scoreOf(km, q.maxKm) };
+    if (d) rec.d = d;
+  }
+  return rec;
+}
+
+const solo = require('./solo.js')({
+  json, isLocal, grade, publicQ, prepare, cloneQ, qMs, lanUrl, readSet, title: CFG.title,
+  currentQuestions: () => QS.map(cloneQ), currentName: () => (fixedSet ? fixedName : 'ชุดสุ่มตามการตั้งค่า (' + N + ' ข้อ)')
+});
+process.on('exit', () => { try { solo.flush(); } catch (e) {} });
+
 http.createServer(async (req, res) => {
   const u = new URL(req.url, 'http://x');
   const p = u.pathname;
   try {
     if (req.method === 'GET') {
       if (p === '/') return serveStatic(req, res, '/index.html');
+      if (p === '/solo') return serveStatic(req, res, '/index.html'); // โหมดทำเอง (นักเรียนทำคนละเวลา)
+      if (p.startsWith('/api/solo/') && solo.route(req, res, u, p, null)) return;
       if (p === '/check') return serveStatic(req, res, '/check.html'); // หน้าตรวจระบบ (ใช้ได้ทั้งครูและนักเรียน)
       if (p === '/host') return isLocal(req) ? serveStatic(req, res, '/host.html') : (res.writeHead(403), res.end('เปิดหน้านี้ได้เฉพาะบนเครื่องครู'));
       if (p === '/api/sim-truth') { // เฉพาะเครื่องครู: ให้บอทซ้อมถามเฉลยของข้อที่สุ่มได้ (ไม่ใช้กับนักเรียนจริง)
@@ -403,6 +453,7 @@ http.createServer(async (req, res) => {
     }
     if (req.method === 'POST') {
       const b = await body(req);
+      if (p.startsWith('/api/solo/') && solo.route(req, res, u, p, b)) return;
       if (p === '/api/join') {
         if (b.id && kicked.has(b.id)) return json(res, 410, { kicked: true });
         let pl = b.id && players.get(b.id);
@@ -424,43 +475,8 @@ http.createServer(async (req, res) => {
         const pl = players.get(b.id);
         if (!pl || phase !== 'question' || paused || Date.now() > deadline + GRACE) return json(res, 200, { ok: false });
         const q = QS[qi];
-        let rec;
-        if (q.type === 'compass') {
-          const ang = +b.ang;
-          if (!(ang >= 0 && ang <= 360)) return json(res, 400, { ok: false });
-          const diff = angDiff(ang, q.angle);
-          rec = { ang: Math.round(ang) % 360, diff, pct: Math.round(Math.max(0, 1 - diff / (q.maxDeg || 45)) * 10000) / 100 };
-        } else if (q.type === 'num') { // ตอบเป็นตัวเลข (เช่น มิล, มุมแม่เหล็ก)
-          const v = +b.v;
-          if (!isFinite(v) || v < 0 || v > 99999) return json(res, 400, { ok: false });
-          const diff = Math.abs(v - q.value);
-          rec = { v, diff, pct: Math.round(Math.max(0, 1 - diff / (q.maxErr || 10)) * 10000) / 100 };
-        } else if (q.type === 'choice') { // เลือกตอบ: ถูก 100 / ผิด 0
-          const c = Number(b.c);
-          if (!Number.isInteger(c) || c < 0 || c >= (q.options || []).length) return json(res, 400, { ok: false });
-          rec = { c, pct: c === q.correct ? 100 : 0 };
-        } else if (q.type === 'grid') { // อ่านพิกัดกริด 6 หรือ 8 หลัก: E/N ตามจำนวนหลักของข้อ (ตำแหน่งมุมล่างซ้ายของช่อง)
-          const dg = q.digits || 3, unit = Math.pow(10, 5 - dg), lim = Math.pow(10, dg) - 1;
-          const g = Array.isArray(b.g) ? b.g.map(Number) : [];
-          if (g.length !== 2 || g.some(x => !Number.isInteger(x) || x < 0 || x > lim)) return json(res, 400, { ok: false });
-          const near = (t, x) => { let best = null; for (let k = -1; k <= 1; k++) { const v = (Math.floor(t / 100000) + k) * 100000 + x * unit; if (best === null || Math.abs(v - t) < Math.abs(best - t)) best = v; } return best; };
-          const tE = Math.floor(q.u.e / unit) * unit, tN = Math.floor(q.u.n / unit) * unit; // เทียบกับช่องที่จุดเฉลยอยู่
-          const E = near(q.u.e, g[0]), Nn = near(q.u.n, g[1]);
-          const km = Math.hypot(E - tE, Nn - tN) / 1000, ll = Geo.fromUTM(47, true, E + unit / 2, Nn + unit / 2);
-          rec = { lat: ll.lat, lng: ll.lng, km, pct: scoreOf(km, q.maxKm), g };
-        } else {
-          let lat, lng, d = null;
-          if (q.type === 'dms') { // กรอก องศา ลิปดา ฟิลิปดา (ซีกโลกเหนือ/ตะวันออก)
-            d = Array.isArray(b.d) ? b.d.map(Number) : [];
-            if (d.length !== 6 || d.some(x => !isFinite(x) || x < 0 || x > 360)) return json(res, 400, { ok: false });
-            d[1] = Math.min(d[1], 59); d[2] = Math.min(d[2], 59.99); d[4] = Math.min(d[4], 59); d[5] = Math.min(d[5], 59.99);
-            lat = d[0] + d[1] / 60 + d[2] / 3600; lng = d[3] + d[4] / 60 + d[5] / 3600;
-          } else { lat = +b.lat; lng = +b.lng; }
-          if (!(lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180)) return json(res, 400, { ok: false });
-          const km = haversineKm(lat, lng, q.lat, q.lng);
-          rec = { lat, lng, km, pct: scoreOf(km, q.maxKm) };
-          if (d) rec.d = d;
-        }
+        const rec = grade(q, b);
+        if (!rec) return json(res, 400, { ok: false });
         pl.scores[qi] = rec; // ส่งซ้ำได้จนหมดเวลา (นักเรียนแก้คำตอบได้) — ใช้คำตอบล่าสุด
         // ทุกคนที่ออนไลน์ตอบครบแล้ว -> ข้ามไปเฉลย (รอ 3.5 วิ เผื่อมีคนกดแก้คำตอบ; ถ้ามีคนส่งซ้ำจะนับใหม่)
         if (!paused && answeredCount() >= connectedCount()) {

@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1f4d2c">
+<title>ครู — ผลข้อสอบแผนที่</title>
+<style>
+  :root { --bg: #0e1a12; --panel: #17291d; --line: #284532; --green: #2e6b3f; --gold: #f5b301; --txt: #f2f7f3; --mut: #9fb8a6; --red: #d9534f; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body { margin: 0; background: var(--bg); color: var(--txt); font-family: 'Sarabun', 'Noto Sans Thai', system-ui, sans-serif; font-size: 16px; padding: 0 0 40px; }
+  [hidden] { display: none !important; }
+  header { position: sticky; top: 0; z-index: 5; background: #12251a; border-bottom: 2px solid var(--line); padding: 10px 16px; display: flex; align-items: center; gap: 10px; }
+  header h1 { font-size: 18px; margin: 0; flex: 1; }
+  .wrap { padding: 12px 16px; max-width: 720px; margin: 0 auto; }
+  .card { background: var(--panel); border-radius: 16px; padding: 14px 16px; margin-bottom: 14px; }
+  .card h2 { margin: 0 0 8px; font-size: 18px; }
+  .btn { border: 0; border-radius: 22px; padding: 10px 18px; font-size: 16px; font-weight: 700; background: #2a4733; color: #fff; font-family: inherit; }
+  .btn.gold { background: var(--gold); color: #3a2a00; } .btn.red { background: #7a2a24; } .btn.sm { padding: 5px 12px; font-size: 14px; }
+  .btn:disabled { opacity: .5; }
+  input, select { width: 100%; font-size: 16px; padding: 10px 12px; border-radius: 12px; border: 0; font-family: inherit; background: #f4f8f5; color: #111; }
+  label { display: block; font-size: 14px; color: var(--mut); margin: 8px 0 3px; }
+  .tag { display: inline-block; border-radius: 12px; padding: 1px 10px; font-size: 14px; font-weight: 700; }
+  .tag.on { background: #2e9d4f; } .tag.off { background: #7a2a24; } .tag.wip { background: #6b5b1a; } .tag.soon { background: #1e6fb3; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .rk { width: 40px; text-align: center; font-weight: 800; font-size: 22px; color: var(--gold); flex: none; }
+  .pl { border-top: 1px solid var(--line); padding: 8px 0; }
+  .pl .top { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+  .pl .nm { flex: 1; min-width: 0; font-weight: 700; font-size: 17px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pl .pc { font-weight: 800; font-size: 20px; color: var(--gold); }
+  .pl .det { margin: 6px 0 2px 48px; font-size: 14px; color: var(--mut); line-height: 1.6; }
+  .pl .flag { color: #ffb74d; }
+  .mut { color: var(--mut); font-size: 14px; }
+  #login { max-width: 360px; margin: 18vh auto 0; text-align: center; }
+  #login input { text-align: center; font-size: 26px; letter-spacing: 6px; }
+  #qr { width: 170px; height: 170px; background: #fff; border-radius: 10px; padding: 5px; }
+  .big { font-size: 17px; font-weight: 700; word-break: break-all; color: #9fd8ff; }
+</style>
+</head>
+<body>
+<header><h1>📝 ผลข้อสอบแผนที่ (ครู)</h1><button class="btn sm" id="out" hidden>ออก</button></header>
+
+<div id="login" class="wrap card" hidden>
+  <h2>ใส่รหัสผ่านครู</h2>
+  <div class="mut" style="margin-bottom:10px">รหัสตัวเลขที่แสดงในแผง "โหมดทำเอง" บนคอมครู</div>
+  <input id="pin" inputmode="numeric" autocomplete="off" placeholder="••••••">
+  <div id="lerr" style="color:#ff8a80;margin:8px 0;min-height:20px"></div>
+  <button class="btn gold" id="lgo" style="width:100%">เข้าสู่ระบบ</button>
+</div>
+
+<div id="main" class="wrap" hidden>
+  <div class="card" id="sess">
+    <h2 id="sTitle">—</h2>
+    <div id="sState"></div>
+    <div class="mut" id="sInfo" style="margin-top:4px"></div>
+    <div class="row" style="margin-top:10px">
+      <button class="btn" id="bToggle">⏹ ปิดรับ</button>
+      <button class="btn" id="bReveal">👁 เปิดเฉลย</button>
+      <a class="btn" id="bCsv" href="#" style="text-decoration:none">⬇ CSV</a>
+    </div>
+  </div>
+
+  <div class="card" id="lnk" hidden>
+    <h2>ลิงก์ให้นักเรียน</h2>
+    <div class="row"><img id="qr" alt="QR"><div style="flex:1;min-width:160px"><div class="big" id="sLink"></div><div class="mut" style="margin-top:6px">ปริ้น QR นี้แจกนักเรียนได้ (ลิงก์ Cloudflare จะเปลี่ยนถ้ารีสตาร์ทเกมที่คอมครู)</div></div></div>
+  </div>
+
+  <div class="card" id="res">
+    <h2>ผลคะแนน <span class="mut" id="cnt"></span></h2>
+    <div class="row" style="margin-bottom:8px"><input id="code" placeholder="ตรวจรหัสยืนยัน XXXX-XXXX-XXXX" style="flex:1;text-transform:uppercase"><button class="btn sm gold" id="vgo">ตรวจ</button></div>
+    <div id="vres" style="margin-bottom:6px"></div>
+    <div id="list"></div>
+  </div>
+
+  <div class="card" id="newr">
+    <h2>เปิดรอบใหม่</h2>
+    <label>ชุดข้อสอบ</label><select id="nSet"></select>
+    <label>เปิดให้ทำตั้งแต่ (เว้นว่าง = เปิดทันที)</label><input id="nFrom" type="datetime-local">
+    <label>ปิดรับเมื่อ (เว้นว่าง = ไม่กำหนด ปิดเอง)</label><input id="nTo" type="datetime-local">
+    <div class="row" style="margin-top:10px"><button class="btn gold" id="nGo">🟢 เปิดรอบใหม่</button><button class="btn" id="nSch" hidden>🕒 ตั้งเวลารอบปัจจุบันใหม่</button></div>
+    <div class="mut" style="margin-top:6px">เปิดรอบใหม่จะแทนรอบเดิม (ผลรอบเดิมยังเก็บในเครื่องครู) · คอมครูต้องเปิดเกมค้างไว้ตลอดช่วงที่ให้ทำ</div>
+  </div>
+
+  <div class="card">
+    <h2>เปลี่ยนรหัสผ่านครู</h2>
+    <div class="row"><input id="npin" inputmode="numeric" placeholder="ตัวเลข 4–10 หลัก" style="flex:1"><button class="btn sm" id="pgo">เปลี่ยน</button></div>
+  </div>
+</div>
+
+<script src="qrcode.min.js"></script>
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  function esc(t) { return String(t).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  var store = { get: function (k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set: function (k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
+  var token = store.get('teacher_token') || '', data = null, timer = null, open = {}, loaded = false;
+  var fmt = function (t) { return t ? new Date(t).toLocaleString('th-TH', { hour12: false, dateStyle: 'short', timeStyle: 'short' }) : ''; };
+  var dur = function (s) { return s ? Math.floor(s / 60) + ':' + ('0' + (s % 60)).slice(-2) : ''; };
+
+  function api(path, body) {
+    var o = { headers: { 'x-teacher': token } };
+    if (body) { o.method = 'POST'; o.body = JSON.stringify(body); }
+    return fetch(path, o).then(function (r) { if (r.status === 403) { throw 403; } return r.json(); });
+  }
+  function showLogin(msg) { clearInterval(timer); $('main').hidden = true; $('out').hidden = true; $('login').hidden = false; $('lerr').textContent = msg || ''; }
+  function showMain() { $('login').hidden = true; $('main').hidden = false; $('out').hidden = false; refresh(); clearInterval(timer); timer = setInterval(refresh, 5000); if (!loaded) loadSets(); }
+
+  $('lgo').onclick = function () {
+    fetch('api/solo/login', { method: 'POST', body: JSON.stringify({ pin: $('pin').value.trim() }) }).then(function (r) { return r.json(); }).then(function (j) {
+      if (j.ok) { token = j.token; store.set('teacher_token', token); $('pin').value = ''; showMain(); } else $('lerr').textContent = j.error || 'เข้าไม่ได้';
+    }).catch(function () { $('lerr').textContent = 'เชื่อมต่อไม่ได้'; });
+  };
+  $('pin').addEventListener('keydown', function (e) { if (e.key === 'Enter') $('lgo').click(); });
+  $('out').onclick = function () { token = ''; store.set('teacher_token', ''); showLogin(); };
+
+  function toLocalInput(ms) { if (!ms) return ''; var d = new Date(ms), p = function (n) { return ('0' + n).slice(-2); }; return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + 'T' + p(d.getHours()) + ':' + p(d.getMinutes()); }
+  var fromMs = function (id) { var v = $(id).value; return v ? new Date(v).getTime() : 0; };
+
+  function loadSets() {
+    api('api/solo/sets').then(function (j) {
+      loaded = true;
+      var o = '<option value="current">ชุดที่ตั้งไว้ในห้องรอบนคอมครู</option>';
+      (j.folders || []).forEach(function (f) { f.sets.forEach(function (s) { o += '<option value="' + esc(f.folder) + '|' + esc(s.name) + '">📁 ' + esc(f.folder || '(ไม่มีโฟลเดอร์)') + ' / ' + esc(s.name) + ' (' + s.count + ' ข้อ)</option>'; }); });
+      $('nSet').innerHTML = o;
+    }).catch(function (e) { if (e === 403) showLogin('เซสชันหมดอายุ ใส่รหัสใหม่'); });
+  }
+
+  function draw() {
+    var d = data; if (!d) return;
+    var s = d.session;
+    $('bCsv').href = 'api/solo/csv?t=' + encodeURIComponent(token);
+    $('sess').hidden = !s; $('res').hidden = !s; $('lnk').hidden = !s; $('nSch').hidden = !s;
+    if (!s) return;
+    var st = s.open ? '<span class="tag on">เปิดรับอยู่</span>' : (s.manualOpen && s.openAt && s.now < s.openAt ? '<span class="tag soon">รอเวลาเปิด</span>' : '<span class="tag off">ปิดรับแล้ว</span>');
+    $('sTitle').textContent = s.setName + ' (' + s.total + ' ข้อ)';
+    $('sState').innerHTML = st;
+    $('sInfo').textContent = (s.openAt ? 'เปิด ' + fmt(s.openAt) : 'เปิดทันที') + ' · ' + (s.closeAt ? 'ปิด ' + fmt(s.closeAt) : 'ปิดเอง');
+    $('bToggle').textContent = s.manualOpen && (s.open || (s.openAt && s.now < s.openAt)) ? '⏹ ปิดรับ' : '▶ เปิดรับอีกครั้ง';
+    $('bReveal').textContent = s.reveal ? '🙈 ซ่อนเฉลย' : '👁 เปิดเฉลย';
+    var lk = (s.stable && s.stable.solo) || s.link;
+    $('sLink').textContent = lk;
+    if ($('qr').dataset.l !== lk) { try { var q = qrcode(0, 'M'); q.addData(lk); q.make(); $('qr').src = q.createDataURL(8, 2); $('qr').dataset.l = lk; } catch (e) {} }
+    $('cnt').textContent = '— เข้าร่วม ' + d.counts.joined + ' · เสร็จ ' + d.counts.done;
+    var rows = d.players.slice().sort(function (a, b) { return (a.rank || 9999) - (b.rank || 9999) || b.pct - a.pct; });
+    $('list').innerHTML = rows.map(function (p) {
+      var stt = p.done ? (p.partial ? '<span class="tag wip">ไม่ครบ</span>' : '<span class="tag on">เสร็จ</span>') : p.si >= 0 ? '<span class="tag wip">ข้อ ' + (p.si + 1) + '/' + s.total + '</span>' : '<span class="tag off">ยังไม่เริ่ม</span>';
+      var det = open[p.no] ? '<div class="det">ลำดับที่เข้า ' + esc(p.no) + ' · ใช้เวลา ' + (p.done ? dur(p.dur) : '-') + ' · เสร็จ ' + esc(fmt(p.finished)) + '<br>รหัสยืนยัน: <b style="font-family:monospace">' + esc(p.code || '-') + '</b><br>แต่ละข้อ (%): ' + p.scores.map(function (v) { return Math.round(v); }).join(' · ') + (p.flag ? '<br><span class="flag">🚩 ' + esc(p.flag) + '</span>' : '') + '<br><button class="btn sm red" data-rm="' + esc(p.no) + '">🗑 ลบผล (ให้ทำใหม่)</button></div>' : '';
+      return '<div class="pl"><div class="top" data-no="' + esc(p.no) + '"><div class="rk">' + (p.rank || '–') + '</div><div class="nm">' + esc(p.av) + ' ' + esc(p.name) + (p.tie ? ' <span class="mut">(เสมอ)</span>' : '') + (p.flag ? ' <span class="flag">🚩</span>' : '') + '</div>' + stt + '<div class="pc">' + p.pct.toFixed(1) + '</div></div>' + det + '</div>';
+    }).join('') || '<div class="mut">ยังไม่มีใครเข้าร่วม</div>';
+  }
+  function refresh() { api('api/solo/admin').then(function (j) { data = j; draw(); }).catch(function (e) { if (e === 403) showLogin('เซสชันหมดอายุ ใส่รหัสใหม่'); }); }
+
+  $('list').onclick = function (e) {
+    var rm = e.target.closest('[data-rm]'), top = e.target.closest('[data-no]');
+    if (rm) { if (confirm('ลบผลของลำดับที่ ' + rm.dataset.rm + ' ?')) cmd({ cmd: 'remove', no: rm.dataset.rm }); return; }
+    if (top) { open[top.dataset.no] = !open[top.dataset.no]; draw(); }
+  };
+  function cmd(o) { return api('api/solo/cmd', o).then(function (j) { if (j && j.ok === false && j.error) alert(j.error); refresh(); return j; }).catch(function (e) { if (e === 403) showLogin('เซสชันหมดอายุ ใส่รหัสใหม่'); }); }
+  $('bToggle').onclick = function () {
+    var s = data && data.session; if (!s) return;
+    var active = s.manualOpen && (s.open || (s.openAt && s.now < s.openAt));
+    if (active && !confirm('ปิดรับ? คนที่ยังทำไม่เสร็จจะถูกสรุปตามที่ทำไว้')) return;
+    cmd({ cmd: active ? 'close' : 'reopen' });
+  };
+  $('bReveal').onclick = function () { var s = data && data.session; if (s) cmd({ cmd: 'reveal', on: !s.reveal }); };
+  $('vgo').onclick = function () {
+    var c = $('code').value.trim(); if (!c) return;
+    api('api/solo/cmd', { cmd: 'verify', code: c }).then(function (j) {
+      $('vres').innerHTML = j.ok ? '<span style="color:#7be08f">✅ ' + esc(j.name) + ' (ลำดับที่ ' + esc(j.no) + ') ได้ <b>' + j.pct.toFixed(1) + '%</b> · ' + esc(j.finished) + (j.partial ? ' · ทำไม่ครบ' : '') + '</span>' : '<span style="color:#ff8a80">❌ ไม่พบรหัสนี้</span>';
+    }).catch(function () {});
+  };
+  $('code').addEventListener('keydown', function (e) { if (e.key === 'Enter') $('vgo').click(); });
+  $('nGo').onclick = function () {
+    var v = $('nSet').value, s = data && data.session;
+    if (s && !confirm('เปิดรอบใหม่จะแทนรอบเดิม (ผลเดิมยังเก็บในเครื่องครู) ต้องการเปิดไหม?')) return;
+    var o = { cmd: 'open', openAt: fromMs('nFrom'), closeAt: fromMs('nTo') };
+    if (v === 'current') o.source = 'current'; else { var i = v.indexOf('|'); o.source = 'saved'; o.folder = v.slice(0, i); o.name = v.slice(i + 1); }
+    cmd(o).then(function (j) { if (j && j.ok) { window.scrollTo(0, 0); } });
+  };
+  $('nSch').onclick = function () { cmd({ cmd: 'schedule', openAt: fromMs('nFrom'), closeAt: fromMs('nTo') }).then(function (j) { if (j && j.ok) alert('ตั้งเวลารอบปัจจุบันแล้ว'); }); };
+  $('pgo').onclick = function () {
+    var p = $('npin').value.trim(); if (!p) return;
+    api('api/solo/cmd', { cmd: 'setpin', pin: p }).then(function (j) { if (j.ok) { token = j.token; store.set('teacher_token', token); $('npin').value = ''; alert('เปลี่ยนรหัสผ่านแล้ว'); } else alert(j.error || 'เปลี่ยนไม่ได้'); });
+  };
+
+  if (token) { showMain(); } else showLogin();
+})();
+</script>
+</body>
+</html>

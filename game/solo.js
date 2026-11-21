@@ -40,6 +40,26 @@ module.exports = function createSolo(ctx) {
     const byIp = {}; list.forEach(p => { if (p.ip) (byIp[p.ip] = byIp[p.ip] || []).push(p); });
     return p => { const same = p.ip && byIp[p.ip] && byIp[p.ip].length > 1 ? byIp[p.ip].filter(x => x !== p) : []; return same.length ? 'IP เดียวกับ: ' + same.map(x => x.name).join(', ') : ''; };
   }
+  // ----- รหัสผ่านครู (เข้าดูผลจากมือถือผ่านหน้า /teacher) -----
+  const TFILE = path.join(RESULTS, '_teacher.json');
+  let teacher = null;
+  function saveTeacher() { try { fs.writeFileSync(TFILE, JSON.stringify(teacher)); } catch (e) { console.error('บันทึกรหัสครูไม่สำเร็จ:', e.message); } }
+  (function loadTeacher() {
+    try { teacher = JSON.parse(fs.readFileSync(TFILE, 'utf8')); } catch (e) { teacher = null; }
+    if (!teacher || !teacher.pin || !teacher.secret) { teacher = { pin: String(crypto.randomInt(100000, 1000000)), secret: crypto.randomBytes(16).toString('hex') }; saveTeacher(); }
+  })();
+  const tokenOf = () => crypto.createHmac('sha256', teacher.secret).update('t|' + teacher.pin).digest('hex').slice(0, 32);
+  const fails = new Map(); // ip -> { n, until }  กันเดารหัส
+  // ----- ช่วงเวลาเปิดรับ -----
+  const isOpenNow = () => !!solo && !!solo.open && (!solo.openAt || Date.now() >= solo.openAt) && (!solo.closeAt || Date.now() < solo.closeAt);
+  function closeSession() {
+    if (!solo) return;
+    solo.open = false;
+    Object.values(solo.players).forEach(p => { if (!p.done && p.si >= 0) { p.partial = true; finish(p); } });
+    saveNow();
+  }
+  const tick = setInterval(() => { if (solo && solo.open && solo.closeAt && Date.now() >= solo.closeAt) closeSession(); }, 10000);
+  if (tick.unref) tick.unref();
   const N = () => QS.length;
   const totalPct = p => { let s = 0; for (let i = 0; i < N(); i++) s += (p.ans[i] && p.ans[i].pct) || 0; return Math.round(s / Math.max(1, N()) * 100) / 100; };
   function codeOf(p) {
@@ -95,11 +115,11 @@ module.exports = function createSolo(ctx) {
     });
     return m;
   }
-  function summary() {
+  function summary(showPin) {
     if (!solo) return null;
     const list = Object.values(solo.players), flag = flagsOf(list), rk = ranks();
     return {
-      session: { id: solo.id, title: solo.title, setName: solo.setName, created: solo.created, open: solo.open, reveal: !!solo.reveal, total: N(), link: ctx.lanUrl().replace(/\/?$/, '/') + 'solo' },
+      session: { id: solo.id, title: solo.title, setName: solo.setName, created: solo.created, open: isOpenNow(), manualOpen: !!solo.open, openAt: solo.openAt || 0, closeAt: solo.closeAt || 0, now: Date.now(), reveal: !!solo.reveal, total: N(), link: ctx.lanUrl().replace(/\/?$/, '/') + 'solo', teacherLink: ctx.lanUrl().replace(/\/?$/, '/') + 'teacher', stable: ctx.stable ? ctx.stable() : null, pin: showPin ? teacher.pin : undefined },
       counts: { joined: list.length, done: list.filter(p => p.done).length },
       players: list.map(p => ({ rank: rk.has(p) ? rk.get(p).rank : 0, tie: rk.has(p) ? rk.get(p).tie : false, dur: Math.round(durOf(p) / 1000), flag: flag(p), no: p.no, name: p.name, av: p.av, si: p.si, done: p.done, partial: !!p.partial, pct: p.done ? p.total : totalPct(p), started: p.started, finished: p.finished || 0, code: p.code || '', scores: QS.map((q, i) => p.ans[i] ? p.ans[i].pct : 0) }))
     };
@@ -117,16 +137,23 @@ module.exports = function createSolo(ctx) {
 
   // เส้นทาง HTTP — คืน true ถ้าจัดการแล้ว
   function route(req, res, u, p, b) {
+    if (solo && solo.open && solo.closeAt && Date.now() >= solo.closeAt) closeSession(); // ถึงเวลาปิดรับ -> สรุปคนที่ทำค้างทันที (ไม่ต้องรอตัวจับเวลา)
     const { json, isLocal } = ctx;
-    const admin = () => { if (!isLocal(req)) { json(res, 403, {}); return false; } return true; };
+    const tokenOk = () => { const t = req.headers['x-teacher'] || u.searchParams.get('t') || (b && b.t) || ''; return !!t && t === tokenOf(); };
+    const admin = () => { if (isLocal(req) || tokenOk()) return true; json(res, 403, {}); return false; }; // เครื่องครู หรือมือถือครูที่ใส่รหัสผ่านแล้ว
     if (req.method === 'GET') {
-      if (p === '/api/solo/info') return json(res, 200, solo ? { open: solo.open, title: solo.title, total: N() } : { open: false, none: true }), true;
+      if (p === '/api/solo/info') {
+        if (!solo) return json(res, 200, { open: false, none: true }), true;
+        const now = Date.now();
+        return json(res, 200, { open: isOpenNow(), notYet: !!solo.open && !!solo.openAt && now < solo.openAt, openAt: solo.openAt || 0, closeAt: solo.closeAt || 0, title: solo.title, total: N() }), true;
+      }
+      if (p === '/api/solo/sets') { if (!admin()) return true; return json(res, 200, { folders: ctx.listSets() }), true; }
       if (p === '/api/solo/state') {
         const pl = solo && solo.players[u.searchParams.get('id')];
         if (!pl) { res.writeHead(404); res.end(); return true; }
         return json(res, 200, stateOf(pl)), true;
       }
-      if (p === '/api/solo/admin') { if (!admin()) return true; return json(res, 200, summary() || { session: null }), true; }
+      if (p === '/api/solo/admin') { if (!admin()) return true; return json(res, 200, summary(isLocal(req)) || { session: null, stable: ctx.stable ? ctx.stable() : null, pin: isLocal(req) ? teacher.pin : undefined, teacherLink: ctx.lanUrl().replace(/\/?$/, '/') + 'teacher' }), true; }
       if (p === '/api/solo/csv') {
         if (!admin()) return true;
         if (!solo) { res.writeHead(404); res.end(); return true; }
@@ -144,7 +171,7 @@ module.exports = function createSolo(ctx) {
       if (old) return json(res, 200, { id: old.id }), true;
       const name = String(b.name || '').trim().slice(0, 20);
       if (!name) return json(res, 200, { error: 'need' }), true;
-      if (!solo.open) return json(res, 200, { error: 'closed' }), true;
+      if (!isOpenNow()) return json(res, 200, solo.open && solo.openAt && Date.now() < solo.openAt ? { error: 'notyet', openAt: solo.openAt } : { error: 'closed', closeAt: solo.closeAt || 0 }), true;
       // ชื่อเล่นซ้ำ -> ต่อท้ายเลขให้อัตโนมัติ
       const taken = new Set(Object.values(solo.players).map(x => x.name.toLowerCase()));
       let nm = name, k = 1; while (taken.has(nm.toLowerCase())) nm = name.slice(0, 17) + ' ' + (++k);
@@ -156,7 +183,7 @@ module.exports = function createSolo(ctx) {
     }
     if (p === '/api/solo/start') {
       const pl = solo && solo.players[b.id];
-      if (!pl || pl.done || !solo.open && pl.si < 0) return json(res, 200, { ok: false }), true;
+      if (!pl || pl.done || (!isOpenNow() && pl.si < 0)) return json(res, 200, { ok: false }), true;
       if (pl.si < 0) { pl.si = 0; pl.started = Date.now(); pl.deadline = pl.started + ctx.qMs(QS[0]); save(); }
       return json(res, 200, { ok: true }), true;
     }
@@ -178,6 +205,13 @@ module.exports = function createSolo(ctx) {
     }
 
     // ----- ครู -----
+    if (p === '/api/solo/login') { // มือถือครูใส่รหัสผ่านเพื่อรับโทเคน
+      const ip = ipOf(req), f = fails.get(ip) || { n: 0, until: 0 };
+      if (Date.now() < f.until) return json(res, 429, { ok: false, error: 'ลองผิดหลายครั้ง รอสักครู่แล้วลองใหม่' }), true;
+      if (String(b.pin || '').trim() === teacher.pin) { fails.delete(ip); return json(res, 200, { ok: true, token: tokenOf() }), true; }
+      f.n++; if (f.n >= 5) { f.until = Date.now() + 10 * 60 * 1000; f.n = 0; } fails.set(ip, f);
+      return json(res, 200, { ok: false, error: 'รหัสผ่านไม่ถูกต้อง' }), true;
+    }
     if (p === '/api/solo/cmd') {
       if (!admin()) return true;
       if (b.cmd === 'open') {
@@ -185,15 +219,29 @@ module.exports = function createSolo(ctx) {
         if (b.source === 'saved') { const j = ctx.readSet(b.folder, b.name); if (!j) return json(res, 200, { ok: false, error: 'ไม่พบชุดข้อสอบ' }), true; raw = j.questions; setName = (b.folder ? b.folder + ' / ' : '') + (j.name || b.name); }
         else { raw = ctx.currentQuestions(); setName = ctx.currentName(); }
         if (!raw || !raw.length) return json(res, 200, { ok: false, error: 'ไม่มีข้อสอบ' }), true;
+        const oa = Number(b.openAt) || 0, ca = Number(b.closeAt) || 0;
+        if (ca && ca <= Date.now()) return json(res, 200, { ok: false, error: 'เวลาปิดรับต้องอยู่ในอนาคต' }), true;
+        if (oa && ca && ca <= oa) return json(res, 200, { ok: false, error: 'เวลาปิดรับต้องหลังเวลาเปิดรับ' }), true;
         saveNow();
         const id = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14) + '-' + crypto.randomBytes(2).toString('hex');
-        setSession({ id, title: ctx.title, setName, created: Date.now(), open: true, reveal: false, secret: crypto.randomBytes(16).toString('hex'), questions: raw.map(ctx.cloneQ), players: {} });
+        setSession({ id, title: ctx.title, setName, created: Date.now(), open: true, openAt: oa, closeAt: ca, reveal: false, secret: crypto.randomBytes(16).toString('hex'), questions: raw.map(ctx.cloneQ), players: {} });
         saveNow();
         return json(res, 200, { ok: true }), true;
       }
       if (!solo) return json(res, 200, { ok: false, error: 'ยังไม่ได้เปิดรอบ' }), true;
-      if (b.cmd === 'close') { solo.open = false; Object.values(solo.players).forEach(p => { if (!p.done && p.si >= 0) { p.partial = true; finish(p); } }); saveNow(); return json(res, 200, { ok: true }), true; }
-      if (b.cmd === 'reopen') { solo.open = true; saveNow(); return json(res, 200, { ok: true }), true; }
+      if (b.cmd === 'close') { closeSession(); return json(res, 200, { ok: true }), true; }
+      if (b.cmd === 'reopen') { solo.open = true; solo.openAt = 0; if (solo.closeAt && solo.closeAt <= Date.now()) solo.closeAt = 0; saveNow(); return json(res, 200, { ok: true }), true; }
+      if (b.cmd === 'schedule') {
+        const oa = Number(b.openAt) || 0, ca = Number(b.closeAt) || 0;
+        if (ca && ca <= Date.now()) return json(res, 200, { ok: false, error: 'เวลาปิดรับต้องอยู่ในอนาคต' }), true;
+        if (oa && ca && ca <= oa) return json(res, 200, { ok: false, error: 'เวลาปิดรับต้องหลังเวลาเปิดรับ' }), true;
+        solo.openAt = oa; solo.closeAt = ca; solo.open = true; saveNow(); return json(res, 200, { ok: true }), true;
+      }
+      if (b.cmd === 'setpin') {
+        const pin = String(b.pin || '').trim();
+        if (!/^[0-9]{4,10}$/.test(pin)) return json(res, 200, { ok: false, error: 'รหัสต้องเป็นตัวเลข 4–10 หลัก' }), true;
+        teacher.pin = pin; saveTeacher(); return json(res, 200, { ok: true, token: tokenOf() }), true;
+      }
       if (b.cmd === 'reveal') { solo.reveal = !!b.on; saveNow(); return json(res, 200, { ok: true }), true; }
       if (b.cmd === 'remove') { // ลบผู้เล่นคนหนึ่ง (เช่น ให้ทำใหม่)
         const pl = Object.values(solo.players).find(x => x.no === String(b.no));

@@ -580,7 +580,8 @@
       .then(function (r) { return r.json(); })
       .then(function (j) {
         if (j.error) {
-          var M = { none: 'ครูยังไม่เปิดให้ทำข้อสอบ', closed: 'ปิดรับแล้ว', need: 'พิมพ์ชื่อเล่นก่อน' };
+          var tm = function (t) { return new Date(t).toLocaleString('th-TH', { hour12: false, dateStyle: 'medium', timeStyle: 'short' }); };
+          var M = { none: 'ครูยังไม่เปิดให้ทำข้อสอบ', closed: 'ปิดรับแล้ว' + (j.closeAt ? ' (ปิดเมื่อ ' + tm(j.closeAt) + ')' : ''), notyet: 'ยังไม่ถึงเวลาเปิด — เปิดให้ทำตั้งแต่ ' + (j.openAt ? tm(j.openAt) : ''), need: 'พิมพ์ชื่อเล่นก่อน' };
           showScreen('📝 ข้อสอบแผนที่', M[j.error] || 'เข้าร่วมไม่ได้', '', 'join'); return;
         }
         myId = j.id; store.set('solo_id', myId); lastFinalKey = ''; soloPoll();
@@ -604,7 +605,11 @@
 
   if (SOLO) {
     $('dice').hidden = true; $('name').maxLength = 20; $('name').placeholder = 'ชื่อเล่น'; $('sText').textContent = 'พิมพ์ชื่อเล่น ทำได้ครั้งเดียว';
-    fetch('api/solo/info').then(function (r) { return r.json(); }).then(function (i) { $('sTitle').innerHTML = '📝 ' + esc(i.title || 'ข้อสอบแผนที่'); if (i.none || !i.open) $('sText').textContent = i.none ? 'ครูยังไม่เปิดให้ทำข้อสอบ' : 'ปิดรับแล้ว (ถ้าเคยเข้าแล้ว ให้เปิดลิงก์ในเครื่องเดิม)'; }).catch(function () {});
+    fetch('api/solo/info').then(function (r) { return r.json(); }).then(function (i) { $('sTitle').innerHTML = '📝 ' + esc(i.title || 'ข้อสอบแผนที่'); var tm = function (t) { return new Date(t).toLocaleString('th-TH', { hour12: false, dateStyle: 'medium', timeStyle: 'short' }); };
+      if (i.none) $('sText').textContent = 'ครูยังไม่เปิดให้ทำข้อสอบ';
+      else if (i.notYet) $('sText').textContent = 'ยังไม่ถึงเวลาเปิด — เปิดให้ทำตั้งแต่ ' + tm(i.openAt);
+      else if (!i.open) $('sText').textContent = 'ปิดรับแล้ว (ถ้าเคยเข้าแล้ว ให้เปิดลิงก์ในเครื่องเดิม)';
+      else if (i.closeAt) $('sText').textContent = 'พิมพ์ชื่อเล่น ทำได้ครั้งเดียว · เปิดให้ทำถึง ' + tm(i.closeAt); }).catch(function () {});
   } else fetch('api/info').then(function (r) { return r.json(); }).then(function (i) { $('sTitle').innerHTML = '🗺️ ' + esc(i.title); }).catch(function () {});
   var saved = store.get('mapgame_name'); if (saved) $('name').value = saved;
   if (myId) connect(); // กลับเข้าเกมเดิมอัตโนมัติ

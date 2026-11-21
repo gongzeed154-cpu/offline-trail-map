@@ -275,7 +275,11 @@ setInterval(() => { for (const c of streams) try { c.res.write(': hb\n\n'); } ca
 
 // ---------- HTTP ----------
 // ---------- อุโมงค์สาธารณะ (Cloudflare Tunnel) — นักเรียนใช้เน็ตมือถือเองได้ ไม่ต้องต่อ Wi-Fi เดียวกัน ----------
+// ลิงก์คงที่ (สำหรับ QR ที่พิมพ์): เปิดเมื่อ PUBLISH_LINK=1 — ดู publish.js
+const PUBLISHER = process.env.PUBLISH_LINK === '1' ? require('./publish.js')({ repo: process.env.PUBLISH_REPO || 'gongzeed154-cpu/offline-trail-map' }) : null;
+if (PUBLISHER) process.on('exit', () => PUBLISHER.clearSync());
 let tunnelUrl = process.env.PUBLIC_URL || null;
+if (tunnelUrl && PUBLISHER) PUBLISHER.publish(tunnelUrl);
 let tunnelState = tunnelUrl ? 'ready' : 'off'; // off | starting | ready | failed
 if (!tunnelUrl && process.env.TUNNEL !== 'off') {
   const { spawn } = require('child_process');
@@ -290,7 +294,7 @@ if (!tunnelUrl && process.env.TUNNEL !== 'off') {
     cp.on('spawn', () => { started = true; tunnelState = 'starting'; });
     const onData = d => {
       const m = /https:\/\/[a-z0-9-]+\.trycloudflare\.com/.exec(String(d));
-      if (m && !tunnelUrl) { tunnelUrl = m[0] + '/'; tunnelState = 'ready'; console.log('  ลิงก์สาธารณะ (ให้นักเรียนสแกน): ' + tunnelUrl); }
+      if (m && !tunnelUrl) { tunnelUrl = m[0] + '/'; tunnelState = 'ready'; console.log('  ลิงก์สาธารณะ (ให้นักเรียนสแกน): ' + tunnelUrl); if (PUBLISHER) PUBLISHER.publish(tunnelUrl); }
     };
     cp.stdout.on('data', onData); cp.stderr.on('data', onData);
     cp.on('exit', () => { if (tunnelState !== 'ready') tunnelState = 'failed'; });
@@ -386,8 +390,8 @@ function grade(q, b) {
 }
 
 const solo = require('./solo.js')({
-  json, isLocal, grade, publicQ, prepare, cloneQ, qMs, lanUrl, readSet, title: CFG.title,
-  currentQuestions: () => QS.map(cloneQ), currentName: () => (fixedSet ? fixedName : 'ชุดสุ่มตามการตั้งค่า (' + N + ' ข้อ)')
+  listSets, stable: () => PUBLISHER ? { solo: PUBLISHER.links.solo, teacher: PUBLISHER.links.teacher, state: PUBLISHER.state() } : null, json, isLocal, grade, publicQ, prepare, cloneQ, qMs, lanUrl, readSet, title: CFG.title,
+  currentQuestions: () => QS.map(cloneQ), currentName: () => (fixedSet ? fixedName : 'ชุดสุ่มตามการตั้งค่า')
 });
 process.on('exit', () => { try { solo.flush(); } catch (e) {} });
 
@@ -397,7 +401,8 @@ http.createServer(async (req, res) => {
   try {
     if (req.method === 'GET') {
       if (p === '/') return serveStatic(req, res, '/index.html');
-      if (p === '/solo') return serveStatic(req, res, '/index.html'); // โหมดทำเอง (นักเรียนทำคนละเวลา)
+      if (p === '/solo') return serveStatic(req, res, '/index.html');
+      if (p === '/teacher') return serveStatic(req, res, '/teacher.html'); // หน้าครูบนมือถือ (ใส่รหัสผ่านก่อนดูผล) // โหมดทำเอง (นักเรียนทำคนละเวลา)
       if (p.startsWith('/api/solo/') && solo.route(req, res, u, p, null)) return;
       if (p === '/check') return serveStatic(req, res, '/check.html'); // หน้าตรวจระบบ (ใช้ได้ทั้งครูและนักเรียน)
       if (p === '/host') return isLocal(req) ? serveStatic(req, res, '/host.html') : (res.writeHead(403), res.end('เปิดหน้านี้ได้เฉพาะบนเครื่องครู'));

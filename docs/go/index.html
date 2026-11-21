@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#1f4d2c">
+<title>ข้อสอบแผนที่ — กำลังพาไป…</title>
+<style>
+  body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; text-align: center; font-family: 'Sarabun', 'Noto Sans Thai', system-ui, sans-serif; background: linear-gradient(160deg, #1f4d2c, #2e6b3f 60%, #4b8f5c); color: #fff; padding: 20px; }
+  h1 { font-size: 26px; margin: 0 0 10px; } p { font-size: 17px; line-height: 1.6; margin: 6px 0; }
+  .spin { width: 34px; height: 34px; border: 4px solid rgba(255,255,255,.3); border-top-color: #fff; border-radius: 50%; animation: sp 1s linear infinite; margin: 14px auto; }
+  @keyframes sp { to { transform: rotate(360deg); } }
+  button { border: 0; border-radius: 24px; padding: 12px 26px; font-size: 18px; font-weight: 700; background: #f5b301; color: #3a2a00; margin-top: 10px; font-family: inherit; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div>
+  <h1>📝 ข้อสอบแผนที่</h1>
+  <div id="busy"><div class="spin"></div><p>กำลังพาไปหน้าทำข้อสอบ…</p></div>
+  <div id="off" hidden>
+    <p id="msg"></p>
+    <p style="opacity:.8;font-size:15px">ถ้าครูเพิ่งเปิดเกม รอสักครู่แล้วกดลองใหม่</p>
+    <button id="retry">🔄 ลองใหม่</button>
+  </div>
+</div>
+<script>
+(function () {
+  // หน้าคงที่สำหรับ QR ที่พิมพ์: อ่านลิงก์ล่าสุดของเกม (เปลี่ยนทุกครั้งที่ครูเปิดเกมใหม่) แล้วพาไป
+  // ?to=solo (ค่าเริ่มต้น: หน้านักเรียน)  หรือ  ?to=teacher (หน้าครูบนมือถือ)
+  var q = new URLSearchParams(location.search), to = q.get('to') === 'teacher' ? 'teacher' : 'solo';
+  var owner = location.hostname.split('.')[0], repo = location.pathname.split('/')[1] || '';
+  var src = 'https://raw.githubusercontent.com/' + owner + '/' + repo + '/tunnel-url/current.json';
+  function show(msg) { document.getElementById('busy').hidden = true; document.getElementById('off').hidden = false; document.getElementById('msg').textContent = msg; }
+  function go() {
+    document.getElementById('busy').hidden = false; document.getElementById('off').hidden = true;
+    fetch(src + '?t=' + Date.now(), { cache: 'no-store' })
+      .then(function (r) { if (!r.ok) throw new Error('http ' + r.status); return r.json(); })
+      .then(function (j) {
+        if (!j || !j.url) return show('ตอนนี้ครูยังไม่ได้เปิดเกม');
+        if (!/^https:\/\/[a-z0-9-]+\.trycloudflare\.com\/?$/.test(j.url)) return show('ลิงก์ไม่ถูกต้อง');
+        location.replace(j.url.replace(/\/$/, '') + '/' + to);
+      })
+      .catch(function () { show('ยังไม่พบลิงก์ของเกม (ครูอาจยังไม่ได้เปิดเกม) หรืออินเทอร์เน็ตมีปัญหา'); });
+  }
+  document.getElementById('retry').onclick = go;
+  go();
+})();
+</script>
+</body>
+</html>

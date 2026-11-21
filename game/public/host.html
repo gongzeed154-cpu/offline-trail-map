@@ -282,12 +282,14 @@
     <div class="box" id="soSetup">
       <h3>1) เลือกชุดข้อสอบ แล้วเปิดรอบ</h3>
       <div class="row2"><select id="soSrc"></select><button class="btn gold" id="soOpen">🟢 เปิดรอบใหม่</button></div>
+      <div class="row2" style="margin-top:10px;font-size:20px"><span>เปิดตั้งแต่ <input type="datetime-local" id="soFrom"></span><span>ปิดรับเมื่อ <input type="datetime-local" id="soTo"></span><span style="opacity:.7;font-size:17px">(เว้นว่าง = เปิดทันที / ปิดเอง)</span></div>
       <div style="font-size:18px;opacity:.75;margin-top:6px">เปิดรอบใหม่จะแทนรอบเดิมที่แสดงอยู่ (ผลรอบเดิมยังเก็บอยู่ในโฟลเดอร์ results/ ของเกม) · ทุกคนได้ข้อสอบชุดเดียวกัน เรียงข้อเดียวกัน</div>
     </div>
     <div class="box" id="soLive" hidden>
       <h3>2) ให้นักเรียนสแกน/เปิดลิงก์นี้ <span id="soState"></span></h3>
       <div class="row2"><img id="soQr" alt="QR"><div><div id="soLink"></div><div id="soInfo" style="margin-top:8px;font-size:21px"></div>
-        <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap"><button class="btn" id="soToggle">⏹ ปิดรับ</button><button class="btn" id="soReveal">👁 เปิดเฉลยให้นักเรียนดู</button><button class="btn gold" id="soAnn">🏆 ประกาศผล</button><a class="btn" id="soCsv" href="api/solo/csv" style="text-decoration:none">⬇ ดาวน์โหลดผล (CSV/Excel)</a></div>
+        <div id="soStable" style="margin-top:6px;font-size:20px"></div><div id="soSched" style="margin-top:4px;font-size:20px"></div><div id="soPin" style="margin-top:8px;font-size:21px"></div>
+        <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap"><button class="btn" id="soPrint">🖨 พิมพ์ใบ QR</button><button class="btn" id="soToggle">⏹ ปิดรับ</button><button class="btn" id="soReveal">👁 เปิดเฉลยให้นักเรียนดู</button><button class="btn gold" id="soAnn">🏆 ประกาศผล</button><a class="btn" id="soCsv" href="api/solo/csv" style="text-decoration:none">⬇ ดาวน์โหลดผล (CSV/Excel)</a></div>
         <div style="margin-top:12px;font-size:20px">ตรวจรหัสยืนยันจากภาพแคปหน้าจอ: <input id="soCode" placeholder="XXXX-XXXX-XXXX" size="16" style="text-transform:uppercase"> <button class="btn sm" id="soVerify">ตรวจ</button> <span id="soVRes"></span></div></div></div>
       <div style="font-size:18px;opacity:.75;margin-top:8px">คอมนี้ต้องเปิดเกมและต่ออินเทอร์เน็ตค้างไว้ตลอดช่วงที่ให้ทำ · ถ้ารีสตาร์ท start-game.bat ลิงก์ (Cloudflare) จะเปลี่ยน ต้องแจกใหม่ แต่ผลที่ทำแล้วไม่หาย</div>
     </div>
@@ -783,10 +785,15 @@
   function soDraw() {
     var d = soData; if (!d || !d.session) { $('soLive').hidden = true; $('soResBox').hidden = true; return; }
     var s = d.session; $('soLive').hidden = false; $('soResBox').hidden = false;
-    $('soState').innerHTML = '<span class="tag ' + (s.open ? 'on' : 'off') + '">' + (s.open ? 'เปิดรับอยู่' : 'ปิดรับแล้ว') + '</span>';
+    var wait = s.manualOpen && s.openAt && s.now < s.openAt;
+    $('soState').innerHTML = '<span class="tag ' + (s.open ? 'on' : wait ? 'wip' : 'off') + '">' + (s.open ? 'เปิดรับอยู่' : wait ? 'รอเวลาเปิด' : 'ปิดรับแล้ว') + '</span>';
+    $('soSched').textContent = '🕒 ' + (s.openAt ? 'เปิด ' + soFmt(s.openAt) : 'เปิดทันที') + ' · ' + (s.closeAt ? 'ปิด ' + soFmt(s.closeAt) : 'ปิดเอง');
+    var stb = s.stable;
+    $('soStable').innerHTML = stb ? '🔗 ลิงก์คงที่สำหรับพิมพ์ QR: <b style="color:#9fd8ff">' + esc(stb.solo) + '</b> <span class="tag ' + (stb.state.state === 'ok' ? 'on' : stb.state.state === 'working' ? 'wip' : 'off') + '">' + (stb.state.state === 'ok' ? 'พร้อมใช้' : stb.state.state === 'working' ? 'กำลังอัปเดต…' : stb.state.state === 'error' ? 'อัปเดตไม่สำเร็จ' : 'รอลิงก์ Cloudflare') + '</span>' + (stb.state.state === 'error' ? '<div style="font-size:16px;color:#ff8a80">' + esc(stb.state.error) + '</div>' : '') : '<span style="opacity:.7;font-size:17px">⚠️ ยังไม่เปิดลิงก์คงที่ — ใบ QR ที่พิมพ์จะใช้ไม่ได้หลังรีสตาร์ทเกม (เปิดเกมด้วย start-game.bat)</span>';
+    $('soPin').innerHTML = '📱 ตรวจคะแนนจากมือถือ: เปิด <b style="color:#9fd8ff">' + esc(s.teacherLink) + '</b> รหัสผ่าน <b style="color:var(--gold);font-size:28px;letter-spacing:3px">' + esc(s.pin || d.pin || '') + '</b>';
     $('soLink').textContent = s.link;
     $('soInfo').innerHTML = 'ชุดข้อสอบ: <b>' + esc(s.setName) + '</b> (' + s.total + ' ข้อ) · เปิดรอบเมื่อ ' + esc(soFmt(s.created));
-    $('soToggle').textContent = s.open ? '⏹ ปิดรับ (คนที่ยังทำไม่เสร็จจะถูกสรุปตามที่ทำไว้)' : '▶ เปิดรับอีกครั้ง';
+    $('soToggle').textContent = (s.open || wait) ? '⏹ ปิดรับ (คนที่ยังทำไม่เสร็จจะถูกสรุปตามที่ทำไว้)' : '▶ เปิดรับอีกครั้ง';
     $('soReveal').textContent = s.reveal ? '🙈 ซ่อนเฉลย' : '👁 เปิดเฉลยให้นักเรียนดู';
     if ($('soQr').dataset.l !== s.link) { try { var q = qrcode(0, 'M'); q.addData(s.link); q.make(); $('soQr').src = q.createDataURL(8, 2); $('soQr').dataset.l = s.link; } catch (e) {} }
     $('soCnt').textContent = '— เข้าร่วม ' + d.counts.joined + ' คน · ทำเสร็จ ' + d.counts.done + ' คน';
@@ -805,13 +812,22 @@
   $('soOpen').onclick = function () {
     var v = $('soSrc').value, had = soData && soData.session;
     if (had && !confirm('เปิดรอบใหม่ จะแทนรอบเดิมที่แสดงอยู่ (ผลรอบเดิมยังเก็บอยู่ในไฟล์ results/) ต้องการเปิดรอบใหม่ไหม?')) return;
-    var o = { cmd: 'open' }; if (v === 'current') o.source = 'current'; else { var i = v.indexOf('|'); o.source = 'saved'; o.folder = v.slice(0, i); o.name = v.slice(i + 1); }
+    var fv = $('soFrom').value, tv = $('soTo').value, o = { cmd: 'open', openAt: fv ? new Date(fv).getTime() : 0, closeAt: tv ? new Date(tv).getTime() : 0 }; if (v === 'current') o.source = 'current'; else { var i = v.indexOf('|'); o.source = 'saved'; o.folder = v.slice(0, i); o.name = v.slice(i + 1); }
     soCmd(o).then(function (j) { if (j && j.ok) { toast('เปิดรอบแล้ว — ให้นักเรียนสแกน QR'); A.sfx('pop'); } });
   };
   $('soToggle').onclick = function () {
     var s = soData && soData.session; if (!s) return;
-    if (s.open && !confirm('ปิดรับ? คนที่ยังทำไม่เสร็จจะถูกสรุปคะแนนตามที่ทำไว้ และคนใหม่เข้าไม่ได้')) return;
-    soCmd({ cmd: s.open ? 'close' : 'reopen' });
+    if ((s.open || (s.manualOpen && s.openAt && s.now < s.openAt)) && !confirm('ปิดรับ? คนที่ยังทำไม่เสร็จจะถูกสรุปคะแนนตามที่ทำไว้ และคนใหม่เข้าไม่ได้')) return;
+    soCmd({ cmd: (s.open || (s.manualOpen && s.openAt && s.now < s.openAt)) ? 'close' : 'reopen' });
+  };
+  $('soPrint').onclick = function () {
+    var s = soData && soData.session; if (!s) return;
+    var printLink = (s.stable && s.stable.solo) || s.link;
+    var q = qrcode(0, 'M'); q.addData(printLink); q.make();
+    var w = window.open('', '_blank'); if (!w) { toast('เบราว์เซอร์บล็อกหน้าต่างพิมพ์ — อนุญาตป๊อปอัปแล้วลองใหม่'); return; }
+    var win = (s.openAt ? 'เปิดทำได้ตั้งแต่ ' + soFmt(s.openAt) : '') + (s.closeAt ? (s.openAt ? ' ' : '') + 'ถึง ' + soFmt(s.closeAt) : '');
+    w.document.write('<!doctype html><meta charset="utf-8"><title>QR ข้อสอบแผนที่</title><body style="font-family:Sarabun,Noto Sans Thai,sans-serif;text-align:center;margin:30px"><h1 style="font-size:44px;margin:0">📝 ' + esc(s.title) + '</h1><p style="font-size:26px;margin:6px 0">สแกนเพื่อทำข้อสอบ · พิมพ์ชื่อเล่นช่องเดียว · ทำได้ครั้งเดียว</p><img src="' + q.createDataURL(14, 4) + '" style="width:520px;max-width:90%"><p style="font-size:22px;word-break:break-all">' + esc(printLink) + '</p><p style="font-size:24px">' + esc(win) + '</p><p style="font-size:18px;color:#555">หน้าสุดท้ายให้แคปหน้าจอส่งครู เพื่อยืนยันคะแนน</p><script>setTimeout(function(){print()},500)<\/script></body>');
+    w.document.close();
   };
   $('soAnn').onclick = function () {
     var d = soData; if (!d || !d.session) return;
